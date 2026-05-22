@@ -134,6 +134,7 @@ async def on_message(message: discord.Message):
         match = re.search(r"<@!?(\d+)> has ascended to level \*\*(\d+)\*\*", message.content)
         if match:
             user_id = int(match.group(1))
+            user_obj = await bot.fetch_user(user_id)
             level   = int(match.group(2))
             pts     = RANK_MILESTONES.get(level, LEVELUP_POINTS)
             is_rank = level in RANK_MILESTONES
@@ -145,7 +146,7 @@ async def on_message(message: discord.Message):
                 )
             else:
                 await message.channel.send(
-                    f"<@{user_id} leveled up and earned **{pts}** contribution points! ✦",
+                    f"{user_obj.display_name} leveled up and earned **{pts}** contribution points! ✦",
                     delete_after=10
                 )
             label = "rank milestone" if is_rank else "level up"
@@ -183,7 +184,7 @@ async def on_raw_message_edit(payload: discord.RawMessageUpdateEvent):
                     mark_rewarded(payload.message_id)
                     add_points(user.id, WORK_POINTS)
                     await channel.send(
-                        f"<@{user.id}> earned **{WORK_POINTS}** contribution points for working! ✦",
+                        f"{user.display_name} earned **{WORK_POINTS}** contribution points for working! ✦",
                         delete_after=10
                     )
                     await log(channel.guild, f"⚒️ `+{WORK_POINTS}` → {user} | kwork | {message.created_at.strftime('%Y-%m-%d %H:%M')}")
@@ -210,7 +211,7 @@ async def handle_karuta_drop(message: discord.Message):
                     add_points(user_id, pts)
                     weekend_text = " (weekend 2x bonus)" if is_weekend() else ""
                     await message.channel.send(
-                        f"<@{user.display_name}> earned **{pts}** contribution points for dropping{weekend_text}! ✦",
+                        f"{user.display_name} earned **{pts}** contribution points for dropping{weekend_text}! ✦",
                         delete_after=10
                     )
                     await log(
