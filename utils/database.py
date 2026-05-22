@@ -68,13 +68,19 @@ async def get_whitelist() -> list[int]:
 #         Drop Reward Tracking         #
 
 
-async def is_rewarded(message_id: int) -> bool:
-    reward: dict | None = await rewardedColl.find_one({"message_id": message_id})
-    if reward is None:
-        return False
-    return True
+# async def is_rewarded(message_id: int) -> bool:
+#     reward: dict | None = await rewardedColl.find_one({"message_id": message_id})
+#     print(reward)
+#     if reward is None:
+#         return False
+#     return True
 
-async def mark_as_rewarded(message_id: int) -> None:
-    reward: dict | None = await rewardedColl.find_one({"message_id": message_id})
-    if reward is None:
-        await rewardedColl.insert_one({"message_id": message_id})
+# async def mark_as_rewarded(message_id: int) -> None:
+#     reward: dict | None = await rewardedColl.find_one({"message_id": message_id})
+#     if reward is None:
+#         await rewardedColl.insert_one({"message_id": message_id})
+
+async def try_claim_reward(message_id: int) -> bool:
+    result = await rewardedColl.update_one({"message_id": message_id}, {"$setOnInsert": {"message_id": message_id}}, upsert=True)
+    print(result.upserted_id)
+    return result.upserted_id is not None

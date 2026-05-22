@@ -4,7 +4,7 @@ from dotenv import load_dotenv
 from utils.database import (
     add_points, 
     is_whitelisted, add_to_whitelist, remove_from_whitelist, get_whitelist,
-    is_rewarded, mark_as_rewarded
+    try_claim_reward
 )
 from utils.helpers import is_weekend
 from constants import *
@@ -112,12 +112,12 @@ async def on_raw_message_edit(payload: discord.RawMessageUpdateEvent):
     title = embed.get("title", "")
 
     if title == "Work" and "Your workers have finished their tasks." in description and payload.guild_id is not None:
-        isRW = await is_rewarded(payload.message_id)
-        print(f"Message edited: {payload.message_id} | already rewarded: {isRW}")
+        isRW = await try_claim_reward(payload.message_id)
+        guild = bot.get_guild(payload.guild_id)
+        await log(guild, f"Message edited: {payload.message_id} | already rewarded: {isRW}")
         if isRW:
             return
         try:
-            guild = bot.get_guild(payload.guild_id)
             if guild is None:
                 return
             channel = guild.get_channel(payload.channel_id)
@@ -129,7 +129,6 @@ async def on_raw_message_edit(payload: discord.RawMessageUpdateEvent):
                 user = ref.author
                 isWL = await is_whitelisted(user.id)
                 if isWL:
-                    await mark_as_rewarded(payload.message_id)
                     await add_points(user.id, WORK_POINTS)
                     await channel.send(
                         f"{user.display_name} earned **{WORK_POINTS}** contribution points for working! ✦",
@@ -144,17 +143,21 @@ async def handle_karuta_drop(message: discord.Message):
         return
     if message.channel.id != 1473256666894962712:
         return
-    if await is_rewarded(message.id):
-        return
     if "is dropping" in message.content:
+        print(f"Karuta drop detected in message {message.id}")
+        if not await try_claim_reward(message.id):
+            await log(message.guild, f"Drop already rewarded for message {message.id}")
+            print("Drop already rewarded, skipping...")
+            return
         try:
             match = re.search(r"<@!?(\d+)> is dropping", message.content)
+            print(f"Drop user match: {match}")
             if match:
                 user_id = int(match.group(1))
                 user = await bot.fetch_user(user_id)
-                if await is_whitelisted(user_id):
+                isWL = await is_whitelisted(user_id)
+                if isWL:
                     pts = DROP_POINTS * 2 if is_weekend() else DROP_POINTS
-                    await mark_as_rewarded(message.id)
                     await add_points(user_id, pts)
                     weekend_text = " (weekend 2x bonus)" if is_weekend() else ""
                     await message.channel.send(
