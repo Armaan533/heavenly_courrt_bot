@@ -12,6 +12,7 @@ TOKEN          = os.getenv("TOKEN")
 KARUTA_BOT_ID  = 646937666251915264
 ARCANE_BOT_ID  = 437808476106784770
 LOG_CHANNEL_ID = 1504005514210578443
+CLAN_ROLE_ID   = 1504127544801366128
 
 DROP_POINTS    = 2
 WORK_POINTS    = 10
@@ -222,6 +223,9 @@ async def handle_karuta_drop(message: discord.Message):
 @commands.has_permissions(manage_guild=True)
 async def addclan_cmd(ctx, member: discord.Member):
     add_to_whitelist(member.id)
+    role = ctx.guild.get_role(CLAN_ROLE_ID)
+    if role:
+        await member.add_roles(role)
     await ctx.send(embed=discord.Embed(
         description=f"✦ {member.mention} added to clan whitelist.",
         color=EMBED_COLOR
@@ -231,6 +235,9 @@ async def addclan_cmd(ctx, member: discord.Member):
 @commands.has_permissions(manage_guild=True)
 async def removeclan_cmd(ctx, member: discord.Member):
     remove_from_whitelist(member.id)
+    role = ctx.guild.get_role(CLAN_ROLE_ID)
+    if role:
+        await member.remove_roles(role)
     await ctx.send(embed=discord.Embed(
         description=f"✦ {member.mention} removed from clan whitelist.",
         color=EMBED_COLOR
