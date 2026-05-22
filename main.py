@@ -103,9 +103,6 @@ async def on_raw_message_edit(payload: discord.RawMessageUpdateEvent):
     if payload.data.get("author", {}).get("id") != str(KARUTA_BOT_ID):
         return
 
-    if await is_rewarded(payload.message_id):
-        return
-
     embeds = payload.data.get("embeds", [])
     if not embeds:
         return
@@ -115,6 +112,10 @@ async def on_raw_message_edit(payload: discord.RawMessageUpdateEvent):
     title = embed.get("title", "")
 
     if title == "Work" and "Your workers have finished their tasks." in description and payload.guild_id is not None:
+        isRW = await is_rewarded(payload.message_id)
+        print(f"Message edited: {payload.message_id} | already rewarded: {isRW}")
+        if isRW:
+            return
         try:
             guild = bot.get_guild(payload.guild_id)
             if guild is None:
@@ -126,7 +127,8 @@ async def on_raw_message_edit(payload: discord.RawMessageUpdateEvent):
             if message.reference and message.reference.message_id:
                 ref  = await channel.fetch_message(message.reference.message_id)
                 user = ref.author
-                if await is_whitelisted(user.id):
+                isWL = await is_whitelisted(user.id)
+                if isWL:
                     await mark_as_rewarded(payload.message_id)
                     await add_points(user.id, WORK_POINTS)
                     await channel.send(

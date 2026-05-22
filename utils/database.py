@@ -8,7 +8,7 @@ connector = pymongo.AsyncMongoClient(os.getenv("MONGO_URI"), serverSelectionTime
 db: AsyncDatabase = connector.get_database("heavenly-court")
 
 pointsColl: AsyncCollection = db.points
-wishlistColl: AsyncCollection = db.wishlist
+wishlistColl: AsyncCollection = db.whitelist
 rewardedColl: AsyncCollection = db.rewarded
 
 
