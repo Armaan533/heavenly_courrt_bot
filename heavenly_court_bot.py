@@ -13,6 +13,8 @@ KARUTA_BOT_ID  = 646937666251915264
 ARCANE_BOT_ID  = 437808476106784770
 LOG_CHANNEL_ID = 1504005514210578443
 CLAN_ROLE_ID   = 1504127544801366128
+CARD_COMPANION_ID = 1380936713639166082
+POG_DROPS_CHANNEL = 1473645723999539294
 
 DROP_POINTS    = 2
 WORK_POINTS    = 10
@@ -154,6 +156,28 @@ async def on_message(message: discord.Message):
         return
 
     await handle_karuta_drop(message)
+
+    if (message.author.id == CARD_COMPANION_ID 
+                and message.channel.id == POG_DROPS_CHANNEL):
+            try:
+                match_user = re.search(r"<@!?(\d+)> is dropping", message.content)
+                match_wl   = re.search(r"♡\s+(\d+)", message.content)
+                if match_user and match_wl:
+                    user_id = int(match_user.group(1))
+                    wl      = int(match_wl.group(1))
+                    if wl < 200:
+                        pts = 5
+                    elif wl < 500:
+                        pts = 8
+                    elif wl < 1000:
+                        pts = 15
+                    else:
+                        pts = 25
+                if is_whitelisted(user_id):
+                    add_points(user_id, pts)
+                    await log(message.guild, f"🌟 `+{pts}` → <@{user_id}> | pog drop (WL: {wl}) | {message.created_at.strftime('%Y-%m-%d %H:%M')}")
+            except Exception as e:
+                print(f"pog drop error: {e}")
 
     await bot.process_commands(message)
 
