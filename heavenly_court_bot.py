@@ -192,7 +192,7 @@ async def on_raw_message_edit(payload: discord.RawMessageUpdateEvent):
             
 async def handle_karuta_drop(message: discord.Message):
 
-    if message.author.id != KARUTA_BOT_ID:
+    if message.author.id != KARUTA_BOT_ID or message.guild is None:
         return
     if message.channel.id != 1473256666894962712:
         return
@@ -203,13 +203,14 @@ async def handle_karuta_drop(message: discord.Message):
             match = re.search(r"<@!?(\d+)> is dropping", message.content)
             if match:
                 user_id = int(match.group(1))
+                user = await bot.fetch_user(user_id)
                 if is_whitelisted(user_id):
                     pts = DROP_POINTS * 2 if is_weekend() else DROP_POINTS
                     mark_rewarded(message.id)
                     add_points(user_id, pts)
                     weekend_text = " (weekend 2x bonus)" if is_weekend() else ""
                     await message.channel.send(
-                        f"<@{user_id}> earned **{pts}** contribution points for dropping{weekend_text}! ✦",
+                        f"<@{user.display_name}> earned **{pts}** contribution points for dropping{weekend_text}! ✦",
                         delete_after=10
                     )
                     await log(
