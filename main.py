@@ -2,8 +2,9 @@ import discord, asyncio, re, os
 from discord.ext import commands
 from dotenv import load_dotenv
 from utils.database import (
+    init_db,
     add_points, 
-    is_whitelisted, add_to_whitelist, remove_from_whitelist, get_whitelist,
+    is_whitelisted,
     try_claim_reward
 )
 from utils.helpers import is_weekend
@@ -22,6 +23,7 @@ class Bot(commands.Bot):
         super().__init__(command_prefix=",", intents=intents)
     
     async def setup_hook(self):
+        await init_db()
         await self.load_extension("cogs.points")
         await self.load_extension("cogs.clan")
 
