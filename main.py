@@ -205,12 +205,12 @@ async def help_cmd(ctx):
     embed = discord.Embed(title="✦ Heavenly Court", description="Contribution system commands", color=EMBED_COLOR)
     embed.add_field(
         name="👤 Members",
-        value="`，bal` — check your points\n`，bal @user` — check someone's points\n`，leaderboard` — top 10 members",
+        value="`，points` — check your points\n`，points @user` — check someone's points\n`，leaderboard` — top 10 members",
         inline=False
     )
     embed.add_field(
         name="⚙️ Staff",
-        value="`，give @user amount` — give points\n`，remove @user amount` — remove points\n`，setpoints @user amount` — set exact points\n`，resetpoints @user` — wipe to zero\n`，addclan @user` — add to kwork whitelist\n`，removeclan @user` — remove from whitelist\n`，clanlist` — view whitelist",
+        value="`，points add @user amount` — give points\n`，points remove @user amount` — remove points\n`，points set @user amount` — set exact points\n`，points reset @user` — wipe to zero\n`，clan add @user` — add to kwork whitelist\n`，clan remove @user` — remove from whitelist\n`，clan list` — view whitelist",
         inline=False
     )
     embed.set_footer(text="Heavenly Court ✦ contribution system")
