@@ -54,22 +54,18 @@ async def get_leaderboard(limit: int = 10) -> list[tuple[int, int]]:
 
 
 async def is_whitelisted(user_id: int) -> bool:
-    print("searching for user_id:", user_id)
     user: dict | None = await wishlistColl.find_one({"user_id": user_id})
     if user is None:
         return False
     return True
 
 async def add_to_whitelist(user_id: int) -> None:
-    print("adding user_id to whitelist:", user_id)
     user : dict | None = await wishlistColl.find_one({"user_id": user_id})
-    print("found user:", user)
     if user is not None:
         raise ValueError("User is already whitelisted")
     await wishlistColl.insert_one({"user_id": user_id})
 
 async def remove_from_whitelist(user_id: int) -> None:
-    print("removing user_id from whitelist:", user_id)
     user : dict | None = await wishlistColl.find_one({"user_id": user_id})
     if user is None:
         raise ValueError("User is not whitelisted")
