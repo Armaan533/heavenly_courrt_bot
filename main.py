@@ -1,4 +1,5 @@
 import discord, asyncio, re, os
+from discord import message
 from discord.ext import commands
 from dotenv import load_dotenv
 from utils.database import (
@@ -95,7 +96,7 @@ async def on_message(message: discord.Message):
                     await log(message.guild, f"🌟 `+{pts}` → <@{user_id}> | pog drop (WL: {wl}) | {message.created_at.strftime('%Y-%m-%d %H:%M')}")
         except Exception as e:
             print(f"pog drop error: {e}")
-
+            
     await bot.process_commands(message)
 
 @bot.event
