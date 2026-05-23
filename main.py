@@ -115,7 +115,7 @@ async def on_raw_message_edit(payload: discord.RawMessageUpdateEvent):
         isRW = await try_claim_reward(payload.message_id)
         guild = bot.get_guild(payload.guild_id)
         await log(guild, f"Message edited: {payload.message_id} | already rewarded: {isRW}")
-        if isRW:
+        if not isRW:
             return
         try:
             if guild is None:
