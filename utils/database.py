@@ -4,6 +4,7 @@ from pymongo.asynchronous.collection import AsyncCollection
 import os
 
 connector = pymongo.AsyncMongoClient(os.getenv("MONGO_URI"), serverSelectionTimeoutMS=5000)
+print("Connected to MongoDB")
 
 db: AsyncDatabase = connector.get_database("heavenly-court")
 
@@ -44,6 +45,7 @@ async def get_leaderboard(limit: int = 10) -> list[tuple[int, int]]:
 
 async def is_whitelisted(user_id: int) -> bool:
     user: dict | None = await wishlistColl.find_one({"user_id": user_id})
+    print(user)
     if user is None:
         return False
     return True
