@@ -3,18 +3,24 @@ from pymongo.asynchronous.database import AsyncDatabase
 from pymongo.asynchronous.collection import AsyncCollection
 import os
 
+connector: pymongo.AsyncMongoClient
+hcdb: AsyncDatabase
+pointsColl: AsyncCollection
+wishlistColl: AsyncCollection
+rewardedColl: AsyncCollection
+
 async def init_db():
-    global pointsColl, wishlistColl, rewardedColl
+    global connector, hcdb, pointsColl, wishlistColl, rewardedColl
     connector = pymongo.AsyncMongoClient(os.getenv("MONGO_URI"), serverSelectionTimeoutMS=5000)
     info = connector.server_info()  # Trigger connection to verify credentials and connectivity
     print("Connected to MongoDB")
     print(f"Server Info: {info}")
 
-    hcdb: AsyncDatabase = connector.get_database("heavenly-court")
+    hcdb = connector.get_database("heavenly-court")
 
-    pointsColl: AsyncCollection = hcdb.points
-    wishlistColl: AsyncCollection = hcdb.whitelist
-    rewardedColl: AsyncCollection = hcdb.rewarded
+    pointsColl = hcdb.points
+    wishlistColl = hcdb.whitelist
+    rewardedColl = hcdb.rewarded
 
 
 #           Points System           #
