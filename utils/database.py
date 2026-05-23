@@ -4,7 +4,7 @@ from pymongo.asynchronous.collection import AsyncCollection
 import os
 
 async def init_db():
-    global connector, pointsColl, wishlistColl, rewardedColl
+    global pointsColl, wishlistColl, rewardedColl
     connector = pymongo.AsyncMongoClient(os.getenv("MONGO_URI"), serverSelectionTimeoutMS=5000)
     info = connector.server_info()  # Trigger connection to verify credentials and connectivity
     print("Connected to MongoDB")
