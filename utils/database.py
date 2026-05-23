@@ -4,7 +4,9 @@ from pymongo.asynchronous.collection import AsyncCollection
 import os
 
 connector = pymongo.AsyncMongoClient(os.getenv("MONGO_URI"), serverSelectionTimeoutMS=5000)
+info = connector.server_info()  # Trigger connection to verify credentials and connectivity
 print("Connected to MongoDB")
+print(f"Server Info: {info}")
 
 db: AsyncDatabase = connector.get_database("heavenly-court")
 
