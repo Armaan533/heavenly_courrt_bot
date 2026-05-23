@@ -55,6 +55,7 @@ async def is_whitelisted(user_id: int) -> bool:
 async def add_to_whitelist(user_id: int) -> None:
     print("adding user_id to whitelist:", user_id)
     user : dict | None = await wishlistColl.find_one({"user_id": user_id})
+    print("found user:", user)
     if user is not None:
         raise ValueError("User is already whitelisted")
     await wishlistColl.insert_one({"user_id": user_id})
