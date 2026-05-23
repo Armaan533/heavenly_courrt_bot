@@ -90,9 +90,9 @@ async def on_message(message: discord.Message):
                     pts = 15
                 else:
                     pts = 25
-            if await is_whitelisted(user_id):
-                await add_points(user_id, pts)
-                await log(message.guild, f"🌟 `+{pts}` → <@{user_id}> | pog drop (WL: {wl}) | {message.created_at.strftime('%Y-%m-%d %H:%M')}")
+                if await is_whitelisted(user_id):
+                    await add_points(user_id, pts)
+                    await log(message.guild, f"🌟 `+{pts}` → <@{user_id}> | pog drop (WL: {wl}) | {message.created_at.strftime('%Y-%m-%d %H:%M')}")
         except Exception as e:
             print(f"pog drop error: {e}")
 
