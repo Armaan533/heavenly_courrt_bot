@@ -3,8 +3,9 @@ from discord import message
 from discord.ext import commands
 from dotenv import load_dotenv
 from utils.database import (
+    init_db,
     add_points, 
-    is_whitelisted, add_to_whitelist, remove_from_whitelist, get_whitelist,
+    is_whitelisted,
     try_claim_reward
 )
 from utils.helpers import is_weekend
@@ -23,6 +24,7 @@ class Bot(commands.Bot):
         super().__init__(command_prefix=",", intents=intents)
     
     async def setup_hook(self):
+        await init_db()
         await self.load_extension("cogs.points")
         await self.load_extension("cogs.clan")
 
@@ -204,12 +206,12 @@ async def help_cmd(ctx):
     embed = discord.Embed(title="✦ Heavenly Court", description="Contribution system commands", color=EMBED_COLOR)
     embed.add_field(
         name="👤 Members",
-        value="`，bal` — check your points\n`，bal @user` — check someone's points\n`，leaderboard` — top 10 members",
+        value="`，points` — check your points\n`，points @user` — check someone's points\n`，leaderboard` — top 10 members",
         inline=False
     )
     embed.add_field(
         name="⚙️ Staff",
-        value="`，give @user amount` — give points\n`，remove @user amount` — remove points\n`，setpoints @user amount` — set exact points\n`，resetpoints @user` — wipe to zero\n`，addclan @user` — add to kwork whitelist\n`，removeclan @user` — remove from whitelist\n`，clanlist` — view whitelist",
+        value="`，points add @user amount` — give points\n`，points remove @user amount` — remove points\n`，points set @user amount` — set exact points\n`，points reset @user` — wipe to zero\n`，clan add @user` — add to kwork whitelist\n`，clan remove @user` — remove from whitelist\n`，clan list` — view whitelist",
         inline=False
     )
     embed.set_footer(text="Heavenly Court ✦ contribution system")
