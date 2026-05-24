@@ -78,24 +78,37 @@ async def on_message(message: discord.Message):
 
     await handle_karuta_drop(message)
 
-    if message.author.id == CARD_COMPANION_ID and message.channel.id == POG_DROPS_CHANNEL and message.guild is not None:
+    if message.author.id == CARD_COMPANION_ID and message.reference and message.guild is not None:
         try:
-            match_user = re.search(r"<@!?(\d+)> is dropping", message.content)
-            match_wl   = re.search(r"♡\s+(\d+)", message.content)
-            if match_user and match_wl:
-                user_id = int(match_user.group(1))
-                wl      = int(match_wl.group(1))
-                if wl < 200:
-                    pts = 5
-                elif wl < 500:
-                    pts = 8
-                elif wl < 1000:
-                    pts = 15
-                else:
-                    pts = 25
-                if await is_whitelisted(user_id):
-                    await add_points(user_id, pts)
-                    await log(message.guild, f"🌟 `+{pts}` → <@{user_id}> | pog drop (WL: {wl}) | {message.created_at.strftime('%Y-%m-%d %H:%M')}")
+            ref_msg = await message.channel.fetch_message(message.reference.message_id)
+            if ref_msg.author.id != KARUTA_BOT_ID:
+                return
+            
+            wl_matches = re.findall(r"♡\s+(\d+)", message.content)
+            if not wl_matches:
+                return
+            
+            max_wl = max(int(w) for w in wl_matches)
+            
+            user_match = re.search(r"<@!?(\d+)> is dropping", ref_msg.content)
+            if not user_match:
+                return
+            
+            user_id = int(user_match.group(1))
+            if not await is_whitelisted(user_id):
+                return
+
+            if max_wl < 200:
+                pts = 5
+            elif max_wl < 500:
+                pts = 8
+            elif max_wl < 1000:
+                pts = 15
+            else:
+                pts = 25
+
+            await add_points(user_id, pts)
+            await log(message.guild, f"🌟 `+{pts}` → <@{user_id}> | pog drop (max WL: {max_wl}) | {message.created_at.strftime('%Y-%m-%d %H:%M')}")
         except Exception as e:
             print(f"pog drop error: {e}")
             
