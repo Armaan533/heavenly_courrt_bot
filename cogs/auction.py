@@ -1,7 +1,8 @@
 import discord
 from discord.ext import commands
+from discord import app_commands
 import asyncio
-from datetime import datetime, timedelta
+from datetime import timedelta
 
 from utils.database import get_points, remove_points, add_points
 from constants import *
@@ -31,16 +32,8 @@ class AuctionView(discord.ui.View):
 
     @discord.ui.button(label="Place Bid", style=discord.ButtonStyle.primary, emoji="🏷️", custom_id="auction_bid")
     async def place_bid(self, interaction: discord.Interaction, button: discord.ui.Button):
-        state = self.cog.state
-        
-        if not state["active"]:
+        if not self.cog.state["active"]:
             return await interaction.response.send_message("No active auction right now.", ephemeral=True)
-            
-        if interaction.user.id in state["winner_ids"]:
-            return await interaction.response.send_message(
-                "✦ You've already won an item this auction — you can't bid on further items.",
-                ephemeral=True
-            )
             
         await interaction.response.send_modal(BidModal(self.cog))
 
@@ -49,146 +42,94 @@ class AuctionCog(commands.Cog):
         self.bot = bot
         self.state = {
             "active":          False,
-            "items":           [],
-            "current_index":   0,
+            "item":            None,
             "current_bid":     0,
             "current_bidder":  None,
             "bid_interval":    10,
             "min_bid":         50,
-            "duration":        300,
             "end_time":        None,
             "message":         None,
             "channel":         None,
-            "winner_ids":      set(),
-            "winners":         {},
         }
         self.timer_task = None
 
     def make_embed(self) -> discord.Embed:
         s = self.state
-        item_num = s["current_index"] + 1
-        total    = len(s["items"])
-        item     = s["items"][s["current_index"]]
         
-        remaining = max(0, int((s["end_time"] - discord.utils.utcnow()).total_seconds())) if s["end_time"] else 0
-        mins, secs = divmod(remaining, 60)
-        time_str = f"{mins}m {secs}s"
+        embed = discord.Embed(title="✦ Heavenly Court Live Auction ✦", color=EMBED_COLOR)
+        embed.description = f"### 🎁 {s['item']}"
         
-        embed = discord.Embed(title=f"✦ Auction — Item {item_num} of {total}", color=EMBED_COLOR)
-        embed.add_field(name="Item", value=item, inline=False)
-        embed.add_field(name="Current Bid", value=f"**{s['current_bid']}** pts" if s["current_bid"] > 0 else "No bids yet", inline=True)
-        embed.add_field(name="Highest Bidder", value=s["current_bidder"].mention if s["current_bidder"] else "—", inline=True)
-        embed.add_field(name="Min Bid", value=f"{s['min_bid']} pts", inline=True)
-        embed.add_field(name="Bid Interval", value=f"+{s['bid_interval']} pts minimum", inline=True)
-        embed.add_field(name="Time Remaining", value=time_str, inline=True)
-        embed.set_footer(text="Heavenly Court ✦ Monthly Auction — bids are final once placed")
+        bid_text = f"## {s['current_bid']} pts" if s["current_bid"] > 0 else "## No bids yet!"
+        embed.add_field(name="💰 Current Highest Bid", value=bid_text, inline=False)
+        
+        bidder = s["current_bidder"].mention if s["current_bidder"] else "—"
+        embed.add_field(name="👑 Highest Bidder", value=bidder, inline=True)
+        
+        if s["end_time"]:
+            unix_time = int(s["end_time"].timestamp())
+            embed.add_field(name="⏱️ Ends In", value=f"<t:{unix_time}:R>", inline=True)
+            
+        embed.add_field(
+            name="📈 Bidding Rules", 
+            value=f"**Starting Bid:** {s['min_bid']} pts\n**Minimum Raise:** +{s['bid_interval']} pts", 
+            inline=False
+        )
+
+        embed.set_footer(text="Heavenly Court ✦ Bids are final once placed")
         return embed
 
-    async def update_embed(self):
-        if self.state["message"]:
-            try:
-                await self.state["message"].edit(embed=self.make_embed())
-            except Exception as e:
-                print(f"embed update error: {e}")
-
-    async def timer_loop(self):
+    async def auction_timer(self, duration_seconds: int):
         try:
-            while True:
-                await asyncio.sleep(5)
-                if not self.state["active"]:
-                    break
-                await self.update_embed()
-                if discord.utils.utcnow() >= self.state["end_time"]:
-                    await self.end_current_item()
-                    break
+            await asyncio.sleep(duration_seconds)
+            if self.state["active"]:
+                await self.end_auction()
         except asyncio.CancelledError:
             pass
 
-    async def start_item(self, index: int):
-        s = self.state
-        s["current_index"]  = index
-        s["current_bid"]    = 0
-        s["current_bidder"] = None
-        s["end_time"]       = discord.utils.utcnow() + timedelta(seconds=s["duration"])
-        s["active"]         = True
-        
-        view  = AuctionView(self)
-        embed = self.make_embed()
-        msg   = await s["channel"].send(embed=embed, view=view)
-        s["message"] = msg
-        
-        if self.timer_task:
-            self.timer_task.cancel()
-        self.timer_task = asyncio.create_task(self.timer_loop())
-
-    async def end_current_item(self):
+    async def end_auction(self):
         s = self.state
         s["active"] = False
-        channel  = s["channel"]
-        item_num = s["current_index"] + 1
-        item     = s["items"][s["current_index"]]
+        channel = s["channel"]
+        item = s["item"]
         
         if s["current_bidder"]:
             winner = s["current_bidder"]
-            bid    = s["current_bid"]
+            bid = s["current_bid"]
             
             try:
                 await remove_points(winner.id, bid)
             except ValueError:
                 await add_points(winner.id, -bid)
                 
-            s["winner_ids"].add(winner.id)
-            s["winners"][s["current_index"]] = winner.id
-            
             end_embed = discord.Embed(
-                title=f"✦ Item {item_num} — Sold!",
-                description=f"**{item}** won by {winner.mention} for **{bid}** pts ✦",
+                title="✦ Auction Ended — Sold!",
+                description=f"### 🎁 {item}\n🎉 Won by {winner.mention} for **{bid}** pts ✦",
                 color=0x9b59b6
             )
             if s["message"]:
                 await s["message"].edit(embed=end_embed, view=None)
-            await channel.send(f"🎉 {winner.mention} won **{item}** for **{bid}** contribution points!")
+                
+            await channel.send(
+                f"🎉 {winner.mention} won **{item}** for **{bid}** contribution points!\n"
+                "Please open a ticket to claim your prize. ✦"
+            )
         else:
             end_embed = discord.Embed(
-                title=f"✦ Item {item_num} — No Bids",
-                description=f"**{item}** received no bids and has been passed.",
+                title="✦ Auction Ended — No Bids",
+                description=f"### 🎁 {item}\nReceived no bids.",
                 color=0xe74c3c
             )
             if s["message"]:
                 await s["message"].edit(embed=end_embed, view=None)
-            await channel.send(f"Item {item_num} had no bids — moving on.")
+            await channel.send(f"The auction for **{item}** ended with no bids.")
 
-        await asyncio.sleep(5)
-        next_index = s["current_index"] + 1
-        
-        if next_index < len(s["items"]):
-            countdown = await channel.send("✦ Next item starting in **10 seconds**...")
-            await asyncio.sleep(10)
-            try:
-                await countdown.delete()
-            except Exception:
-                pass
-            await self.start_item(next_index)
-        else:
-            await channel.send(
-                "✦ The auction has concluded!\n\n"
-                "Winners may open a ticket to claim their prizes. "
-                "Please include your winning item when opening the ticket. ✦"
-            )
-            s["winner_ids"].clear()
-            s["winners"].clear()
-            s["items"] = []
+        self.state["item"] = None
+        self.state["message"] = None
 
     async def process_bid(self, interaction: discord.Interaction, bid_str: str):
         s = self.state
         if not s["active"]:
             return await interaction.response.send_message("No active auction right now.", ephemeral=True)
-            
-        if interaction.user.id in s["winner_ids"]:
-            return await interaction.response.send_message(
-                "✦ You've already won an item this auction — you can't bid further.",
-                ephemeral=True
-            )
             
         try:
             bid = int(bid_str.strip())
@@ -210,118 +151,98 @@ class AuctionCog(commands.Cog):
                 ephemeral=True
             )
             
+        previous_bidder = s["current_bidder"]
+        
         s["current_bid"]    = bid
         s["current_bidder"] = interaction.user
-        await self.update_embed()
         
+        if s["message"]:
+            await s["message"].edit(embed=self.make_embed())
+            
         await interaction.response.send_message(
             f"✦ Bid of **{bid}** pts placed successfully!",
             ephemeral=True
         )
-
-    # --------------------------------------------------
-    # COMMANDS
-    # --------------------------------------------------
-
-    @commands.group(name="auction", invoke_without_command=True)
-    @commands.guild_only()
-    async def auction_cmd(self, ctx):
-        embed = discord.Embed(
-            title="✦ Auction Commands",
-            description="A simple guide to running the auction:",
-            color=EMBED_COLOR
-        )
         
-        commands_list = (
-            "**`,auction setup <minutes> <min_bid> <interval> Item1|Item2|Item3|Item4|Item5`**\n"
-            "**`,auction start`**\n"
-            "Begins the auction once it is set up.\n\n"
-            "**`,auction extend <minutes>`**\n"
-            "Adds extra time to the current item.\n\n"
-            "**`,auction status`**\n"
-            "Shows what is currently being auctioned and the highest bid.\n\n"
-            "**`,auction cancel`**\n"
-            "Stops the current auction completely."
-        )
-        
-        embed.add_field(name="Command List", value=commands_list, inline=False)
-        embed.set_footer(text="Heavenly Court ✦ Auction System")
-        await ctx.send(embed=embed)
+        if previous_bidder and previous_bidder.id != interaction.user.id:
+            outbid_embed = discord.Embed(
+                title="⚠️ You've been outbid!",
+                description=f"You were just outbid on **{s['item']}** in the Heavenly Court auction!\n\nThe new highest bid is **{bid} pts**.",
+                color=0xe74c3c
+            )
+            try:
+                await previous_bidder.send(embed=outbid_embed)
+            except discord.Forbidden:
+                if s["channel"]:
+                    warn_msg = await s["channel"].send(f"⚠️ {previous_bidder.mention}, you were just outbid on **{s['item']}**!")
+                    await warn_msg.delete(delay=10)
 
-    @auction_cmd.command(name="setup")
-    @commands.has_permissions(administrator=True)
-    @commands.guild_only()
-    async def auction_setup(self, ctx, duration: int, min_bid: int, bid_interval: int, *, items: str):
-        item_list = [i.strip() for i in items.split("|")]
-        
-        if len(item_list) != 5:
-            return await ctx.send("✦ Provide exactly 5 items separated by `|`")
-            
-        channel = ctx.guild.get_channel(AUCTION_CHANNEL_ID)
-        if not channel:
-            return await ctx.send("✦ Auction channel not found — set `AUCTION_CHANNEL_ID` in constants.py")
-            
-        self.state.update({
-            "items":        item_list,
-            "duration":     duration * 60,
-            "min_bid":      min_bid,
-            "bid_interval": bid_interval,
-            "channel":      channel,
-            "winner_ids":   set(),
-            "winners":      {},
-        })
-        
-        embed = discord.Embed(title="✦ Auction Setup Complete", color=EMBED_COLOR)
-        embed.add_field(name="Items", value="\n".join([f"{i+1}. ||{item}||" for i, item in enumerate(item_list)]), inline=False)
-        embed.add_field(name="Duration per item", value=f"{duration} minutes", inline=True)
-        embed.add_field(name="Min bid", value=f"{min_bid} pts", inline=True)
-        embed.add_field(name="Bid interval", value=f"{bid_interval} pts", inline=True)
-        embed.set_footer(text="Use ,auction start when ready")
-        await ctx.send(embed=embed)
 
-    @auction_cmd.command(name="start")
-    @commands.has_permissions(administrator=True)
-    @commands.guild_only()
-    async def auction_start(self, ctx):
-        if not self.state["items"]:
-            return await ctx.send("✦ No auction prepared — use `,auction setup` first.")
+    auction_group = app_commands.Group(name="auction", description="Manage the single-item auction system")
+
+    @auction_group.command(name="start", description="Start a new single-item auction")
+    @app_commands.describe(
+        item="The name of the item being auctioned",
+        duration="How many minutes the auction lasts",
+        min_bid="Starting minimum bid",
+        interval="Minimum interval to raise bids"
+    )
+    @app_commands.default_permissions(administrator=True)
+    async def auction_start(self, interaction: discord.Interaction, item: str, duration: int, min_bid: int, interval: int):
         if self.state["active"]:
-            return await ctx.send("✦ An auction is already running.")
-            
-        await ctx.send("✦ Starting the auction!")
-        await self.start_item(0)
+            return await interaction.response.send_message("✦ An auction is already running. Cancel it or let it finish first.", ephemeral=True)
 
-    @auction_cmd.command(name="cancel")
-    @commands.has_permissions(administrator=True)
-    @commands.guild_only()
-    async def auction_cancel(self, ctx):
+        channel = interaction.guild.get_channel(AUCTION_CHANNEL_ID)
+        if not channel:
+            return await interaction.response.send_message("✦ Auction channel not found — set `AUCTION_CHANNEL_ID` in constants.py", ephemeral=True)
+
+        end_time = discord.utils.utcnow() + timedelta(minutes=duration)
+
+        self.state.update({
+            "active":         True,
+            "item":           item,
+            "current_bid":    0,
+            "current_bidder": None,
+            "bid_interval":   interval,
+            "min_bid":        min_bid,
+            "end_time":       end_time,
+            "channel":        channel,
+        })
+
+        view = AuctionView(self)
+        embed = self.make_embed()
+        
+        msg = await channel.send(embed=embed, view=view)
+        self.state["message"] = msg
+
+        if self.timer_task:
+            self.timer_task.cancel()
+        self.timer_task = asyncio.create_task(self.auction_timer(duration * 60))
+
+        await interaction.response.send_message(f"✦ Auction for **{item}** started in {channel.mention}!", ephemeral=True)
+
+    @auction_group.command(name="cancel", description="Cancel the active auction")
+    @app_commands.default_permissions(administrator=True)
+    async def auction_cancel(self, interaction: discord.Interaction):
+        if not self.state["active"]:
+            return await interaction.response.send_message("✦ No active auction to cancel.", ephemeral=True)
+
         if self.timer_task:
             self.timer_task.cancel()
         self.state["active"] = False
-        self.state["items"]  = []
-        await ctx.send("✦ Auction cancelled.")
 
-    @auction_cmd.command(name="extend")
-    @commands.has_permissions(administrator=True)
-    @commands.guild_only()
-    async def auction_extend(self, ctx, minutes: int):
-        if not self.state["active"]:
-            return await ctx.send("✦ No active auction.")
-        self.state["end_time"] += timedelta(minutes=minutes)
-        await ctx.send(f"✦ Timer extended by {minutes} minutes.")
+        if self.state["message"]:
+            embed = discord.Embed(
+                title="✦ Auction Cancelled",
+                description=f"The auction for **{self.state['item']}** was cancelled by an admin.",
+                color=0xe74c3c
+            )
+            await self.state["message"].edit(embed=embed, view=None)
 
-    @auction_cmd.command(name="status")
-    @commands.guild_only()
-    async def auction_status(self, ctx):
-        if not self.state["active"] and not self.state["items"]:
-            return await ctx.send("✦ No auction running or prepared.")
-        if self.state["active"]:
-            await ctx.send(embed=self.make_embed())
-        else:
-            await ctx.send(embed=discord.Embed(
-                description="✦ Auction prepared but not started yet. Use `,auction start`.",
-                color=EMBED_COLOR
-            ))
+        self.state["item"] = None
+        self.state["message"] = None
+
+        await interaction.response.send_message("✦ Auction cancelled successfully.", ephemeral=True)
 
 async def setup(bot):
     await bot.add_cog(AuctionCog(bot))

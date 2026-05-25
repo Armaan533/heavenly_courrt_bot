@@ -29,6 +29,8 @@ class Bot(commands.Bot):
         await self.load_extension("cogs.clan")
         await self.load_extension("cogs.auction")
 
+        await self.tree.sync()
+
 bot = Bot()
 
 
