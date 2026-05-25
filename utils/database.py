@@ -91,7 +91,13 @@ async def get_whitelist() -> list[int]:
 #     if reward is None:
 #         await rewardedColl.insert_one({"message_id": message_id})
 
+# true if not claimed
 async def try_claim_reward(message_id: int) -> bool:
     result = await rewardedColl.update_one({"message_id": message_id}, {"$setOnInsert": {"message_id": message_id}}, upsert=True)
     print(result.upserted_id)
     return result.upserted_id is not None
+
+#true if pog not claimed
+async def try_claim_pog_reward(message_id: int) -> bool:
+    result = await rewardedColl.update_one({"message_id": message_id}, {"$setOnInsert": {"pog_rewarded": True}}, upsert=True)
+    return result.modified_count == 0
