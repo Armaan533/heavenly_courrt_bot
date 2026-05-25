@@ -10,7 +10,7 @@ wishlistColl: AsyncCollection
 rewardedColl: AsyncCollection
 
 async def init_db():
-    global connector, hcdb, pointsColl, wishlistColl, rewardedColl
+    global connector, hcdb, pointsColl, wishlistColl, rewardedColl, auctionWinnersColl
     connector = pymongo.AsyncMongoClient(os.getenv("MONGO_URI"), serverSelectionTimeoutMS=5000)
     info = await connector.server_info()  # Trigger connection to verify credentials and connectivity
     print("Connected to MongoDB")
@@ -21,6 +21,7 @@ async def init_db():
     pointsColl = hcdb.points
     wishlistColl = hcdb.whitelist
     rewardedColl = hcdb.rewarded
+    auctionWinnersColl = hcdb.auction_winners
 
 
 #           Points System           #
@@ -101,3 +102,24 @@ async def try_claim_reward(message_id: int) -> bool:
 async def try_claim_pog_reward(message_id: int) -> bool:
     result = await rewardedColl.update_one({"message_id": message_id}, {"$setOnInsert": {"pog_rewarded": True}}, upsert=True)
     return result.modified_count == 0
+
+#auction winner tracking
+
+async def is_auction_winner(user_id: int) -> bool:
+    user = await auctionWinnersColl.find_one({"user_id": user_id})
+    return user is not None
+
+async def add_auction_winner(user_id: int) -> None:
+    await auctionWinnersColl.update_one({"user_id": user_id}, {"$set": {"user_id": user_id}}, upsert=True)
+
+async def remove_auction_winner(user_id: int) -> None:
+    result = await auctionWinnersColl.delete_one({"user_id": user_id})
+    if result.deleted_count == 0:
+        raise ValueError("User is not in the winner list.")
+
+async def get_auction_winners() -> list[int]:
+    cursor = auctionWinnersColl.find({}, {"user_id": 1})
+    return [doc["user_id"] async for doc in cursor]
+
+async def clear_auction_winners() -> None:
+    await auctionWinnersColl.delete_many({})

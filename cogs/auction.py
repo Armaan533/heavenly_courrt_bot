@@ -4,7 +4,10 @@ from discord import app_commands
 import asyncio
 from datetime import timedelta
 
-from utils.database import get_points, remove_points, add_points
+from utils.database import (
+    get_points, remove_points, add_points, 
+    is_auction_winner, add_auction_winner, remove_auction_winner, get_auction_winners, clear_auction_winners
+)
 from constants import *
 
 class BidModal(discord.ui.Modal, title="Place Your Bid"):
@@ -35,6 +38,9 @@ class AuctionView(discord.ui.View):
         if not self.cog.state["active"]:
             return await interaction.response.send_message("No active auction right now.", ephemeral=True)
             
+        if await is_auction_winner(interaction.user.id):
+            return await interaction.response.send_message("✦ You've already won an item recently — you cannot bid again until the winner list is reset.", ephemeral=True)
+            
         await interaction.response.send_modal(BidModal(self.cog))
 
 class AuctionCog(commands.Cog):
@@ -55,7 +61,6 @@ class AuctionCog(commands.Cog):
 
     def make_embed(self) -> discord.Embed:
         s = self.state
-        
         embed = discord.Embed(title="✦ Heavenly Court Live Auction ✦", color=EMBED_COLOR)
         embed.description = f"### 🎁 {s['item']}"
         
@@ -101,6 +106,8 @@ class AuctionCog(commands.Cog):
             except ValueError:
                 await add_points(winner.id, -bid)
                 
+            await add_auction_winner(winner.id)
+                
             end_embed = discord.Embed(
                 title="✦ Auction Ended!",
                 description=f"### 🎁 {item}\n🎉 Won by {winner.mention} for **{bid}** pts ✦",
@@ -130,6 +137,9 @@ class AuctionCog(commands.Cog):
         s = self.state
         if not s["active"]:
             return await interaction.response.send_message("No active auction right now.", ephemeral=True)
+            
+        if await is_auction_winner(interaction.user.id):
+            return await interaction.response.send_message("✦ You've already won an item recently — you cannot bid again until the winner list is reset.", ephemeral=True)
             
         try:
             bid = int(bid_str.strip())
@@ -177,10 +187,9 @@ class AuctionCog(commands.Cog):
                     warn_msg = await s["channel"].send(f"⚠️ {previous_bidder.mention}, you were just outbid on **{s['item']}**!")
                     await warn_msg.delete(delay=10)
 
+    auction_group = app_commands.Group(name="auction", description="Manage the item auction system")
 
-    auction_group = app_commands.Group(name="auction", description="Manage the single-item auction system")
-
-    @auction_group.command(name="start", description="Start a new single-item auction")
+    @auction_group.command(name="start", description="Start a new item auction")
     @app_commands.describe(
         item="The name of the item being auctioned",
         duration="How many minutes the auction lasts",
@@ -243,6 +252,40 @@ class AuctionCog(commands.Cog):
         self.state["message"] = None
 
         await interaction.response.send_message("✦ Auction cancelled successfully.", ephemeral=True)
+
+    winner_group = app_commands.Group(name="auction_winners", description="Manage the auction winner lock out list")
+
+    @winner_group.command(name="add", description="add someone to the winner list so they cannot bid")
+    @app_commands.default_permissions(administrator=True)
+    async def winner_add(self, interaction: discord.Interaction, member: discord.Member):
+        await add_auction_winner(member.id)
+        await interaction.response.send_message(f"✦ {member.mention} has been added to the auction winner list.", ephemeral=True)
+
+    @winner_group.command(name="remove", description="Remove someone from the winner list so they can bid again")
+    @app_commands.default_permissions(administrator=True)
+    async def winner_remove(self, interaction: discord.Interaction, member: discord.Member):
+        try:
+            await remove_auction_winner(member.id)
+            await interaction.response.send_message(f"✦ {member.mention} has been removed from the winner list.", ephemeral=True)
+        except ValueError:
+            await interaction.response.send_message(f"✦ {member.mention} is not in the winner list.", ephemeral=True)
+
+    @winner_group.command(name="list", description="View everyone currently locked out from bidding")
+    @app_commands.default_permissions(administrator=True)
+    async def winner_list(self, interaction: discord.Interaction):
+        winners = await get_auction_winners()
+        if not winners:
+            return await interaction.response.send_message("✦ The winner list is currently empty.", ephemeral=True)
+            
+        mentions = [f"<@{uid}>" for uid in winners]
+        embed = discord.Embed(title="✦ Locked Out Auction Winners", description="\n".join(mentions), color=EMBED_COLOR)
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+
+    @winner_group.command(name="clear", description="Wipe the entire winner list")
+    @app_commands.default_permissions(administrator=True)
+    async def winner_clear(self, interaction: discord.Interaction):
+        await clear_auction_winners()
+        await interaction.response.send_message("✦ The auction winner list has been wiped.!", ephemeral=True)
 
 async def setup(bot):
     await bot.add_cog(AuctionCog(bot))
