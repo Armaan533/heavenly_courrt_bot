@@ -27,6 +27,7 @@ class Bot(commands.Bot):
         await init_db()
         await self.load_extension("cogs.points")
         await self.load_extension("cogs.clan")
+        await self.load_extension("cogs.auction")
 
 bot = Bot()
 
