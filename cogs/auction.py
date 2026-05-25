@@ -225,37 +225,27 @@ class AuctionCog(commands.Cog):
     @commands.group(name="auction", invoke_without_command=True)
     @commands.guild_only()
     async def auction_cmd(self, ctx):
-        await ctx.send_help(ctx.command)
-
-    @auction_cmd.command(name="setup", help="Setup 5 auction items. Usage: ,auction setup <duration_mins> <min_bid> <interval> Item1|Item2|Item3|Item4|Item5")
-    @commands.has_permissions(administrator=True)
-    @commands.guild_only()
-    async def auction_setup(self, ctx, duration: int, min_bid: int, bid_interval: int, *, items: str):
-        item_list = [i.strip() for i in items.split("|")]
+        embed = discord.Embed(
+            title="✦ Auction Commands",
+            description="A simple guide to running the auction:",
+            color=EMBED_COLOR
+        )
         
-        if len(item_list) != 5:
-            return await ctx.send("✦ Provide exactly 5 items separated by `|`")
-            
-        channel = ctx.guild.get_channel(AUCTION_CHANNEL_ID)
-        if not channel:
-            return await ctx.send("✦ Auction channel not found")
-            
-        self.state.update({
-            "items":        item_list,
-            "duration":     duration * 60,
-            "min_bid":      min_bid,
-            "bid_interval": bid_interval,
-            "channel":      channel,
-            "winner_ids":   set(),
-            "winners":      {},
-        })
+        commands_list = (
+            "**`,auction setup <minutes> <min_bid> <interval> Item1|Item2|Item3|Item4|Item5`**\n"
+            "Prepares the 5 items. *(Example: `,auction setup 5 50 10 Sword|Shield|Potion|Ring|Cape`)*\n\n"
+            "**`,auction start`**\n"
+            "Begins the auction once it is set up.\n\n"
+            "**`,auction extend <minutes>`**\n"
+            "Adds extra time to the current item.\n\n"
+            "**`,auction status`**\n"
+            "Shows what is currently being auctioned and the highest bid.\n\n"
+            "**`,auction cancel`**\n"
+            "Stops the current auction completely."
+        )
         
-        embed = discord.Embed(title="✦ Auction Setup Complete", color=EMBED_COLOR)
-        embed.add_field(name="Items", value="\n".join([f"{i+1}. ||{item}||" for i, item in enumerate(item_list)]), inline=False)
-        embed.add_field(name="Duration per item", value=f"{duration} minutes", inline=True)
-        embed.add_field(name="Min bid", value=f"{min_bid} pts", inline=True)
-        embed.add_field(name="Bid interval", value=f"{bid_interval} pts", inline=True)
-        embed.set_footer(text="Use ,auction start when ready")
+        embed.add_field(name="Command List", value=commands_list, inline=False)
+        embed.set_footer(text="Heavenly Court ✦ Auction System")
         await ctx.send(embed=embed)
 
     @auction_cmd.command(name="start")
