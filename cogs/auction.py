@@ -102,7 +102,7 @@ class AuctionCog(commands.Cog):
                 await add_points(winner.id, -bid)
                 
             end_embed = discord.Embed(
-                title="✦ Auction Ended — Sold!",
+                title="✦ Auction Ended!",
                 description=f"### 🎁 {item}\n🎉 Won by {winner.mention} for **{bid}** pts ✦",
                 color=0x9b59b6
             )
@@ -194,7 +194,7 @@ class AuctionCog(commands.Cog):
 
         channel = interaction.guild.get_channel(AUCTION_CHANNEL_ID)
         if not channel:
-            return await interaction.response.send_message("✦ Auction channel not found — set `AUCTION_CHANNEL_ID` in constants.py", ephemeral=True)
+            return await interaction.response.send_message("✦ Auction channel not found", ephemeral=True)
 
         end_time = discord.utils.utcnow() + timedelta(minutes=duration)
 
