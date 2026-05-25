@@ -24,7 +24,6 @@ class BidModal(discord.ui.Modal, title="Place Your Bid"):
     async def on_submit(self, interaction: discord.Interaction):
         await self.cog.process_bid(interaction, self.bid_input.value)
 
-
 class AuctionView(discord.ui.View):
     def __init__(self, cog):
         super().__init__(timeout=None)
@@ -44,7 +43,6 @@ class AuctionView(discord.ui.View):
             )
             
         await interaction.response.send_modal(BidModal(self.cog))
-
 
 class AuctionCog(commands.Cog):
     def __init__(self, bot):
@@ -197,7 +195,6 @@ class AuctionCog(commands.Cog):
         except ValueError:
             return await interaction.response.send_message("Please enter a valid number.", ephemeral=True)
             
-
         min_next = s["current_bid"] + s["bid_interval"] if s["current_bid"] > 0 else s["min_bid"]
         if bid < min_next:
             return await interaction.response.send_message(
@@ -205,7 +202,7 @@ class AuctionCog(commands.Cog):
                 f"(current: {s['current_bid']} + interval: {s['bid_interval']}).",
                 ephemeral=True
             )
-        
+            
         user_pts = await get_points(interaction.user.id)
         if user_pts < bid:
             return await interaction.response.send_message(
@@ -222,6 +219,10 @@ class AuctionCog(commands.Cog):
             ephemeral=True
         )
 
+    # --------------------------------------------------
+    # COMMANDS
+    # --------------------------------------------------
+
     @commands.group(name="auction", invoke_without_command=True)
     @commands.guild_only()
     async def auction_cmd(self, ctx):
@@ -233,7 +234,6 @@ class AuctionCog(commands.Cog):
         
         commands_list = (
             "**`,auction setup <minutes> <min_bid> <interval> Item1|Item2|Item3|Item4|Item5`**\n"
-            "Prepares the 5 items. *(Example: `,auction setup 5 50 10 Sword|Shield|Potion|Ring|Cape`)*\n\n"
             "**`,auction start`**\n"
             "Begins the auction once it is set up.\n\n"
             "**`,auction extend <minutes>`**\n"
@@ -246,6 +246,37 @@ class AuctionCog(commands.Cog):
         
         embed.add_field(name="Command List", value=commands_list, inline=False)
         embed.set_footer(text="Heavenly Court ✦ Auction System")
+        await ctx.send(embed=embed)
+
+    @auction_cmd.command(name="setup")
+    @commands.has_permissions(administrator=True)
+    @commands.guild_only()
+    async def auction_setup(self, ctx, duration: int, min_bid: int, bid_interval: int, *, items: str):
+        item_list = [i.strip() for i in items.split("|")]
+        
+        if len(item_list) != 5:
+            return await ctx.send("✦ Provide exactly 5 items separated by `|`")
+            
+        channel = ctx.guild.get_channel(AUCTION_CHANNEL_ID)
+        if not channel:
+            return await ctx.send("✦ Auction channel not found — set `AUCTION_CHANNEL_ID` in constants.py")
+            
+        self.state.update({
+            "items":        item_list,
+            "duration":     duration * 60,
+            "min_bid":      min_bid,
+            "bid_interval": bid_interval,
+            "channel":      channel,
+            "winner_ids":   set(),
+            "winners":      {},
+        })
+        
+        embed = discord.Embed(title="✦ Auction Setup Complete", color=EMBED_COLOR)
+        embed.add_field(name="Items", value="\n".join([f"{i+1}. ||{item}||" for i, item in enumerate(item_list)]), inline=False)
+        embed.add_field(name="Duration per item", value=f"{duration} minutes", inline=True)
+        embed.add_field(name="Min bid", value=f"{min_bid} pts", inline=True)
+        embed.add_field(name="Bid interval", value=f"{bid_interval} pts", inline=True)
+        embed.set_footer(text="Use ,auction start when ready")
         await ctx.send(embed=embed)
 
     @auction_cmd.command(name="start")
@@ -269,6 +300,15 @@ class AuctionCog(commands.Cog):
         self.state["active"] = False
         self.state["items"]  = []
         await ctx.send("✦ Auction cancelled.")
+
+    @auction_cmd.command(name="extend")
+    @commands.has_permissions(administrator=True)
+    @commands.guild_only()
+    async def auction_extend(self, ctx, minutes: int):
+        if not self.state["active"]:
+            return await ctx.send("✦ No active auction.")
+        self.state["end_time"] += timedelta(minutes=minutes)
+        await ctx.send(f"✦ Timer extended by {minutes} minutes.")
 
     @auction_cmd.command(name="status")
     @commands.guild_only()
