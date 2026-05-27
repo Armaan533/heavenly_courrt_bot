@@ -3,7 +3,7 @@ import discord
 from main import log
 
 from constants import *
-from utils.database import add_points, get_points, remove_points, set_points, get_leaderboard
+from utils.database import add_points, get_points, remove_points, set_points, get_leaderboard, add_booster_points, get_booster_points, remove_booster_points, set_booster_points
 
 
 async def setup(bot: commands.Bot):
@@ -18,9 +18,11 @@ class Points(commands.Cog):
     async def points_cmd(self, ctx: commands.Context, member: discord.Member | None = None):
         target = member or ctx.author
         pts = await get_points(target.id)
+        b_pts = await get_booster_points(target.id) # Fetches booster points
+        
         embed = discord.Embed(title="✦ Contribution Points", color=EMBED_COLOR)
         embed.set_thumbnail(url=target.display_avatar.url)
-        embed.add_field(name=target.display_name, value=f"**{pts}** points")
+        embed.add_field(name=target.display_name, value=f"**{pts}** points\n**{b_pts}** booster points", inline=False)
         await ctx.send(embed=embed)
 
     @points_cmd.command(name="reset", help="Reset a member's points to 0")
@@ -93,3 +95,34 @@ class Points(commands.Cog):
                 lines.append(f"{prefix} {name} — **{points}** pts")
             embed.description = "\n".join(lines)
         await ctx.send(embed=embed)
+
+    @commands.group(name="booster", invoke_without_command=True)
+    @commands.has_permissions(administrator=True)
+    async def booster_cmd(self, ctx: commands.Context):
+        await ctx.send("✦ Use `,booster add @user <amount>`, `,booster remove @user <amount>`, or `,booster set @user <amount>`")
+
+    @booster_cmd.command(name="add")
+    @commands.has_permissions(administrator=True)
+    async def booster_add(self, ctx: commands.Context, member: discord.Member, amount: int):
+        if amount <= 0: return await ctx.send("Amount must be positive.")
+        await add_booster_points(member.id, amount)
+        total = await get_booster_points(member.id)
+        await ctx.send(embed=discord.Embed(description=f"✦ Added **{amount}** booster points to {member.mention}. Total: **{total}**", color=EMBED_COLOR))
+        await log(ctx.guild, f"🚀 `+{amount}` Booster Pts → {member} | by {ctx.author} | total: {total}")
+
+    @booster_cmd.command(name="remove", aliases=["rm"])
+    @commands.has_permissions(administrator=True)
+    async def booster_remove(self, ctx: commands.Context, member: discord.Member, amount: int):
+        if amount <= 0: return await ctx.send("Amount must be positive.")
+        try:
+            new_total = await remove_booster_points(member.id, amount)
+            await ctx.send(embed=discord.Embed(description=f"✦ Removed **{amount}** booster points from {member.mention}. Total: **{new_total}**", color=EMBED_COLOR))
+            await log(ctx.guild, f"🚀 `-{amount}` Booster Pts → {member} | by {ctx.author} | total: {new_total}")
+        except ValueError:
+            await ctx.send(f"✦ {member.mention} does not have enough booster points.")
+
+    @booster_cmd.command(name="set")
+    @commands.has_permissions(administrator=True)
+    async def booster_set(self, ctx: commands.Context, member: discord.Member, amount: int):
+        await set_booster_points(member.id, amount)
+        await ctx.send(embed=discord.Embed(description=f"✦ Set {member.mention}'s booster points to **{amount}**.", color=EMBED_COLOR))

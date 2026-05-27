@@ -123,3 +123,24 @@ async def get_auction_winners() -> list[int]:
 
 async def clear_auction_winners() -> None:
     await auctionWinnersColl.delete_many({})
+
+#booster stuff 
+
+async def get_booster_points(user_id: int) -> int:
+    user = await pointsColl.find_one({"user_id": user_id})
+    if user is None:
+        return 0
+    return user.get("booster_points", 0)
+
+async def add_booster_points(user_id: int, amount: int) -> None:
+    await pointsColl.update_one({"user_id": user_id}, {"$inc": {"booster_points": amount}}, upsert=True)
+
+async def remove_booster_points(user_id: int, amount: int) -> int:
+    user = await pointsColl.find_one({"user_id": user_id, "booster_points": {"$gte": amount}})
+    if user is None:
+        raise ValueError("User does not have enough booster points")
+    await pointsColl.update_one({"user_id": user_id}, {"$inc": {"booster_points": -amount}}, upsert=True)
+    return user["booster_points"] - amount
+
+async def set_booster_points(user_id: int, amount: int) -> None:
+    await pointsColl.update_one({"user_id": user_id}, {"$set": {"booster_points": amount}}, upsert=True)
