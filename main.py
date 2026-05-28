@@ -28,6 +28,10 @@ class Bot(commands.Bot):
         await self.load_extension("cogs.points")
         await self.load_extension("cogs.clan")
         await self.load_extension("cogs.auction")
+        await self.load_extension("cogs.colors")
+        
+        from cogs.colors import ColorView
+        self.add_view(ColorView())
 
         await self.tree.sync()
 
