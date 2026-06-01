@@ -200,6 +200,17 @@ class AuctionCog(commands.Cog):
     )
     @app_commands.default_permissions(administrator=True)
     async def auction_start(self, interaction: discord.Interaction, item: str, duration: int, min_bid: int, interval: int):
+        OWNER_ROLE_ID = 1473722923926946000
+        
+        has_owner_role = any(role.id == OWNER_ROLE_ID for role in interaction.user.roles)
+        
+        if not has_owner_role:
+            await interaction.response.send_message(
+                "❌ Only the Supreme Elders with the Owner destiny token have the authority to activate the auction!", 
+                ephemeral=True
+            )
+            return
+        
         if self.state["active"]:
             return await interaction.response.send_message("✦ An auction is already running. Cancel it or let it finish first.", ephemeral=True)
 
