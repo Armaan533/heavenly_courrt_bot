@@ -63,10 +63,8 @@ class AuctionCog(commands.Cog):
         s = self.state
         embed = discord.Embed(title="✦ Heavenly Court Live Auction ✦", color=EMBED_COLOR)
         embed.description = f"### 🎁 {s['item']}"
-
-        embed.set_thumbnail(url="https://cdnb.artstation.com/p/assets/images/images/038/658/167/original/peter-sheff-chest-open03-small.gif")
         
-        bid_text = f"## {s['current_bid']} pts" if s["current_bid"] > 0 else "No bids yet!"
+        bid_text = f"{s['current_bid']} pts" if s["current_bid"] > 0 else "No bids yet!"
         embed.add_field(name="💰 Current Highest Bid", value=bid_text, inline=False)
         
         bidder = s["current_bidder"].mention if s["current_bidder"] else "—"
