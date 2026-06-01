@@ -22,7 +22,19 @@ intents.members = True
 class Bot(commands.Bot):
     def __init__(self):
         super().__init__(command_prefix=",", intents=intents)
-    
+
+        @self.tree.interaction_check
+        async def restrict_slash_commands(interaction: discord.Interaction) -> bool:
+            if interaction.type == discord.InteractionType.application_command:
+                if not interaction.user.guild_permissions.administrator:
+                    await interaction.response.send_message(
+                        "❌ You do not have permission to use Heavenly Court commands.",
+                        ephemeral=True
+                    )
+                    return False
+            
+            return True
+            
     async def setup_hook(self):
         await init_db()
         await self.load_extension("cogs.points")
