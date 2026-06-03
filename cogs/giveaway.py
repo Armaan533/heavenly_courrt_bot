@@ -78,7 +78,7 @@ class ItemSetupModal(discord.ui.Modal, title="Setup Item Giveaway"):
                 
         desc += f"\n⏰ **Ends:** <t:{end_time}:R>"
         
-        embed = discord.Embed(title="✦ . HEAVENLY COURT GIVEAWAY . ✦", description=desc, color=0x2b2d31)
+        embed = discord.Embed(title="✦ . HEAVENLY COURT GIVEAWAY . ✦", description=desc, color=0xE0B0FF)
         embed.set_footer(text=f"Hosted by {interaction.user.display_name}")
 
         await interaction.response.send_message("Giveaway started successfully!", ephemeral=True)
@@ -210,7 +210,7 @@ class GiveawayCog(commands.Cog):
                 
         desc += f"\n⏰ **Ends:** <t:{end_time}:R>"
 
-        giveaway_embed = discord.Embed(title="✦ . HEAVENLY COURT GIVEAWAY . ✦", description=desc, color=0x2b2d31)
+        giveaway_embed = discord.Embed(title="✦ . HEAVENLY COURT GIVEAWAY . ✦", description=desc, color=0xE0B0FF)
         giveaway_embed.set_footer(text=f"Hosted by {author.display_name}")
         
         if card_image_url:
@@ -235,7 +235,7 @@ class GiveawayCog(commands.Cog):
         if not (is_admin or is_event_manager):
             return await interaction.response.send_message("❌ You do not have permission to run this command.", ephemeral=True)
 
-        embed = discord.Embed(title="Giveaway Setup", description="Select the type of giveaway:", color=0x2b2d31)
+        embed = discord.Embed(title="Giveaway Setup", description="Select the type of giveaway:", color=0xE0B0FF)
         await interaction.response.send_message(embed=embed, view=GiveawayTypeSelect(self, interaction.user, clan_bonus, booster_bonus), ephemeral=True)
 
     @giveaway_group.command(name="cancel", description="Cancels an active giveaway")
