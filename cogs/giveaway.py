@@ -45,7 +45,7 @@ class GiveawayTypeSelect(discord.ui.View):
         self.stop()
 
 class ItemSetupModal(discord.ui.Modal, title="Setup Item Giveaway"):
-    item_name = discord.ui.TextInput(label="Item Name", placeholder="e.g., 500 Ticket Pack / Special Role")
+    item_name = discord.ui.TextInput(label="Item Name", placeholder="e.g., idk gng")
     description = discord.ui.TextInput(label="Item Description", style=discord.TextStyle.paragraph, placeholder="Describe what the winner receives...")
     duration = discord.ui.TextInput(label="Duration (in minutes)", placeholder="e.g., 60 for 1 hour, 1440 for 1 day")
 
@@ -62,8 +62,8 @@ class ItemSetupModal(discord.ui.Modal, title="Setup Item Giveaway"):
         end_time = int(time.time()) + (mins * 60)
         
         embed = discord.Embed(
-            title="⛩️ HEAVENLY COURT ITEM LOTTERY ⛩️",
-            description=f"An item of the realm is up for acquisition!\n\n**Item:** {self.item_name.value}\n**Details:** {self.description.value}\n\n⏱️ **Closes:** <t:{end_time}:R> (<t:{end_time}:F>)",
+            title="⛩️ITEM GIVEAWAY ⛩️",
+            description=f"An item is up for acquisition!\n\n**Item:** {self.item_name.value}\n**Details:** {self.description.value}\n\n⏱️ **Closes:** <t:{end_time}:R> (<t:{end_time}:F>)",
             color=0xe67e22
         )
         embed.set_thumbnail(url="https://cdnb.artstation.com/p/assets/images/images/038/658/167/original/peter-sheff-chest-open03-small.gif")
@@ -150,8 +150,8 @@ class GiveawayCog(commands.Cog):
         end_time = int(time.time()) + (mins * 60)
 
         giveaway_embed = discord.Embed(
-            title="⛩️ HEAVENLY COURT GRAIL GIVEAWAY ⛩️",
-            description=f"A legendary character card has been sacrificed to the scroll! Press the button below to register your lottery ticket.",
+            title="⛩️CARD GIVEAWAY ⛩️",
+            description=f"Press the button below to enter.",
             color=0xf1c40f
         )
         giveaway_embed.add_field(name="Character Identity", value=f"**{character_name}**", inline=True)
