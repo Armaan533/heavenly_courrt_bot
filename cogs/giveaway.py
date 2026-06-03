@@ -65,7 +65,7 @@ class ItemSetupModal(discord.ui.Modal, title="Setup Item Giveaway"):
 
         end_time = int(time.time()) + seconds
         
-        desc = f"✨ *An artifact has been offered to the sect.* ✨\n\n"
+        desc = f"✨ *An item has been offered to the sect.* ✨\n\n"
         desc += f"**୨୧ Item ୨୧**\n{self.item_name.value}\n\n"
         desc += f"**୨୧ Description ୨୧**\n{self.description.value}\n"
         
