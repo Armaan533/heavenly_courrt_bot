@@ -5,13 +5,25 @@ import asyncio
 import time
 import random
 
+# --- TIME PARSER HELPER ---
+def parse_time(time_str: str) -> int:
+    time_str = time_str.lower().strip()
+    if time_str.endswith('d'): return int(time_str[:-1]) * 86400
+    if time_str.endswith('h'): return int(time_str[:-1]) * 3600
+    if time_str.endswith('m'): return int(time_str[:-1]) * 60
+    if time_str.endswith('s'): return int(time_str[:-1])
+    if time_str.isdigit(): return int(time_str) * 60 # Default to minutes
+    raise ValueError("Invalid format")
+
+
 # --- 1. THE GIVEAWAY BUTTON & TICKETS ---
 class GiveawayEntryView(discord.ui.View):
-    def __init__(self, allow_bonus=False):
+    def __init__(self, clan_bonus: int = 0, booster_bonus: int = 0):
         super().__init__(timeout=None)
-        self.participants = set() # Tracks unique users for the counter
-        self.tickets = []         # Tracks total entries for the drawing
-        self.allow_bonus = allow_bonus
+        self.participants = set() # Tracks unique users so they can't double-enter
+        self.tickets = []         # Tracks TOTAL entries/tickets in the hat
+        self.clan_bonus = clan_bonus
+        self.booster_bonus = booster_bonus
 
     @discord.ui.button(label="Enter Giveaway (0)", style=discord.ButtonStyle.green, custom_id="claim_gaw_entry")
     async def enter_button(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -19,97 +31,106 @@ class GiveawayEntryView(discord.ui.View):
             await interaction.response.send_message("❌ You have already entered this giveaway.", ephemeral=True)
             return
             
-        entries = 1
-        if self.allow_bonus:
-            user_role_ids = [role.id for role in interaction.user.roles]
-            if 1504127544801366128 in user_role_ids: # Clan Member
-                entries += 1
-            if 1474356762063667210 in user_role_ids: # Booster
-                entries += 1
+        entries = 1 # Base entry for everyone
+        user_role_ids = [role.id for role in interaction.user.roles]
+        
+        if 1504127544801366128 in user_role_ids: # Clan Member
+            entries += self.clan_bonus
+        if 1474356762063667210 in user_role_ids: # Booster
+            entries += self.booster_bonus
                 
         self.participants.add(interaction.user.id)
+        
+        # Add their ID to the hat multiple times based on their bonuses
         for _ in range(entries):
             self.tickets.append(interaction.user.id)
             
-        # Update the live counter on the button!
-        button.label = f"Enter Giveaway ({len(self.participants)})"
+        # Update the live counter to show total tickets in the pool!
+        button.label = f"Enter Giveaway ({len(self.tickets)})"
         await interaction.response.edit_message(view=self)
         
-        await interaction.followup.send(f"✅ You have entered the giveaway with **{entries}** ticket(s)!", ephemeral=True)
+        # Clean, simple success message
+        await interaction.followup.send("✅ Successfully entered the giveaway!", ephemeral=True)
 
 
-# --- 2. THE MODALS (NO MORE CHAT TIMEOUTS) ---
+# --- 2. THE MODALS ---
 class ItemSetupModal(discord.ui.Modal, title="Setup Item Giveaway"):
     item_name = discord.ui.TextInput(label="Item Name")
     description = discord.ui.TextInput(label="Description", style=discord.TextStyle.paragraph)
-    duration = discord.ui.TextInput(label="Duration (in minutes)", placeholder="e.g. 10")
-    bonus = discord.ui.TextInput(label="Enable Clan/Booster Bonus? (yes/no)", default="yes")
+    duration = discord.ui.TextInput(label="Duration (e.g., 10m, 2h, 1d)", placeholder="10m, 2h, 1d")
 
-    def __init__(self, cog):
+    def __init__(self, cog, clan_bonus: int, booster_bonus: int):
         super().__init__()
         self.cog = cog
+        self.clan_bonus = clan_bonus
+        self.booster_bonus = booster_bonus
 
     async def on_submit(self, interaction: discord.Interaction):
         try:
-            mins = int(self.duration.value.strip())
+            seconds = parse_time(self.duration.value)
         except ValueError:
-            return await interaction.response.send_message("❌ Invalid duration.", ephemeral=True)
+            return await interaction.response.send_message("❌ Invalid duration. Use formats like 10m, 2h, or 1d.", ephemeral=True)
 
-        allow_bonus = "yes" in self.bonus.value.lower()
-        end_time = int(time.time()) + (mins * 60)
+        end_time = int(time.time()) + seconds
         
-        desc = f"**Item:** {self.item_name.value}\n**Description:** {self.description.value}\n"
-        if allow_bonus:
-            desc += "\n🎁 *Clan Members & Boosters receive +1 bonus entry!*"
-        desc += f"\n\nEnds: <t:{end_time}:R>"
+        embed = discord.Embed(
+            title="🎁 Item Giveaway", 
+            description=f"**Item:** {self.item_name.value}\n**Description:** {self.description.value}\n\nEnds: <t:{end_time}:R>", 
+            color=0x2f3136
+        )
         
-        embed = discord.Embed(title="🎁 Item Giveaway", description=desc, color=0x2f3136)
+        # Dynamically build the Bonus UI if bonuses are set above 0
+        if self.clan_bonus > 0 or self.booster_bonus > 0:
+            bonus_text = ""
+            if self.clan_bonus > 0:
+                bonus_text += f"Clan Members: {self.clan_bonus}\n"
+            if self.booster_bonus > 0:
+                bonus_text += f"Boosters: {self.booster_bonus}"
+            embed.add_field(name="Bonus Entries", value=bonus_text.strip(), inline=False)
+            
         embed.set_footer(text=f"Hosted by {interaction.user.display_name}")
 
         await interaction.response.send_message("Giveaway started successfully!", ephemeral=True)
-        view = GiveawayEntryView(allow_bonus=allow_bonus)
+        view = GiveawayEntryView(self.clan_bonus, self.booster_bonus)
         msg = await interaction.channel.send(embed=embed, view=view)
 
-        # Start background timer
-        task = asyncio.create_task(self.cog.manage_giveaway_timer(mins * 60, msg.id, interaction.channel.id, view, embed, self.item_name.value))
+        task = asyncio.create_task(self.cog.manage_giveaway_timer(seconds, msg.id, interaction.channel.id, view, embed, self.item_name.value))
         self.cog.active_giveaways[msg.id] = {"task": task, "view": view, "embed": embed, "prize": self.item_name.value, "channel_id": interaction.channel.id}
 
 class CardConfigModal(discord.ui.Modal, title="Configure Card Giveaway"):
-    duration = discord.ui.TextInput(label="Duration (in minutes)", placeholder="e.g. 10")
-    bonus = discord.ui.TextInput(label="Enable Clan/Booster Bonus? (yes/no)", default="yes")
+    duration = discord.ui.TextInput(label="Duration (e.g., 10m, 2h, 1d)", placeholder="10m, 2h, 1d")
 
-    def __init__(self, cog):
+    def __init__(self, cog, clan_bonus: int, booster_bonus: int):
         super().__init__()
         self.cog = cog
+        self.clan_bonus = clan_bonus
+        self.booster_bonus = booster_bonus
 
     async def on_submit(self, interaction: discord.Interaction):
         try:
-            mins = int(self.duration.value.strip())
+            seconds = parse_time(self.duration.value)
         except ValueError:
-            return await interaction.response.send_message("❌ Invalid duration.", ephemeral=True)
+            return await interaction.response.send_message("❌ Invalid duration. Use formats like 10m, 2h, or 1d.", ephemeral=True)
 
-        allow_bonus = "yes" in self.bonus.value.lower()
-        
         await interaction.response.send_message(f"✅ Configuration saved! **{interaction.user.mention}, please run `kci <card_code>` in this channel now.**", ephemeral=False)
-        
-        # Now we watch for Karuta!
-        await self.cog.wait_for_kci(interaction.channel, interaction.user, mins, allow_bonus)
+        await self.cog.wait_for_kci(interaction.channel, interaction.user, seconds, self.clan_bonus, self.booster_bonus)
 
 
 # --- 3. THE SETUP WIZARD MENU ---
 class GiveawayTypeSelect(discord.ui.View):
-    def __init__(self, cog, author):
+    def __init__(self, cog, author, clan_bonus, booster_bonus):
         super().__init__(timeout=60)
         self.cog = cog
         self.author = author
+        self.clan_bonus = clan_bonus
+        self.booster_bonus = booster_bonus
 
     @discord.ui.button(label="Karuta Card", style=discord.ButtonStyle.primary)
     async def card_choice(self, interaction: discord.Interaction, button: discord.ui.Button):
         if interaction.user.id != self.author.id:
             return await interaction.response.send_message("❌ This setup session belongs to someone else.", ephemeral=True)
         
-        # Launch Card Modal immediately!
-        await interaction.response.send_modal(CardConfigModal(self.cog))
+        await interaction.response.send_modal(CardConfigModal(self.cog, self.clan_bonus, self.booster_bonus))
         self.stop()
 
     @discord.ui.button(label="Item", style=discord.ButtonStyle.secondary)
@@ -117,8 +138,7 @@ class GiveawayTypeSelect(discord.ui.View):
         if interaction.user.id != self.author.id:
             return await interaction.response.send_message("❌ This setup session belongs to someone else.", ephemeral=True)
         
-        # Launch Item Modal immediately!
-        await interaction.response.send_modal(ItemSetupModal(self.cog))
+        await interaction.response.send_modal(ItemSetupModal(self.cog, self.clan_bonus, self.booster_bonus))
         self.stop()
 
 
@@ -160,7 +180,7 @@ class GiveawayCog(commands.Cog):
         await channel.send(f"🎉 Congratulations {winner_user.mention}, you won **{prize_name}**!")
 
     # -------- KARUTA CARD CATCHER --------
-    async def wait_for_kci(self, channel, author, mins, allow_bonus):
+    async def wait_for_kci(self, channel, author, seconds, clan_bonus, booster_bonus):
         def karuta_check(m):
             return (m.author.id == 646937666251915264 and 
                     m.channel.id == channel.id and 
@@ -178,22 +198,25 @@ class GiveawayCog(commands.Cog):
         if not lines:
             return await channel.send("❌ Could not read card metadata.")
 
-        # Line 0 usually contains the code and print.
         code_line = lines[0]
         card_code = code_line.split("·")[0].strip().replace("`", "")
-
-        # Line 1 is almost always the bolded character name.
         character_name = lines[1].replace("*", "").strip() if len(lines) > 1 else "Unknown"
         card_image_url = embed_data.thumbnail.url if embed_data.thumbnail else None
 
-        end_time = int(time.time()) + (mins * 60)
+        end_time = int(time.time()) + seconds
 
         giveaway_embed = discord.Embed(title="🎁 Card Giveaway", description=f"Click the button below to enter.", color=0x2f3136)
         giveaway_embed.add_field(name="Character", value=character_name, inline=True)
         giveaway_embed.add_field(name="Details", value=code_line, inline=False)
         
-        if allow_bonus:
-            giveaway_embed.add_field(name="Bonus Perks", value="🎁 Clan Members & Boosters receive +1 extra entry!", inline=False)
+        # Dynamically format the Bonus section on the embed
+        if clan_bonus > 0 or booster_bonus > 0:
+            bonus_text = ""
+            if clan_bonus > 0:
+                bonus_text += f"Clan Members: {clan_bonus}\n"
+            if booster_bonus > 0:
+                bonus_text += f"Boosters: {booster_bonus}"
+            giveaway_embed.add_field(name="Bonus Entries", value=bonus_text.strip(), inline=False)
             
         giveaway_embed.add_field(name="Ends", value=f"<t:{end_time}:R>", inline=True)
         giveaway_embed.add_field(name="Hosted by", value=author.mention, inline=True)
@@ -201,15 +224,19 @@ class GiveawayCog(commands.Cog):
         if card_image_url:
             giveaway_embed.set_thumbnail(url=card_image_url)
 
-        view = GiveawayEntryView(allow_bonus=allow_bonus)
+        view = GiveawayEntryView(clan_bonus, booster_bonus)
         msg = await channel.send(embed=giveaway_embed, view=view)
 
-        task = asyncio.create_task(self.manage_giveaway_timer(mins * 60, msg.id, channel.id, view, giveaway_embed, character_name))
+        task = asyncio.create_task(self.manage_giveaway_timer(seconds, msg.id, channel.id, view, giveaway_embed, character_name))
         self.active_giveaways[msg.id] = {"task": task, "view": view, "embed": giveaway_embed, "prize": character_name, "channel_id": channel.id}
 
     # -------- SLASH COMMANDS --------
     @giveaway_group.command(name="start", description="Starts a giveaway")
-    async def start_wizard(self, interaction: discord.Interaction):
+    @app_commands.describe(
+        clan_bonus="Extra entries for Clan Members (leave 0 if none)",
+        booster_bonus="Extra entries for Boosters (leave 0 if none)"
+    )
+    async def start_wizard(self, interaction: discord.Interaction, clan_bonus: int = 0, booster_bonus: int = 0):
         EVENT_MANAGER_ROLE_ID = 1508333073668898996
         is_admin = interaction.user.guild_permissions.administrator
         is_event_manager = any(role.id == EVENT_MANAGER_ROLE_ID for role in interaction.user.roles)
@@ -218,7 +245,8 @@ class GiveawayCog(commands.Cog):
             return await interaction.response.send_message("❌ You do not have permission to run this command.", ephemeral=True)
 
         embed = discord.Embed(title="Giveaway Setup", description="Select the type of giveaway:", color=0x2f3136)
-        await interaction.response.send_message(embed=embed, view=GiveawayTypeSelect(self, interaction.user), ephemeral=True)
+        # Passes the slash command parameters down to the setup view
+        await interaction.response.send_message(embed=embed, view=GiveawayTypeSelect(self, interaction.user, clan_bonus, booster_bonus), ephemeral=True)
 
     @giveaway_group.command(name="cancel", description="Cancels an active giveaway")
     @app_commands.describe(message_id="The message ID of the giveaway to cancel")
