@@ -14,7 +14,6 @@ def parse_time(time_str: str) -> int:
     if time_str.isdigit(): return int(time_str) * 60 
     raise ValueError("Invalid format")
 
-
 class GiveawayEntryView(discord.ui.View):
     def __init__(self, clan_bonus: int = 0, booster_bonus: int = 0):
         super().__init__(timeout=None)
@@ -32,9 +31,9 @@ class GiveawayEntryView(discord.ui.View):
         entries = 1 
         user_role_ids = [role.id for role in interaction.user.roles]
         
-        if 1504127544801366128 in user_role_ids: 
+        if 1504127544801366128 in user_role_ids:
             entries += self.clan_bonus
-        if 1474356762063667210 in user_role_ids: 
+        if 1474356762063667210 in user_role_ids:
             entries += self.booster_bonus
                 
         self.participants.add(interaction.user.id)
@@ -46,7 +45,6 @@ class GiveawayEntryView(discord.ui.View):
         await interaction.response.edit_message(view=self)
         
         await interaction.followup.send("✅ Successfully entered the giveaway!", ephemeral=True)
-
 
 class ItemSetupModal(discord.ui.Modal, title="Setup Item Giveaway"):
     item_name = discord.ui.TextInput(label="Item Name")
@@ -67,7 +65,7 @@ class ItemSetupModal(discord.ui.Modal, title="Setup Item Giveaway"):
 
         end_time = int(time.time()) + seconds
         
-        desc = f"✨ *An item has been offered to the sect.* ✨\n\n"
+        desc = f"✨ *An artifact has been offered to the sect.* ✨\n\n"
         desc += f"**୨୧ Item ୨୧**\n{self.item_name.value}\n\n"
         desc += f"**୨୧ Description ୨୧**\n{self.description.value}\n"
         
@@ -108,7 +106,6 @@ class CardConfigModal(discord.ui.Modal, title="Configure Card Giveaway"):
         await interaction.response.send_message(f"✅ Configuration saved! **{interaction.user.mention}, please run `kci <card_code>` in this channel now.**", ephemeral=False)
         await self.cog.wait_for_kci(interaction.channel, interaction.user, seconds, self.clan_bonus, self.booster_bonus)
 
-
 class GiveawayTypeSelect(discord.ui.View):
     def __init__(self, cog, author, clan_bonus, booster_bonus):
         super().__init__(timeout=60)
@@ -132,7 +129,6 @@ class GiveawayTypeSelect(discord.ui.View):
         
         await interaction.response.send_modal(ItemSetupModal(self.cog, self.clan_bonus, self.booster_bonus))
         self.stop()
-
 
 class GiveawayCog(commands.Cog):
     def __init__(self, bot):
@@ -170,7 +166,6 @@ class GiveawayCog(commands.Cog):
         
         await channel.send(f"🎊 The heavens have chosen! {winner_user.mention} has won **{prize_name}**! Open a ticket to claim in <#1509258805777666180>")
 
-    # -------- KARUTA CARD CATCHER --------
     async def wait_for_kci(self, channel, author, seconds, clan_bonus, booster_bonus):
         def karuta_check(m):
             return (m.author.id == 646937666251915264 and 
@@ -195,16 +190,25 @@ class GiveawayCog(commands.Cog):
                 stats_line = line
                 break
 
-        parts = stats_line.split("·")
-        card_code = parts[0].strip().replace("`", "").replace("*", "")
-        character_name = parts[-1].strip().replace("*", "")
+        parts = [p.strip().replace("*", "").replace("`", "") for p in stats_line.split("·")]
+        
+        card_code = parts[0] if len(parts) > 0 else "Unknown"
+        character_name = parts[-1] if len(parts) > 0 else "Unknown"
+        print_num = next((p for p in parts if "#" in p), "?")
+        edition_str = next((p for p in parts if "◈" in p or "Edition" in p), "?")
+        series_name = parts[-2] if len(parts) > 4 else "Unknown"
         
         card_image_url = embed_data.thumbnail.url if embed_data.thumbnail else None
         end_time = int(time.time()) + seconds
 
         desc = f"✨ *A new treasure has entered the pavilion.* ✨\n\n"
-        desc += f"**୨୧ Character ୨୧**\n{character_name}\n\n"
-        desc += f"**୨୧ Details ୨୧**\n`{stats_line}`\n"
+        desc += f"**୨୧ Character ୨୧**\n**{character_name}**\n\n"
+        
+        desc += f"**୨୧ Details ୨୧**\n"
+        desc += f"✦ **Code:** `{card_code}`\n"
+        desc += f"✦ **Print:** {print_num}\n"
+        desc += f"✦ **Edition:** {edition_str}\n"
+        desc += f"✦ **Series:** *{series_name}*\n"
         
         if clan_bonus > 0 or booster_bonus > 0:
             desc += f"\n**୨୧ Bonus Entries ୨୧**\n"
