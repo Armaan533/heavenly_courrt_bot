@@ -190,7 +190,7 @@ class GiveawayCog(commands.Cog):
                 stats_line = line
                 break
 
-        parts = [p.strip().replace("*", "").replace("`", "") for p in stats_line.split("·")]
+        parts = [p.strip().replace("*", "").replace("`", "") for p in stats_line.split("·") if "★" not in p and "☆" not in p]
         character_name = parts[-1] if len(parts) > 0 else "Unknown"
         clean_details = " · ".join(parts)
         
