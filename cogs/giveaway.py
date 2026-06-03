@@ -213,17 +213,19 @@ class GiveawayCog(commands.Cog):
         if not lines:
             return await channel.send("❌ Could not read card metadata.")
 
-        card_code = "Unknown"
-        for part in lines[0].split("·"):
-            if "`" in part:
-                card_code = part.replace("`", "").strip()
-                break
+        meta_segments = [seg.strip().replace("*", "").replace("`", "") for seg in lines[0].split("·")]
+        card_code = meta_segments[0] if len(meta_segments) > 0 else "Unknown"
 
         character_name = "Unknown"
-        for line in lines:
-            if "·" not in line and "Dropped" not in line and "Owned" not in line and "Grabbed" not in line:
-                character_name = line.replace("*", "").strip()
-                break
+        if len(meta_segments) > 5 and meta_segments[5]:
+            character_name = meta_segments[5]
+        else:
+            forbidden_keywords = ["dropped", "grabbed", "owned", "morphed", "dyed", "trimmed", "framed", "generated", "·"]
+            for line in lines[1:]:
+                cleaned_line = line.lower()
+                if not any(kw in cleaned_line for kw in forbidden_keywords):
+                    character_name = line.replace("*", "").strip()
+                    break
         
         card_image_url = embed_data.thumbnail.url if embed_data.thumbnail else None
 
