@@ -191,24 +191,15 @@ class GiveawayCog(commands.Cog):
                 break
 
         parts = [p.strip().replace("*", "").replace("`", "") for p in stats_line.split("·")]
-        
-        card_code = parts[0] if len(parts) > 0 else "Unknown"
         character_name = parts[-1] if len(parts) > 0 else "Unknown"
-        print_num = next((p for p in parts if "#" in p), "?")
-        edition_str = next((p for p in parts if "◈" in p or "Edition" in p), "?")
-        series_name = parts[-2] if len(parts) > 4 else "Unknown"
+        clean_details = " · ".join(parts)
         
         card_image_url = embed_data.thumbnail.url if embed_data.thumbnail else None
         end_time = int(time.time()) + seconds
 
         desc = f"✨ *A new treasure has entered the pavilion.* ✨\n\n"
         desc += f"**୨୧ Character ୨୧**\n**{character_name}**\n\n"
-        
-        desc += f"**୨୧ Details ୨୧**\n"
-        desc += f"✦ **Code:** `{card_code}`\n"
-        desc += f"✦ **Print:** {print_num}\n"
-        desc += f"✦ **Edition:** {edition_str}\n"
-        desc += f"✦ **Series:** *{series_name}*\n"
+        desc += f"**୨୧ Details ୨୧**\n`{clean_details}`\n"
         
         if clan_bonus > 0 or booster_bonus > 0:
             desc += f"\n**୨୧ Bonus Entries ୨୧**\n"
