@@ -6,18 +6,35 @@ import time
 import random
 
 class GiveawayEntryView(discord.ui.View):
-    def __init__(self):
+    def __init__(self, allow_bonus=False):
         super().__init__(timeout=None)
-        self.entrants = set()
+        self.entered_users = set()
+        self.tickets = []
+        self.allow_bonus = allow_bonus
 
-    @discord.ui.button(label="Enter Giveaway", style=discord.ButtonStyle.green, custom_id="claim_giveaway_entry")
+    @discord.ui.button(label="Enter Giveaway (0)", style=discord.ButtonStyle.green, custom_id="claim_giveaway_entry")
     async def enter_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if interaction.user.id in self.entrants:
+        if interaction.user.id in self.entered_users:
             await interaction.response.send_message("❌ You have already entered this giveaway.", ephemeral=True)
             return
             
-        self.entrants.add(interaction.user.id)
-        await interaction.response.send_message("✅ You have entered the giveaway.", ephemeral=True)
+        self.entered_users.add(interaction.user.id)
+        entries = 1
+        
+        if self.allow_bonus:
+            user_role_ids = [role.id for role in interaction.user.roles]
+            if 1504127544801366128 in user_role_ids:
+                entries += 1
+            if 1474356762063667210 in user_role_ids:
+                entries += 1
+                
+        for _ in range(entries):
+            self.tickets.append(interaction.user.id)
+            
+        button.label = f"Enter Giveaway ({len(self.entered_users)})"
+        
+        await interaction.response.edit_message(view=self)
+        await interaction.followup.send(f"✅ You have entered the giveaway with **{entries}** ticket(s)!", ephemeral=True)
 
 class GiveawayTypeSelect(discord.ui.View):
     def __init__(self, cog, author):
@@ -46,6 +63,7 @@ class ItemSetupModal(discord.ui.Modal, title="Setup Giveaway"):
     item_name = discord.ui.TextInput(label="Item Name")
     description = discord.ui.TextInput(label="Description", style=discord.TextStyle.paragraph)
     duration = discord.ui.TextInput(label="Duration (in minutes)")
+    bonus = discord.ui.TextInput(label="Enable Clan/Booster Bonus? (yes/no)", default="yes")
 
     def __init__(self, cog):
         super().__init__()
@@ -53,21 +71,27 @@ class ItemSetupModal(discord.ui.Modal, title="Setup Giveaway"):
 
     async def on_submit(self, interaction: discord.Interaction):
         try:
-            mins = int(self.duration.value)
+            mins = int(self.duration.value.strip())
         except ValueError:
             return await interaction.response.send_message("❌ Invalid duration time.", ephemeral=True)
 
+        allow_bonus = "yes" in self.bonus.value.lower()
         end_time = int(time.time()) + (mins * 60)
+        
+        desc = f"**Item:** {self.item_name.value}\n**Description:** {self.description.value}\n"
+        if allow_bonus:
+            desc += "\n🎁 *Clan Members & Boosters receive +1 bonus entry!*"
+        desc += f"\n\nEnds: <t:{end_time}:R>"
         
         embed = discord.Embed(
             title="🎁 Item Giveaway",
-            description=f"**Item:** {self.item_name.value}\n**Description:** {self.description.value}\n\nEnds: <t:{end_time}:R>",
+            description=desc,
             color=0x2f3136
         )
         embed.set_footer(text=f"Hosted by {interaction.user.display_name}")
 
         await interaction.response.send_message("Giveaway started.", ephemeral=True)
-        view = GiveawayEntryView()
+        view = GiveawayEntryView(allow_bonus=allow_bonus)
         msg = await interaction.channel.send(embed=embed, view=view)
 
         task = asyncio.create_task(self.cog.manage_giveaway_timer(mins * 60, msg.id, interaction.channel.id, view, embed, self.item_name.value))
@@ -104,7 +128,7 @@ class GiveawayCog(commands.Cog):
         except:
             return
 
-        winners = list(view.entrants)
+        winners = view.tickets
         if not winners:
             embed.description = "Giveaway ended.\nWinner: None"
             await target_msg.edit(embed=embed, view=None)
@@ -229,21 +253,23 @@ class GiveawayCog(commands.Cog):
         
         card_image_url = embed_data.thumbnail.url if embed_data.thumbnail else None
 
-        duration_prompt = await channel.send(f"Found **{character_name}** (`{card_code}`). Reply with the duration in minutes:")
+        duration_prompt = await channel.send(f"Found **{character_name}** (`{card_code}`). Reply with the duration in minutes, and whether you want bonus entries (e.g. `10 yes` or `60 no`):")
 
-        def duration_check(m):
-            return m.author.id == author.id and m.channel.id == channel.id and m.content.isdigit()
+        def config_check(m):
+            return m.author.id == author.id and m.channel.id == channel.id
 
         try:
-            duration_msg = await self.bot.wait_for('message', timeout=60.0, check=duration_check)
-            mins = int(duration_msg.content)
-        except asyncio.TimeoutError:
-            return await channel.send(f"❌ Setup timed out.")
+            config_msg = await self.bot.wait_for('message', timeout=60.0, check=config_check)
+            parts = config_msg.content.lower().split()
+            mins = int(parts[0])
+            allow_bonus = "yes" in parts if len(parts) > 1 else False
+        except (asyncio.TimeoutError, ValueError):
+            return await channel.send(f"❌ Setup timed out or invalid format. Use 'minutes yes/no'.")
 
         try:
             await prompt.delete()
             await duration_prompt.delete()
-            await duration_msg.delete()
+            await config_msg.delete()
         except:
             pass
 
@@ -256,13 +282,17 @@ class GiveawayCog(commands.Cog):
         )
         giveaway_embed.add_field(name="Character", value=character_name, inline=True)
         giveaway_embed.add_field(name="Details", value=lines[0], inline=False)
+        
+        if allow_bonus:
+            giveaway_embed.add_field(name="Bonus Perks", value="🎁 Clan Members & Boosters receive +1 extra entry!", inline=False)
+            
         giveaway_embed.add_field(name="Ends", value=f"<t:{end_time}:R>", inline=True)
         giveaway_embed.add_field(name="Hosted by", value=author.mention, inline=True)
         
         if card_image_url:
             giveaway_embed.set_thumbnail(url=card_image_url)
 
-        view = GiveawayEntryView()
+        view = GiveawayEntryView(allow_bonus=allow_bonus)
         msg = await channel.send(embed=giveaway_embed, view=view)
 
         task = asyncio.create_task(self.manage_giveaway_timer(mins * 60, msg.id, channel.id, view, giveaway_embed, character_name))
