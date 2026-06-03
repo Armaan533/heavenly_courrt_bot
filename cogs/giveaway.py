@@ -5,23 +5,21 @@ import asyncio
 import time
 import random
 
-# --- TIME PARSER HELPER ---
 def parse_time(time_str: str) -> int:
     time_str = time_str.lower().strip()
     if time_str.endswith('d'): return int(time_str[:-1]) * 86400
     if time_str.endswith('h'): return int(time_str[:-1]) * 3600
     if time_str.endswith('m'): return int(time_str[:-1]) * 60
     if time_str.endswith('s'): return int(time_str[:-1])
-    if time_str.isdigit(): return int(time_str) * 60 # Default to minutes
+    if time_str.isdigit(): return int(time_str) * 60 
     raise ValueError("Invalid format")
 
 
-# --- 1. THE GIVEAWAY BUTTON & TICKETS ---
 class GiveawayEntryView(discord.ui.View):
     def __init__(self, clan_bonus: int = 0, booster_bonus: int = 0):
         super().__init__(timeout=None)
-        self.participants = set() # Tracks unique users so they can't double-enter
-        self.tickets = []         # Tracks TOTAL entries/tickets in the hat
+        self.participants = set() 
+        self.tickets = []         
         self.clan_bonus = clan_bonus
         self.booster_bonus = booster_bonus
 
@@ -31,29 +29,25 @@ class GiveawayEntryView(discord.ui.View):
             await interaction.response.send_message("❌ You have already entered this giveaway.", ephemeral=True)
             return
             
-        entries = 1 # Base entry for everyone
+        entries = 1 
         user_role_ids = [role.id for role in interaction.user.roles]
         
-        if 1504127544801366128 in user_role_ids: # Clan Member
+        if 1504127544801366128 in user_role_ids:
             entries += self.clan_bonus
-        if 1474356762063667210 in user_role_ids: # Booster
+        if 1474356762063667210 in user_role_ids: 
             entries += self.booster_bonus
                 
         self.participants.add(interaction.user.id)
         
-        # Add their ID to the hat multiple times based on their bonuses
         for _ in range(entries):
             self.tickets.append(interaction.user.id)
             
-        # Update the live counter to show total tickets in the pool!
         button.label = f"Enter Giveaway ({len(self.tickets)})"
         await interaction.response.edit_message(view=self)
         
-        # Clean, simple success message
         await interaction.followup.send("✅ Successfully entered the giveaway!", ephemeral=True)
 
 
-# --- 2. THE MODALS ---
 class ItemSetupModal(discord.ui.Modal, title="Setup Item Giveaway"):
     item_name = discord.ui.TextInput(label="Item Name")
     description = discord.ui.TextInput(label="Description", style=discord.TextStyle.paragraph)
@@ -73,21 +67,21 @@ class ItemSetupModal(discord.ui.Modal, title="Setup Item Giveaway"):
 
         end_time = int(time.time()) + seconds
         
-        embed = discord.Embed(
-            title="🎁 Item Giveaway", 
-            description=f"**Item:** {self.item_name.value}\n**Description:** {self.description.value}\n\nEnds: <t:{end_time}:R>", 
-            color=0x2f3136
-        )
+        # Aesthetic UI Update
+        desc = f"✨ *An artifact has been offered to the sect.* ✨\n\n"
+        desc += f"**୨୧ Item ୨୧**\n{self.item_name.value}\n\n"
+        desc += f"**୨୧ Description ୨୧**\n{self.description.value}\n"
         
-        # Dynamically build the Bonus UI if bonuses are set above 0
         if self.clan_bonus > 0 or self.booster_bonus > 0:
-            bonus_text = ""
+            desc += f"\n**୨୧ Bonus Entries ୨୧**\n"
             if self.clan_bonus > 0:
-                bonus_text += f"Clan Members: {self.clan_bonus}\n"
+                desc += f"✦ Clan Members: +{self.clan_bonus}\n"
             if self.booster_bonus > 0:
-                bonus_text += f"Boosters: {self.booster_bonus}"
-            embed.add_field(name="Bonus Entries", value=bonus_text.strip(), inline=False)
-            
+                desc += f"✦ Boosters: +{self.booster_bonus}\n"
+                
+        desc += f"\n⏰ **Ends:** <t:{end_time}:R>"
+        
+        embed = discord.Embed(title="✦ . HEAVENLY COURT GIVEAWAY . ✦", description=desc, color=0x2b2d31)
         embed.set_footer(text=f"Hosted by {interaction.user.display_name}")
 
         await interaction.response.send_message("Giveaway started successfully!", ephemeral=True)
@@ -116,7 +110,6 @@ class CardConfigModal(discord.ui.Modal, title="Configure Card Giveaway"):
         await self.cog.wait_for_kci(interaction.channel, interaction.user, seconds, self.clan_bonus, self.booster_bonus)
 
 
-# --- 3. THE SETUP WIZARD MENU ---
 class GiveawayTypeSelect(discord.ui.View):
     def __init__(self, cog, author, clan_bonus, booster_bonus):
         super().__init__(timeout=60)
@@ -142,7 +135,6 @@ class GiveawayTypeSelect(discord.ui.View):
         self.stop()
 
 
-# --- 4. THE MAIN COG ---
 class GiveawayCog(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
@@ -150,7 +142,6 @@ class GiveawayCog(commands.Cog):
         
     giveaway_group = app_commands.Group(name="giveaway", description="Manage giveaways")
 
-    # -------- GIVEAWAY ENDING LOGIC --------
     async def manage_giveaway_timer(self, seconds, message_id, channel_id, view, embed, prize_name):
         await asyncio.sleep(seconds)
         await self.determine_winner(message_id, channel_id, view, embed, prize_name)
@@ -169,17 +160,16 @@ class GiveawayCog(commands.Cog):
 
         winners = view.tickets
         if not winners:
-            embed.description = "Giveaway ended.\nWinner: None"
+            embed.description = "✨ *The giveaway has concluded.* ✨\n\n**୨୧ Winner ୨୧**\nNone"
             await target_msg.edit(embed=embed, view=None)
-            await channel.send(f"Giveaway for **{prize_name}** ended with no entries.")
+            await channel.send(f"The pavilion closes. The giveaway for **{prize_name}** ended with no entries.")
             return
 
         winner_user = await self.bot.fetch_user(random.choice(winners))
-        embed.description = f"Giveaway ended.\nWinner: {winner_user.mention}"
+        embed.description = f"✨ *The giveaway has concluded.* ✨\n\n**୨୧ Winner ୨୧**\n{winner_user.mention}"
         await target_msg.edit(embed=embed, view=None)
-        await channel.send(f"🎉 Congratulations {winner_user.mention}, you won **{prize_name}**!")
+        await channel.send(f"🎊 The heavens have chosen! {winner_user.mention} has claimed **{prize_name}**!")
 
-    # -------- KARUTA CARD CATCHER --------
     async def wait_for_kci(self, channel, author, seconds, clan_bonus, booster_bonus):
         def karuta_check(m):
             return (m.author.id == 646937666251915264 and 
@@ -198,28 +188,35 @@ class GiveawayCog(commands.Cog):
         if not lines:
             return await channel.send("❌ Could not read card metadata.")
 
-        code_line = lines[0]
-        card_code = code_line.split("·")[0].strip().replace("`", "")
-        character_name = lines[1].replace("*", "").strip() if len(lines) > 1 else "Unknown"
-        card_image_url = embed_data.thumbnail.url if embed_data.thumbnail else None
+        stats_line = lines[0]
+        for line in lines:
+            if "·" in line and "#" in line: 
+                stats_line = line
+                break
 
+        parts = stats_line.split("·")
+        
+        card_code = parts[0].strip().replace("`", "").replace("*", "")
+        character_name = parts[-1].strip().replace("*", "")
+        
+        card_image_url = embed_data.thumbnail.url if embed_data.thumbnail else None
         end_time = int(time.time()) + seconds
 
-        giveaway_embed = discord.Embed(title="🎁 Card Giveaway", description=f"Click the button below to enter.", color=0x2f3136)
-        giveaway_embed.add_field(name="Character", value=character_name, inline=True)
-        giveaway_embed.add_field(name="Details", value=code_line, inline=False)
+        desc = f"✨ *A new treasure has entered the pavilion.* ✨\n\n"
+        desc += f"**୨୧ Character ୨୧**\n{character_name}\n\n"
+        desc += f"**୨୧ Details ୨୧**\n`{stats_line}`\n"
         
-        # Dynamically format the Bonus section on the embed
         if clan_bonus > 0 or booster_bonus > 0:
-            bonus_text = ""
+            desc += f"\n**୨୧ Bonus Entries ୨୧**\n"
             if clan_bonus > 0:
-                bonus_text += f"Clan Members: {clan_bonus}\n"
+                desc += f"✦ Clan Members: +{clan_bonus}\n"
             if booster_bonus > 0:
-                bonus_text += f"Boosters: {booster_bonus}"
-            giveaway_embed.add_field(name="Bonus Entries", value=bonus_text.strip(), inline=False)
-            
-        giveaway_embed.add_field(name="Ends", value=f"<t:{end_time}:R>", inline=True)
-        giveaway_embed.add_field(name="Hosted by", value=author.mention, inline=True)
+                desc += f"✦ Boosters: +{booster_bonus}\n"
+                
+        desc += f"\n⏰ **Ends:** <t:{end_time}:R>"
+
+        giveaway_embed = discord.Embed(title="✦ . HEAVENLY COURT GIVEAWAY . ✦", description=desc, color=0x2b2d31)
+        giveaway_embed.set_footer(text=f"Hosted by {author.display_name}")
         
         if card_image_url:
             giveaway_embed.set_thumbnail(url=card_image_url)
@@ -230,7 +227,6 @@ class GiveawayCog(commands.Cog):
         task = asyncio.create_task(self.manage_giveaway_timer(seconds, msg.id, channel.id, view, giveaway_embed, character_name))
         self.active_giveaways[msg.id] = {"task": task, "view": view, "embed": giveaway_embed, "prize": character_name, "channel_id": channel.id}
 
-    # -------- SLASH COMMANDS --------
     @giveaway_group.command(name="start", description="Starts a giveaway")
     @app_commands.describe(
         clan_bonus="Extra entries for Clan Members (leave 0 if none)",
@@ -244,8 +240,7 @@ class GiveawayCog(commands.Cog):
         if not (is_admin or is_event_manager):
             return await interaction.response.send_message("❌ You do not have permission to run this command.", ephemeral=True)
 
-        embed = discord.Embed(title="Giveaway Setup", description="Select the type of giveaway:", color=0x2f3136)
-        # Passes the slash command parameters down to the setup view
+        embed = discord.Embed(title="Giveaway Setup", description="Select the type of giveaway:", color=0x2b2d31)
         await interaction.response.send_message(embed=embed, view=GiveawayTypeSelect(self, interaction.user, clan_bonus, booster_bonus), ephemeral=True)
 
     @giveaway_group.command(name="cancel", description="Cancels an active giveaway")
@@ -271,7 +266,7 @@ class GiveawayCog(commands.Cog):
             try:
                 target_msg = await channel.fetch_message(msg_id)
                 embed = gaw_data["embed"]
-                embed.description = "Giveaway cancelled."
+                embed.description = "✨ *The giveaway was cancelled.* ✨"
                 await target_msg.edit(embed=embed, view=None)
             except: pass
 
