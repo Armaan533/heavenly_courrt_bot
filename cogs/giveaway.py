@@ -32,7 +32,7 @@ class GiveawayEntryView(discord.ui.View):
         entries = 1 
         user_role_ids = [role.id for role in interaction.user.roles]
         
-        if 1504127544801366128 in user_role_ids:
+        if 1504127544801366128 in user_role_ids: 
             entries += self.clan_bonus
         if 1474356762063667210 in user_role_ids: 
             entries += self.booster_bonus
@@ -42,7 +42,7 @@ class GiveawayEntryView(discord.ui.View):
         for _ in range(entries):
             self.tickets.append(interaction.user.id)
             
-        button.label = f"Enter Giveaway ({len(self.tickets)})"
+        button.label = f"Enter Giveaway ({len(self.participants)})"
         await interaction.response.edit_message(view=self)
         
         await interaction.followup.send("✅ Successfully entered the giveaway!", ephemeral=True)
@@ -67,8 +67,7 @@ class ItemSetupModal(discord.ui.Modal, title="Setup Item Giveaway"):
 
         end_time = int(time.time()) + seconds
         
-        # Aesthetic UI Update
-        desc = f"✨ *An artifact has been offered to the sect.* ✨\n\n"
+        desc = f"✨ *An item has been offered to the sect.* ✨\n\n"
         desc += f"**୨୧ Item ୨୧**\n{self.item_name.value}\n\n"
         desc += f"**୨୧ Description ୨୧**\n{self.description.value}\n"
         
@@ -168,8 +167,10 @@ class GiveawayCog(commands.Cog):
         winner_user = await self.bot.fetch_user(random.choice(winners))
         embed.description = f"✨ *The giveaway has concluded.* ✨\n\n**୨୧ Winner ୨୧**\n{winner_user.mention}"
         await target_msg.edit(embed=embed, view=None)
-        await channel.send(f"🎊 The heavens have chosen! {winner_user.mention} has claimed **{prize_name}**!")
+        
+        await channel.send(f"🎊 The heavens have chosen! {winner_user.mention} has won **{prize_name}**! Open a ticket to claim in <#1509258805777666180>")
 
+    # -------- KARUTA CARD CATCHER --------
     async def wait_for_kci(self, channel, author, seconds, clan_bonus, booster_bonus):
         def karuta_check(m):
             return (m.author.id == 646937666251915264 and 
@@ -195,7 +196,6 @@ class GiveawayCog(commands.Cog):
                 break
 
         parts = stats_line.split("·")
-        
         card_code = parts[0].strip().replace("`", "").replace("*", "")
         character_name = parts[-1].strip().replace("*", "")
         
