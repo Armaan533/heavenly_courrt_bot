@@ -26,7 +26,12 @@ class Bot(commands.Bot):
 
     async def restrict_slash_commands(self, interaction: discord.Interaction) -> bool:
         if interaction.type == discord.InteractionType.application_command:
-            if not interaction.user.guild_permissions.administrator:
+            EVENT_MANAGER_ROLE_ID = 1508333073668898996
+            
+            is_admin = interaction.user.guild_permissions.administrator
+            is_event_manager = any(role.id == EVENT_MANAGER_ROLE_ID for role in interaction.user.roles)
+            
+            if not (is_admin or is_event_manager):
                 await interaction.response.send_message(
                     "❌ You do not have permission to use Heavenly Court commands.",
                     ephemeral=True
@@ -41,6 +46,7 @@ class Bot(commands.Bot):
         await self.load_extension("cogs.clan")
         await self.load_extension("cogs.auction")
         await self.load_extension("cogs.colors")
+        await self.load_extension("cogs.kgiveaway")
         
         from cogs.colors import ColorView
         self.add_view(ColorView())
