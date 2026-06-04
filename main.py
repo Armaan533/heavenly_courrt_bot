@@ -24,6 +24,9 @@ class Bot(commands.Bot):
         self.tree.interaction_check = self.restrict_slash_commands
 
     async def restrict_slash_commands(self, interaction: discord.Interaction) -> bool:
+        if interaction.command and interaction.command.name == "ad":
+            return True
+        
         if interaction.type == discord.InteractionType.application_command:
             EVENT_MANAGER_ROLE_ID = 1508333073668898996
             
