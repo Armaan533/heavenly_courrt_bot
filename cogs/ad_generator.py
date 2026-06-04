@@ -134,12 +134,19 @@ class BitStockModal(discord.ui.Modal, title="List Bits"):
         await interaction.response.edit_message(content=f"✅ Added {self.bit_name} to ad!", view=self.view_to_restore)
 
 class KarutaSelectorView(discord.ui.View):
-    def __init__(self, session, target_msg, mode="cards"):
+    def __init__(self, cog, session, target_msg, mode="cards"):
         super().__init__(timeout=300)
+        self.cog = cog
         self.session = session
         self.target_msg = target_msg
         self.mode = mode
         self.update_options()
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id != self.session.user_id:
+            await interaction.response.send_message("❌ This scanning session belongs to someone else.", ephemeral=True)
+            return False
+        return True
 
     def update_options(self):
         self.clear_items()
@@ -208,7 +215,8 @@ class KarutaSelectorView(discord.ui.View):
         
         finish_btn = discord.ui.Button(label="✅ Finish Scanning", style=discord.ButtonStyle.success)
         async def finish_callback(interaction: discord.Interaction):
-            await interaction.response.edit_message(content="✅ Scanning complete. Return to your Ad Control Panel.", view=None)
+            await interaction.response.edit_message(content="✅ Scanning complete.", view=None)
+            await interaction.followup.send("🛠️ **Ad Control Panel**", view=AdMainMenuView(self.cog, self.session), ephemeral=True)
         finish_btn.callback = finish_callback
         self.add_item(finish_btn)
 
@@ -218,22 +226,25 @@ class ManualItemModal(discord.ui.Modal, title="Add Manual Item"):
     price = discord.ui.TextInput(label="Price in Tickets", placeholder="e.g. 5")
     stock = discord.ui.TextInput(label="Stock", placeholder="e.g. 10")
     
-    def __init__(self, session):
+    def __init__(self, cog, session):
         super().__init__()
+        self.cog = cog
         self.session = session
         
     async def on_submit(self, interaction: discord.Interaction):
         display = f"{self.emoji.value.strip()} {self.name.value.strip()}" if self.emoji.value.strip() else self.name.value.strip()
         self.session.selling_items.append((display, self.price.value.strip(), self.stock.value.strip()))
-        await interaction.response.send_message(f"✅ Added {display}!", ephemeral=True)
+        await interaction.response.edit_message(content=f"✅ Added {display}!", view=None)
+        await interaction.followup.send("🛠️ **Ad Control Panel**", view=AdMainMenuView(self.cog, self.session), ephemeral=True)
 
 class TicketGemModal(discord.ui.Modal, title="Ticket/Gem Exchange"):
     selling = discord.ui.TextInput(label="Type 'Tickets' or 'Gems' to sell", default="Tickets")
     rate = discord.ui.TextInput(label="Rate (How many Gems per Ticket?)", placeholder="e.g. 20")
     stock = discord.ui.TextInput(label="Stock Available", placeholder="e.g. 5000")
     
-    def __init__(self, session):
+    def __init__(self, cog, session):
         super().__init__()
+        self.cog = cog
         self.session = session
         
     async def on_submit(self, interaction: discord.Interaction):
@@ -242,54 +253,72 @@ class TicketGemModal(discord.ui.Modal, title="Ticket/Gem Exchange"):
         else:
             text = f"**SELLING GEMS 💎 | BUYING TICKETS 🎟️**\n{self.rate.value.strip()} 💎 = 1 🎟️\nSTOCK : {self.stock.value.strip()} 💎"
         self.session.exchanges.append(text)
-        await interaction.response.send_message("✅ Exchange added!", ephemeral=True)
+        await interaction.response.edit_message(content="✅ Exchange added!", view=None)
+        await interaction.followup.send("🛠️ **Ad Control Panel**", view=AdMainMenuView(self.cog, self.session), ephemeral=True)
 
 class GoldExchangeModal(discord.ui.Modal, title="Gold Exchange"):
     rate = discord.ui.TextInput(label="Rate (Gold per Ticket)", placeholder="e.g. 2600")
     stock = discord.ui.TextInput(label="Stock Available", placeholder="e.g. 50000")
     
-    def __init__(self, session):
+    def __init__(self, cog, session):
         super().__init__()
+        self.cog = cog
         self.session = session
         
     async def on_submit(self, interaction: discord.Interaction):
         text = f"**SELLING GOLD 💰**\n{self.rate.value.strip()} 💰 : 1 🎟️\nSTOCK : {self.stock.value.strip()} 💰"
         self.session.exchanges.append(text)
-        await interaction.response.send_message("✅ Exchange added!", ephemeral=True)
+        await interaction.response.edit_message(content="✅ Exchange added!", view=None)
+        await interaction.followup.send("🛠️ **Ad Control Panel**", view=AdMainMenuView(self.cog, self.session), ephemeral=True)
 
 class BitsRateModal(discord.ui.Modal, title="Bits Exchange Rate"):
     rate = discord.ui.TextInput(label="Rate (Bits per Ticket)", placeholder="e.g. 2000")
     
-    def __init__(self, session):
+    def __init__(self, cog, session):
         super().__init__()
+        self.cog = cog
         self.session = session
         
     async def on_submit(self, interaction: discord.Interaction):
         gem_calc = self.session.gem_rate if self.session.gem_rate > 0 else "XX"
         text = f"**BITS RATE**\n{self.rate.value.strip()} Bits = 1 🎟️ : {gem_calc} 💎"
         self.session.exchanges.append(text)
-        await interaction.response.send_message("✅ Bits rate added!", ephemeral=True)
+        await interaction.response.edit_message(content="✅ Bits rate added!", view=None)
+        await interaction.followup.send("🛠️ **Ad Control Panel**", view=AdMainMenuView(self.cog, self.session), ephemeral=True)
 
 class ExchangeCategoryView(discord.ui.View):
-    def __init__(self, session):
-        super().__init__()
+    def __init__(self, cog, session):
+        super().__init__(timeout=300)
+        self.cog = cog
         self.session = session
+        
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id != self.session.user_id:
+            await interaction.response.send_message("❌ This session belongs to someone else.", ephemeral=True)
+            return False
+        return True
         
     @discord.ui.button(label="Ticket / Gem Exchange")
     async def btn_t(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await interaction.response.send_modal(TicketGemModal(self.session))
+        await interaction.response.send_modal(TicketGemModal(self.cog, self.session))
     @discord.ui.button(label="Gold Exchange")
     async def btn_g(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await interaction.response.send_modal(GoldExchangeModal(self.session))
+        await interaction.response.send_modal(GoldExchangeModal(self.cog, self.session))
     @discord.ui.button(label="Bits Rate")
     async def btn_b(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await interaction.response.send_modal(BitsRateModal(self.session))
+        await interaction.response.send_modal(BitsRateModal(self.cog, self.session))
 
 class AdMainMenuView(discord.ui.View):
     def __init__(self, cog, session):
         super().__init__(timeout=600)
         self.cog = cog
         self.session = session
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id != self.session.user_id:
+            await interaction.response.send_message("❌ This session belongs to someone else.", ephemeral=True)
+            return False
+        return True
 
     @discord.ui.select(
         placeholder="Select a category to add to...",
@@ -306,7 +335,7 @@ class AdMainMenuView(discord.ui.View):
         
         if val in ["cards", "items", "bits"]:
             cmd = "k!c" if val == "cards" else "k!i" if val == "items" else "k!bi"
-            await interaction.response.send_message(f"👀 I am watching. Please run `{cmd}` in this channel now.", ephemeral=True)
+            await interaction.response.edit_message(content=f"👀 I am watching. Please run `{cmd}` in this channel now.", view=None)
             
             def check(m):
                 return m.author.id == 646937666251915264 and m.channel.id == interaction.channel.id and len(m.embeds) > 0
@@ -315,21 +344,21 @@ class AdMainMenuView(discord.ui.View):
                 karuta_msg = await self.cog.bot.wait_for('message', check=check, timeout=60.0)
                 await interaction.followup.send(
                     f"✅ **Karuta Detected!** Navigate to the correct page on Karuta's message above, then use the menu below to add them to your ad.", 
-                    view=KarutaSelectorView(self.session, karuta_msg, val), 
+                    view=KarutaSelectorView(self.cog, self.session, karuta_msg, val), 
                     ephemeral=False
                 )
             except asyncio.TimeoutError:
-                await interaction.followup.send("❌ Timed out waiting for Karuta.", ephemeral=True)
+                await interaction.followup.send("❌ Timed out waiting for Karuta. Run `/ad create` again.", ephemeral=True)
                 
         elif val == "exchanges":
-            await interaction.response.send_message("Select an exchange to configure:", view=ExchangeCategoryView(self.session), ephemeral=True)
+            await interaction.response.edit_message(content="Select an exchange to configure:", view=ExchangeCategoryView(self.cog, self.session))
         elif val == "manual":
-            await interaction.response.send_modal(ManualItemModal(self.session))
+            await interaction.response.send_modal(ManualItemModal(self.cog, self.session))
 
     @discord.ui.button(label="📜 Generate & Export Ad", style=discord.ButtonStyle.success, row=1)
     async def export_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         ad_text = generate_ad_text(self.session)
-        await interaction.response.send_message(f"Here is your compiled ad:\n```\n{ad_text}\n```", ephemeral=True)
+        await interaction.response.edit_message(content=f"Here is your compiled ad:\n```\n{ad_text}\n```", view=None)
 
 class GemRateModal(discord.ui.Modal, title="Set Global Gem Rate"):
     rate = discord.ui.TextInput(label="1 Ticket = How many Gems?", placeholder="e.g. 15")
@@ -345,13 +374,20 @@ class GemRateModal(discord.ui.Modal, title="Set Global Gem Rate"):
         except ValueError:
             return await interaction.response.send_message("❌ Must be a valid number.", ephemeral=True)
             
-        await interaction.response.send_message("✅ Settings saved! Welcome to your Control Panel.", view=AdMainMenuView(self.cog, self.session), ephemeral=True)
+        await interaction.response.edit_message(content="✅ Settings saved!", view=None)
+        await interaction.followup.send("🛠️ **Ad Control Panel**", view=AdMainMenuView(self.cog, self.session), ephemeral=True)
 
 class AdSetupView(discord.ui.View):
     def __init__(self, cog, session):
         super().__init__(timeout=120)
         self.cog = cog
         self.session = session
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id != self.session.user_id:
+            await interaction.response.send_message("❌ This session belongs to someone else.", ephemeral=True)
+            return False
+        return True
 
     @discord.ui.select(placeholder="Select Ad Font", options=[discord.SelectOption(label=f) for f in FONTS.keys()], row=0)
     async def font_select(self, interaction: discord.Interaction, select: discord.ui.Select):
@@ -368,7 +404,8 @@ class AdSetupView(discord.ui.View):
         if self.session.currency_mode == "Both":
             await interaction.response.send_modal(GemRateModal(self.cog, self.session))
         else:
-            await interaction.response.send_message("✅ Settings saved! Welcome to your Control Panel.", view=AdMainMenuView(self.cog, self.session), ephemeral=True)
+            await interaction.response.edit_message(content="✅ Settings saved!", view=None)
+            await interaction.followup.send("🛠️ **Ad Control Panel**", view=AdMainMenuView(self.cog, self.session), ephemeral=True)
 
 class AdGeneratorCog(commands.Cog):
     def __init__(self, bot):
