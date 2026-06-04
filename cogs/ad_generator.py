@@ -2,22 +2,11 @@ import discord
 from discord.ext import commands
 from discord import app_commands
 import asyncio
-
-FONTS = {
-    "Default": None,
-    "Bold Sans": str.maketrans("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789", "𝗮𝗯𝗰𝗱𝗲𝗳𝗴𝗵𝗶𝗷𝗸𝗹𝗺𝗻𝗼𝗽𝗾𝗿𝘀𝘁𝘂𝘃𝘄𝘅𝘆𝘇𝗔𝗕𝗖𝗗Ｅ𝗙𝗚trace𝗛𝗜𝗝𝗞𝗟𝗠𝗡𝗢𝗣𝗤𝗥𝗦𝗧𝗨𝗩𝗪𝗫𝗬𝗭𝟬𝟭𝟮𝟯𝟰𝟱𝟲𝟳𝟴𝟵"),
-    "Small Caps": str.maketrans("abcdefghijklmnopqrstuvwxyz", "ᴀʙᴄᴅᴇғɢʜɪᴊᴋʟᴍɴᴏᴘǫʀsᴛᴜᴠᴡxʏᴢ")
-}
-
-def apply_font(text: str, font_name: str):
-    if font_name in FONTS and FONTS[font_name]:
-        return text.translate(FONTS[font_name])
-    return text
+import time
 
 class AdSession:
     def __init__(self, user_id):
         self.user_id = user_id
-        self.font = "Default"
         self.currency_mode = "Both"
         self.gem_rate = 0
         self.selling_cards_fixed = []
@@ -37,36 +26,35 @@ class AdSession:
 
 def generate_ad_text(session: AdSession):
     lines = []
-    f = lambda t: apply_font(t, session.font)
     
     if session.selling_cards_fixed:
-        lines.append(f("**SELLING CARDS**"))
+        lines.append("**SELLING CARDS**")
         if session.currency_mode == "Both" and session.gem_rate > 0:
-            lines.append(f("[CONVERSION RATE = 1 🎟️ : ") + str(session.gem_rate) + f(" 💎]"))
+            lines.append(f"[CONVERSION RATE = 1 🎟️ : {session.gem_rate} 💎]")
         for code, name, price in session.selling_cards_fixed:
             lines.append(f"{session.format_price(price)} `{code}` · {name}")
         lines.append("")
             
     if session.selling_cards_offers:
-        lines.append(f("**TAKING OFFER**"))
+        lines.append("**TAKING OFFER**")
         for code, name in session.selling_cards_offers:
             lines.append(f"`{code}` · {name}")
         lines.append("")
         
     if session.selling_cards_custom:
-        lines.append(f("**CUSTOM NAME SECTION**"))
+        lines.append("**CUSTOM NAME SECTION**")
         for text in session.selling_cards_custom:
             lines.append(text)
         lines.append("")
         
     if session.selling_items:
-        lines.append(f("**SELLING ITEMS**"))
+        lines.append("**SELLING ITEMS**")
         for item, price, stock in session.selling_items:
             lines.append(f"{item} {session.format_price(price)} ({stock}x)")
         lines.append("")
         
     if session.selling_frames:
-        lines.append(f("**SELLING FRAMES**"))
+        lines.append("**SELLING FRAMES**")
         for frame, price, stock in session.selling_frames:
             lines.append(f"{frame} {session.format_price(price)} ({stock}x)")
         lines.append("")
@@ -275,7 +263,7 @@ class AdMainMenuView(discord.ui.View):
     @discord.ui.button(label="📜 Generate & Export Ad", style=discord.ButtonStyle.success, row=1)
     async def export_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         ad_text = generate_ad_text(self.session)
-        await interaction.response.send_message(f"Here is your compiled ad:\n```\n{ad_text}\n ```", ephemeral=True)
+        await interaction.response.send_message(f"Here is your compiled ad:\n```\n{ad_text}\n```", ephemeral=True)
 
 class GemRateModal(discord.ui.Modal, title="Set Global Gem Rate"):
     rate = discord.ui.TextInput(label="1 Ticket = How many Gems?", placeholder="e.g. 15")
@@ -299,17 +287,12 @@ class AdSetupView(discord.ui.View):
         self.cog = cog
         self.session = session
 
-    @discord.ui.select(placeholder="Select Ad Font", options=[discord.SelectOption(label=f) for f in FONTS.keys()], row=0)
-    async def font_select(self, interaction: discord.Interaction, select: discord.ui.Select):
-        self.session.font = select.values[0]
-        await interaction.response.defer()
-
-    @discord.ui.select(placeholder="Currency Type", options=[discord.SelectOption(label=c) for c in ["Tickets", "Gems", "Both"]], row=1)
+    @discord.ui.select(placeholder="Currency Type", options=[discord.SelectOption(label=c) for c in ["Tickets", "Gems", "Both"]], row=0)
     async def currency_select(self, interaction: discord.Interaction, select: discord.ui.Select):
         self.session.currency_mode = select.values[0]
         await interaction.response.defer()
 
-    @discord.ui.button(label="Start Building Ad", style=discord.ButtonStyle.primary, row=2)
+    @discord.ui.button(label="Start Building Ad", style=discord.ButtonStyle.primary, row=1)
     async def start_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         if self.session.currency_mode == "Both":
             await interaction.response.send_modal(GemRateModal(self.cog, self.session))
@@ -326,7 +309,7 @@ class AdGeneratorCog(commands.Cog):
     async def ad_help(self, interaction: discord.Interaction):
         embed = discord.Embed(
             title="✦ . HEAVENLY COURT AD GENERATOR . ✦",
-            description="Welcome to the automated Karuta trading matrix.\n\n**How it works:**\n1. Run `/ad create` to open your Control Panel.\n2. Choose your aesthetics (Fonts) and global exchange rates.\n3. Select a category (like Cards or Items) and run your `k!c` or `k!i` command.\n4. The bot will literally read your Karuta page and give you a dropdown menu to price your items instantly!\n5. Hit **Generate** to export your perfectly formatted ad.",
+            description="Welcome to the automated Karuta trading matrix.\n\n**How it works:**\n1. Run `/ad create` to open your Control Panel.\n2. Choose your currency preference and global exchange rates.\n3. Select a category (like Cards or Items) and run your `k!c` or `k!i` command.\n4. The bot will perfectly read your Karuta page and give you a dropdown menu to price your items instantly!\n5. Hit **Generate** to export your perfectly formatted ad.",
             color=0x8b0000
         )
         await interaction.response.send_message(embed=embed, ephemeral=True)
