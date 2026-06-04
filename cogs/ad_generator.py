@@ -2,33 +2,48 @@ import discord
 from discord.ext import commands
 from discord import app_commands
 import asyncio
-import time
+
+FONTS = {
+    "Default": None,
+    "Bold Sans": str.maketrans("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789", "𝗮𝗯𝗰𝗱𝗲𝗳𝗴𝗵𝗶𝗷𝗸𝗹𝗺𝗻𝗼𝗽𝗾𝗿𝘀𝘁𝘂𝘃𝘄𝘅𝘆𝘇𝗔𝗕𝗖𝗗𝗘𝗙𝗚𝗛𝗜𝗝𝗞𝗟𝗠𝗡𝗢𝗣𝗤𝗥𝗦𝗧𝗨𝗩𝗪𝗫𝗬𝗭𝟬𝟭𝟮𝟯𝟰𝟱𝟲𝟳𝟴𝟵"),
+    "Small Caps": str.maketrans("abcdefghijklmnopqrstuvwxyz", "ᴀʙᴄᴅᴇғɢʜɪᴊᴋʟᴍɴᴏᴘǫʀsᴛᴜᴠᴡxʏᴢ")
+}
+
+def apply_font(text: str, font_name: str):
+    if font_name in FONTS and FONTS[font_name]:
+        return text.translate(FONTS[font_name])
+    return text
 
 class AdSession:
     def __init__(self, user_id):
         self.user_id = user_id
+        self.font = "Default"
         self.currency_mode = "Both"
         self.gem_rate = 0
         self.selling_cards_fixed = []
         self.selling_cards_offers = []
         self.selling_cards_custom = []
-        self.buying_cards = []
         self.selling_items = []
-        self.selling_frames = []
+        self.selling_bits = []
+        self.exchanges = []
 
-    def format_price(self, tickets: int):
-        if self.currency_mode == "Tickets" or self.gem_rate == 0:
-            return f"{tickets} 🎟️"
-        elif self.currency_mode == "Gems":
-            return f"{tickets * self.gem_rate} 💎"
-        else:
-            return f"{tickets} 🎟️ | {tickets * self.gem_rate} 💎"
+    def format_price(self, price_str: str):
+        try:
+            val = float(price_str.split()[0])
+            if self.currency_mode == "Tickets" or self.gem_rate == 0:
+                return f"{price_str} 🎟️"
+            elif self.currency_mode == "Gems":
+                return f"{val * self.gem_rate:g} 💎"
+            else:
+                return f"{price_str} 🎟️ | {val * self.gem_rate:g} 💎"
+        except:
+            return f"{price_str} 🎟️"
 
 def generate_ad_text(session: AdSession):
     lines = []
     
     if session.selling_cards_fixed:
-        lines.append("**SELLING CARDS**")
+        lines.append(apply_font("**SELLING CARDS**", session.font))
         if session.currency_mode == "Both" and session.gem_rate > 0:
             lines.append(f"[CONVERSION RATE = 1 🎟️ : {session.gem_rate} 💎]")
         for code, name, price in session.selling_cards_fixed:
@@ -36,27 +51,31 @@ def generate_ad_text(session: AdSession):
         lines.append("")
             
     if session.selling_cards_offers:
-        lines.append("**TAKING OFFER**")
+        lines.append(apply_font("**TAKING OFFER**", session.font))
         for code, name in session.selling_cards_offers:
             lines.append(f"`{code}` · {name}")
         lines.append("")
         
     if session.selling_cards_custom:
-        lines.append("**CUSTOM NAME SECTION**")
+        lines.append(apply_font("**CUSTOM NAME SECTION**", session.font))
         for text in session.selling_cards_custom:
             lines.append(text)
         lines.append("")
         
-    if session.selling_items:
-        lines.append("**SELLING ITEMS**")
-        for item, price, stock in session.selling_items:
-            lines.append(f"{item} {session.format_price(price)} ({stock}x)")
+    for ex in session.exchanges:
+        lines.append(apply_font(ex, session.font))
+        lines.append("")
+
+    if session.selling_bits:
+        lines.append(apply_font("**SELLING BITS 🌸**", session.font))
+        for bit in session.selling_bits:
+            lines.append(bit)
         lines.append("")
         
-    if session.selling_frames:
-        lines.append("**SELLING FRAMES**")
-        for frame, price, stock in session.selling_frames:
-            lines.append(f"{frame} {session.format_price(price)} ({stock}x)")
+    if session.selling_items:
+        lines.append(apply_font("**SELLING ITEMS**", session.font))
+        for item, price, stock in session.selling_items:
+            lines.append(f"{item} = {session.format_price(price)} ({stock})")
         lines.append("")
         
     if not lines:
@@ -79,39 +98,40 @@ class CardPriceModal(discord.ui.Modal, title="Set Card Details"):
         if self.custom_note.value:
             self.session.selling_cards_custom.append(f"`{self.card_code}` · {self.card_name} - {self.custom_note.value}")
         elif self.price.value:
-            try:
-                self.session.selling_cards_fixed.append((self.card_code, self.card_name, int(self.price.value.strip())))
-            except ValueError:
-                return await interaction.response.send_message("❌ Price must be a number.", ephemeral=True)
+            self.session.selling_cards_fixed.append((self.card_code, self.card_name, self.price.value.strip()))
         else:
             self.session.selling_cards_offers.append((self.card_code, self.card_name))
             
-        await interaction.response.edit_message(content=f"✅ Added `{self.card_code}` to ad! Select another or hit Finish.", view=self.view_to_restore)
+        await interaction.response.edit_message(content=f"✅ Added `{self.card_code}` to ad!", view=self.view_to_restore)
 
 class ItemPriceModal(discord.ui.Modal, title="Set Item Details"):
-    price = discord.ui.TextInput(label="Price in Tickets", placeholder="e.g. 2")
+    price = discord.ui.TextInput(label="Price in Tickets", placeholder="e.g. 2 or 2.5 each")
     stock = discord.ui.TextInput(label="Stock Available", placeholder="e.g. 10")
 
-    def __init__(self, session, item_name, is_frame, view_to_restore):
+    def __init__(self, session, item_name, max_stock, view_to_restore):
         super().__init__()
         self.session = session
         self.item_name = item_name
-        self.is_frame = is_frame
         self.view_to_restore = view_to_restore
+        self.stock.default = str(max_stock)
 
     async def on_submit(self, interaction: discord.Interaction):
-        try:
-            p = int(self.price.value.strip())
-            s = int(self.stock.value.strip())
-        except ValueError:
-            return await interaction.response.send_message("❌ Must be valid numbers.", ephemeral=True)
+        self.session.selling_items.append((self.item_name, self.price.value.strip(), self.stock.value.strip()))
+        await interaction.response.edit_message(content=f"✅ Added {self.item_name} to ad!", view=self.view_to_restore)
 
-        if self.is_frame:
-            self.session.selling_frames.append((self.item_name, p, s))
-        else:
-            self.session.selling_items.append((self.item_name, p, s))
-            
-        await interaction.response.edit_message(content=f"✅ Added {self.item_name} to ad! Select another or hit Finish.", view=self.view_to_restore)
+class BitStockModal(discord.ui.Modal, title="List Bits"):
+    amount = discord.ui.TextInput(label="Amount to list", placeholder="e.g. 5000")
+    
+    def __init__(self, session, bit_name, max_stock, view_to_restore):
+        super().__init__()
+        self.session = session
+        self.bit_name = bit_name
+        self.view_to_restore = view_to_restore
+        self.amount.default = str(max_stock)
+        
+    async def on_submit(self, interaction: discord.Interaction):
+        self.session.selling_bits.append(f"{self.amount.value.strip()} · {self.bit_name}")
+        await interaction.response.edit_message(content=f"✅ Added {self.bit_name} to ad!", view=self.view_to_restore)
 
 class KarutaSelectorView(discord.ui.View):
     def __init__(self, session, target_msg, mode="cards"):
@@ -132,17 +152,25 @@ class KarutaSelectorView(discord.ui.View):
         options = []
         for line in lines[:25]:
             parts = [p.strip().replace("*", "").replace("`", "") for p in line.split("·")]
-            if not parts: continue
-            
-            emoji = parts[0].split()[0] if parts[0].split() else ""
+            if len(parts) < 2: continue
             
             if self.mode == "cards":
                 code = parts[0].split()[-1] if parts[0].split() else parts[0]
                 name = parts[-1]
                 options.append(discord.SelectOption(label=f"{code} - {name}"[:100], value=f"{code}||{name}"))
             else:
+                first_part = parts[0].split()
+                if len(first_part) > 1:
+                    emoji = first_part[0]
+                    stock = first_part[1].replace(",", "")
+                else:
+                    emoji = ""
+                    stock = first_part[0].replace(",", "")
+                    
                 name = parts[-1]
-                options.append(discord.SelectOption(label=f"{emoji} {name}"[:100], value=f"{emoji}||{name}"))
+                val_string = f"{emoji}||{name}||{stock}"
+                display_label = f"{emoji} {name} (x{stock})" if emoji else f"{name} (x{stock})"
+                options.append(discord.SelectOption(label=display_label[:100], value=val_string[:100]))
                 
         if not options:
             self.add_item(discord.ui.Button(label="No valid items found on this page.", disabled=True))
@@ -155,10 +183,13 @@ class KarutaSelectorView(discord.ui.View):
             if self.mode == "cards":
                 code, name = val.split("||")
                 await interaction.response.send_modal(CardPriceModal(self.session, code, name, self))
+            elif self.mode == "bits":
+                emoji, name, stock = val.split("||")
+                await interaction.response.send_modal(BitStockModal(self.session, name, stock, self))
             else:
-                emoji, name = val.split("||")
+                emoji, name, stock = val.split("||")
                 display_name = f"{emoji} {name}" if emoji else name
-                await interaction.response.send_modal(ItemPriceModal(self.session, display_name, self.mode == "frames", self))
+                await interaction.response.send_modal(ItemPriceModal(self.session, display_name, stock, self))
                 
         select.callback = select_callback
         self.add_item(select)
@@ -181,44 +212,78 @@ class KarutaSelectorView(discord.ui.View):
         finish_btn.callback = finish_callback
         self.add_item(finish_btn)
 
-class GenericMarketModal(discord.ui.Modal, title="Add Item Details"):
+class ManualItemModal(discord.ui.Modal, title="Add Manual Item"):
+    name = discord.ui.TextInput(label="Item Name", placeholder="e.g. Work Permit, Generosity")
+    emoji = discord.ui.TextInput(label="Emoji (Optional)", placeholder="e.g. 📜, ✨", required=False)
     price = discord.ui.TextInput(label="Price in Tickets", placeholder="e.g. 5")
-    stock = discord.ui.TextInput(label="Stock Available", placeholder="e.g. 2500")
-
-    def __init__(self, session, item_name, emoji):
-        super().__init__()
-        self.session = session
-        self.item_name = item_name
-        self.emoji = emoji
-
-    async def on_submit(self, interaction: discord.Interaction):
-        try:
-            p = int(self.price.value.strip())
-            s = int(self.stock.value.strip())
-        except ValueError:
-            return await interaction.response.send_message("❌ Must be valid numbers.", ephemeral=True)
-            
-        display_name = f"{self.emoji} {self.item_name}" if self.emoji else self.item_name
-        self.session.selling_items.append((display_name, p, s))
-        await interaction.response.send_message(f"✅ Added {display_name} to selling items!", ephemeral=True)
-
-class GenericCategoryView(discord.ui.View):
+    stock = discord.ui.TextInput(label="Stock", placeholder="e.g. 10")
+    
     def __init__(self, session):
         super().__init__()
         self.session = session
         
-    @discord.ui.button(label="Gold")
+    async def on_submit(self, interaction: discord.Interaction):
+        display = f"{self.emoji.value.strip()} {self.name.value.strip()}" if self.emoji.value.strip() else self.name.value.strip()
+        self.session.selling_items.append((display, self.price.value.strip(), self.stock.value.strip()))
+        await interaction.response.send_message(f"✅ Added {display}!", ephemeral=True)
+
+class TicketGemModal(discord.ui.Modal, title="Ticket/Gem Exchange"):
+    selling = discord.ui.TextInput(label="Type 'Tickets' or 'Gems' to sell", default="Tickets")
+    rate = discord.ui.TextInput(label="Rate (How many Gems per Ticket?)", placeholder="e.g. 20")
+    stock = discord.ui.TextInput(label="Stock Available", placeholder="e.g. 5000")
+    
+    def __init__(self, session):
+        super().__init__()
+        self.session = session
+        
+    async def on_submit(self, interaction: discord.Interaction):
+        if self.selling.value.strip().lower() == "tickets":
+            text = f"**SELLING TICKETS 🎟️ | BUYING GEMS 💎**\n{self.rate.value.strip()} 💎 = 1 🎟️\nSTOCK : {self.stock.value.strip()} 🎟️"
+        else:
+            text = f"**SELLING GEMS 💎 | BUYING TICKETS 🎟️**\n{self.rate.value.strip()} 💎 = 1 🎟️\nSTOCK : {self.stock.value.strip()} 💎"
+        self.session.exchanges.append(text)
+        await interaction.response.send_message("✅ Exchange added!", ephemeral=True)
+
+class GoldExchangeModal(discord.ui.Modal, title="Gold Exchange"):
+    rate = discord.ui.TextInput(label="Rate (Gold per Ticket)", placeholder="e.g. 2600")
+    stock = discord.ui.TextInput(label="Stock Available", placeholder="e.g. 50000")
+    
+    def __init__(self, session):
+        super().__init__()
+        self.session = session
+        
+    async def on_submit(self, interaction: discord.Interaction):
+        text = f"**SELLING GOLD 💰**\n{self.rate.value.strip()} 💰 : 1 🎟️\nSTOCK : {self.stock.value.strip()} 💰"
+        self.session.exchanges.append(text)
+        await interaction.response.send_message("✅ Exchange added!", ephemeral=True)
+
+class BitsRateModal(discord.ui.Modal, title="Bits Exchange Rate"):
+    rate = discord.ui.TextInput(label="Rate (Bits per Ticket)", placeholder="e.g. 2000")
+    
+    def __init__(self, session):
+        super().__init__()
+        self.session = session
+        
+    async def on_submit(self, interaction: discord.Interaction):
+        gem_calc = self.session.gem_rate if self.session.gem_rate > 0 else "XX"
+        text = f"**BITS RATE**\n{self.rate.value.strip()} Bits = 1 🎟️ : {gem_calc} 💎"
+        self.session.exchanges.append(text)
+        await interaction.response.send_message("✅ Bits rate added!", ephemeral=True)
+
+class ExchangeCategoryView(discord.ui.View):
+    def __init__(self, session):
+        super().__init__()
+        self.session = session
+        
+    @discord.ui.button(label="Ticket / Gem Exchange")
+    async def btn_t(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.send_modal(TicketGemModal(self.session))
+    @discord.ui.button(label="Gold Exchange")
     async def btn_g(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await interaction.response.send_modal(GenericMarketModal(self.session, "Gold", "💰"))
-    @discord.ui.button(label="Bits")
+        await interaction.response.send_modal(GoldExchangeModal(self.session))
+    @discord.ui.button(label="Bits Rate")
     async def btn_b(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await interaction.response.send_modal(GenericMarketModal(self.session, "Bits", "🪨"))
-    @discord.ui.button(label="Droplet")
-    async def btn_d(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await interaction.response.send_modal(GenericMarketModal(self.session, "Droplet", "💧"))
-    @discord.ui.button(label="Blessing")
-    async def btn_bl(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await interaction.response.send_modal(GenericMarketModal(self.session, "Blessing", "✨"))
+        await interaction.response.send_modal(BitsRateModal(self.session))
 
 class AdMainMenuView(discord.ui.View):
     def __init__(self, cog, session):
@@ -229,36 +294,37 @@ class AdMainMenuView(discord.ui.View):
     @discord.ui.select(
         placeholder="Select a category to add to...",
         options=[
-            discord.SelectOption(label="Scan Cards (Fixed/Offers)", value="cards", emoji="🎴"),
-            discord.SelectOption(label="Scan Items", value="items", emoji="📦"),
-            discord.SelectOption(label="Scan Frames", value="frames", emoji="🖼️"),
-            discord.SelectOption(label="Add Gold/Bits/Droplets/Blessings", value="generic", emoji="💰"),
-            discord.SelectOption(label="Custom Requests (Buying)", value="buying", emoji="🛒")
+            discord.SelectOption(label="Scan Cards", value="cards", emoji="🎴", description="Run k!c to add cards"),
+            discord.SelectOption(label="Scan Inventory", value="items", emoji="📦", description="Run k!i to add items/frames"),
+            discord.SelectOption(label="Scan Bits", value="bits", emoji="🪨", description="Run k!bi to add bits"),
+            discord.SelectOption(label="Add Market Exchanges", value="exchanges", emoji="💹", description="Rates for Gold/Tickets/Gems"),
+            discord.SelectOption(label="Add Manual Item", value="manual", emoji="✍️", description="For Blessings or un-scannable items")
         ]
     )
     async def category_select(self, interaction: discord.Interaction, select: discord.ui.Select):
         val = select.values[0]
         
-        if val in ["cards", "items", "frames"]:
-            await interaction.response.send_message("👀 I am watching. Please run `k!c` or `k!i` in this channel now.", ephemeral=True)
+        if val in ["cards", "items", "bits"]:
+            cmd = "k!c" if val == "cards" else "k!i" if val == "items" else "k!bi"
+            await interaction.response.send_message(f"👀 I am watching. Please run `{cmd}` in this channel now.", ephemeral=True)
             
             def check(m):
-                return m.author.id == 646937666251915264 and m.channel.id == interaction.channel.id
+                return m.author.id == 646937666251915264 and m.channel.id == interaction.channel.id and len(m.embeds) > 0
             
             try:
                 karuta_msg = await self.cog.bot.wait_for('message', check=check, timeout=60.0)
                 await interaction.followup.send(
-                    "✅ **Karuta Detected!** Navigate to the correct page on Karuta's message above, then use the menu below to add them to your ad.", 
+                    f"✅ **Karuta Detected!** Navigate to the correct page on Karuta's message above, then use the menu below to add them to your ad.", 
                     view=KarutaSelectorView(self.session, karuta_msg, val), 
                     ephemeral=False
                 )
             except asyncio.TimeoutError:
                 await interaction.followup.send("❌ Timed out waiting for Karuta.", ephemeral=True)
                 
-        elif val == "generic":
-            await interaction.response.send_message("Which item?", view=GenericCategoryView(self.session), ephemeral=True)
-        else:
-            await interaction.response.send_message("Feature expanding soon!", ephemeral=True)
+        elif val == "exchanges":
+            await interaction.response.send_message("Select an exchange to configure:", view=ExchangeCategoryView(self.session), ephemeral=True)
+        elif val == "manual":
+            await interaction.response.send_modal(ManualItemModal(self.session))
 
     @discord.ui.button(label="📜 Generate & Export Ad", style=discord.ButtonStyle.success, row=1)
     async def export_button(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -287,12 +353,17 @@ class AdSetupView(discord.ui.View):
         self.cog = cog
         self.session = session
 
-    @discord.ui.select(placeholder="Currency Type", options=[discord.SelectOption(label=c) for c in ["Tickets", "Gems", "Both"]], row=0)
+    @discord.ui.select(placeholder="Select Ad Font", options=[discord.SelectOption(label=f) for f in FONTS.keys()], row=0)
+    async def font_select(self, interaction: discord.Interaction, select: discord.ui.Select):
+        self.session.font = select.values[0]
+        await interaction.response.defer()
+
+    @discord.ui.select(placeholder="Currency Type", options=[discord.SelectOption(label=c) for c in ["Tickets", "Gems", "Both"]], row=1)
     async def currency_select(self, interaction: discord.Interaction, select: discord.ui.Select):
         self.session.currency_mode = select.values[0]
         await interaction.response.defer()
 
-    @discord.ui.button(label="Start Building Ad", style=discord.ButtonStyle.primary, row=1)
+    @discord.ui.button(label="Start Building Ad", style=discord.ButtonStyle.primary, row=2)
     async def start_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         if self.session.currency_mode == "Both":
             await interaction.response.send_modal(GemRateModal(self.cog, self.session))
