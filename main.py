@@ -46,6 +46,7 @@ class Bot(commands.Bot):
         await self.load_extension("cogs.auction")
         await self.load_extension("cogs.colors")
         await self.load_extension("cogs.giveaway")
+        await self.load_extension("cogs.ad_generator")
         
         from cogs.colors import ColorView
         self.add_view(ColorView())
