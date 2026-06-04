@@ -33,21 +33,21 @@ def generate_ad_text(session: AdSession):
     if session.selling_cards_fixed:
         lines.append("**SELLING CARDS**")
         if session.currency_mode == "Both" and session.gem_rate > 0:
-            lines.append(f"[CONVERSION RATE = 1 🎟️ : {session.gem_rate} 💎]")
+            lines.append(f"> [CONVERSION RATE = 1 🎟️ : {session.gem_rate} 💎]")
         for code, name, price in session.selling_cards_fixed:
-            lines.append(f"{session.format_price(price)} `{code}` · {name}")
+            lines.append(f"> {session.format_price(price)} `{code}` · {name}")
         lines.append("")
             
     if session.selling_cards_offers:
         lines.append("**TAKING OFFER**")
         for code, name in session.selling_cards_offers:
-            lines.append(f"`{code}` · {name}")
+            lines.append(f"> `{code}` · {name}")
         lines.append("")
         
     if session.selling_cards_custom:
         lines.append("**CUSTOM NAME SECTION**")
         for text in session.selling_cards_custom:
-            lines.append(text)
+            lines.append(f"> {text}")
         lines.append("")
         
     for ex in session.exchanges:
@@ -57,13 +57,13 @@ def generate_ad_text(session: AdSession):
     if session.selling_bits:
         lines.append("**SELLING BITS 🌸**")
         for bit in session.selling_bits:
-            lines.append(bit)
+            lines.append(f"> {bit}")
         lines.append("")
         
     if session.selling_items:
         lines.append("**SELLING ITEMS**")
         for item, price, stock in session.selling_items:
-            lines.append(f"{item} = {session.format_price(price)} ({stock})")
+            lines.append(f"> {item} = {session.format_price(price)} ({stock})")
         lines.append("")
         
     if not lines:
@@ -93,7 +93,7 @@ class CardPriceModal(discord.ui.Modal, title="Set Card Details"):
         await interaction.response.edit_message(content=f"✅ Added `{self.card_code}` to ad!", view=self.view_to_restore)
 
 class ItemPriceModal(discord.ui.Modal, title="Set Item Details"):
-    price = discord.ui.TextInput(label="Price in Tickets", placeholder="e.g. 2 or 2.5 each")
+    price = discord.ui.TextInput(label="Price in Tickets", placeholder="e.g. 2 or 2.5")
     stock = discord.ui.TextInput(label="Stock Available", placeholder="e.g. 10")
 
     def __init__(self, session, item_name, max_stock, view_to_restore):
@@ -237,9 +237,9 @@ class TicketGemModal(discord.ui.Modal, title="Ticket/Gem Exchange"):
         
     async def on_submit(self, interaction: discord.Interaction):
         if self.selling.value.strip().lower() == "tickets":
-            text = f"**SELLING TICKETS 🎟️ | BUYING GEMS 💎**\n{self.rate.value.strip()} 💎 = 1 🎟️\nSTOCK : {self.stock.value.strip()} 🎟️"
+            text = f"**SELLING TICKETS 🎟️ | BUYING GEMS 💎**\n> {self.rate.value.strip()} 💎 = 1 🎟️\n> STOCK : {self.stock.value.strip()} 🎟️"
         else:
-            text = f"**SELLING GEMS 💎 | BUYING TICKETS 🎟️**\n{self.rate.value.strip()} 💎 = 1 🎟️\nSTOCK : {self.stock.value.strip()} 💎"
+            text = f"**SELLING GEMS 💎 | BUYING TICKETS 🎟️**\n> {self.rate.value.strip()} 💎 = 1 🎟️\n> STOCK : {self.stock.value.strip()} 💎"
         self.session.exchanges.append(text)
         await interaction.response.edit_message(content="✅ Exchange added!", view=None)
         await interaction.followup.send("🛠️ **Ad Control Panel**", view=AdMainMenuView(self.cog, self.session), ephemeral=True)
@@ -254,7 +254,7 @@ class GoldExchangeModal(discord.ui.Modal, title="Gold Exchange"):
         self.session = session
         
     async def on_submit(self, interaction: discord.Interaction):
-        text = f"**SELLING GOLD 💰**\n{self.rate.value.strip()} 💰 : 1 🎟️\nSTOCK : {self.stock.value.strip()} 💰"
+        text = f"**SELLING GOLD 💰**\n> {self.rate.value.strip()} 💰 : 1 🎟️\n> STOCK : {self.stock.value.strip()} 💰"
         self.session.exchanges.append(text)
         await interaction.response.edit_message(content="✅ Exchange added!", view=None)
         await interaction.followup.send("🛠️ **Ad Control Panel**", view=AdMainMenuView(self.cog, self.session), ephemeral=True)
@@ -269,7 +269,7 @@ class BitsRateModal(discord.ui.Modal, title="Bits Exchange Rate"):
         
     async def on_submit(self, interaction: discord.Interaction):
         gem_calc = self.session.gem_rate if self.session.gem_rate > 0 else "XX"
-        text = f"**BITS RATE**\n{self.rate.value.strip()} Bits = 1 🎟️ : {gem_calc} 💎"
+        text = f"**BITS RATE**\n> {self.rate.value.strip()} Bits = 1 🎟️ : {gem_calc} 💎"
         self.session.exchanges.append(text)
         await interaction.response.edit_message(content="✅ Bits rate added!", view=None)
         await interaction.followup.send("🛠️ **Ad Control Panel**", view=AdMainMenuView(self.cog, self.session), ephemeral=True)
