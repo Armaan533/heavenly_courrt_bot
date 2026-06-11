@@ -300,5 +300,33 @@ async def bot_start():
         return
     await bot.start(TOKEN)
 
+@bot.command(name="hide", help="Hides the current or specified channel from @everyone")
+@commands.has_permissions(manage_channels=True)
+async def hide_channel(ctx, channel: discord.TextChannel = None):
+    target_channel = channel or ctx.channel
+    everyone_role = ctx.guild.default_role
+
+    await target_channel.set_permissions(everyone_role, view_channel=False)
+    
+    embed = discord.Embed(
+        description=f"✅ {target_channel.mention} is now hidden from `@everyone`.", 
+        color=0x8b0000
+    )
+    await ctx.send(embed=embed)
+
+@bot.command(name="unhide", help="Unhides the current or specified channel for @everyone")
+@commands.has_permissions(manage_channels=True)
+async def unhide_channel(ctx, channel: discord.TextChannel = None):
+    target_channel = channel or ctx.channel
+    everyone_role = ctx.guild.default_role
+    
+    await target_channel.set_permissions(everyone_role, view_channel=None)
+    
+    embed = discord.Embed(
+        description=f"✅ {target_channel.mention} is now visible to `@everyone` again.", 
+        color=0x8b0000
+    )
+    await ctx.send(embed=embed)
+
 if __name__ == "__main__":
     asyncio.run(bot_start())

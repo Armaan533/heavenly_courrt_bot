@@ -65,7 +65,7 @@ class ItemSetupModal(discord.ui.Modal, title="Setup Item Giveaway"):
 
         end_time = int(time.time()) + seconds
         
-        desc = f"✨ *An item has been offered to the sect.* ✨\n\n"
+        desc = f"✨ *An artifact has been offered to the sect.* ✨\n\n"
         desc += f"**୨୧ Item ୨୧**\n{self.item_name.value}\n\n"
         desc += f"**୨୧ Description ୨୧**\n{self.description.value}\n"
         
@@ -78,7 +78,7 @@ class ItemSetupModal(discord.ui.Modal, title="Setup Item Giveaway"):
                 
         desc += f"\n⏰ **Ends:** <t:{end_time}:R>"
         
-        embed = discord.Embed(title="✦ . HEAVENLY COURT GIVEAWAY . ✦", description=desc, color=0xE0B0FF)
+        embed = discord.Embed(title="✦ . HEAVENLY COURT GIVEAWAY . ✦", description=desc, color=0x8b0000)
         embed.set_footer(text=f"Hosted by {interaction.user.display_name}")
 
         await interaction.response.send_message("Giveaway started successfully!", ephemeral=True)
@@ -134,6 +134,7 @@ class GiveawayCog(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.active_giveaways = {}
+        self.ended_giveaways = {} 
         
     giveaway_group = app_commands.Group(name="giveaway", description="Manage giveaways")
 
@@ -146,6 +147,9 @@ class GiveawayCog(commands.Cog):
             return
             
         self.active_giveaways.pop(message_id, None)
+        
+        self.ended_giveaways[message_id] = {"tickets": view.tickets, "prize": prize_name}
+
         channel = self.bot.get_channel(channel_id)
         if not channel: return
 
@@ -199,7 +203,7 @@ class GiveawayCog(commands.Cog):
 
         desc = f"✨ *A new treasure has entered the pavilion.* ✨\n\n"
         desc += f"**୨୧ Character ୨୧**\n**{character_name}**\n\n"
-        desc += f"**୨୧ Details ୨୧**\n`{clean_details}`\n"
+        desc += f"**୨୧ Details ୨୧**\n{clean_details}\n" 
         
         if clan_bonus > 0 or booster_bonus > 0:
             desc += f"\n**୨୧ Bonus Entries ୨୧**\n"
@@ -210,7 +214,7 @@ class GiveawayCog(commands.Cog):
                 
         desc += f"\n⏰ **Ends:** <t:{end_time}:R>"
 
-        giveaway_embed = discord.Embed(title="✦ . HEAVENLY COURT GIVEAWAY . ✦", description=desc, color=0xE0B0FF)
+        giveaway_embed = discord.Embed(title="✦ . HEAVENLY COURT GIVEAWAY . ✦", description=desc, color=0x8b0000)
         giveaway_embed.set_footer(text=f"Hosted by {author.display_name}")
         
         if card_image_url:
@@ -235,7 +239,7 @@ class GiveawayCog(commands.Cog):
         if not (is_admin or is_event_manager):
             return await interaction.response.send_message("❌ You do not have permission to run this command.", ephemeral=True)
 
-        embed = discord.Embed(title="Giveaway Setup", description="Select the type of giveaway:", color=0xE0B0FF)
+        embed = discord.Embed(title="Giveaway Setup", description="Select the type of giveaway:", color=0x8b0000)
         await interaction.response.send_message(embed=embed, view=GiveawayTypeSelect(self, interaction.user, clan_bonus, booster_bonus), ephemeral=True)
 
     @giveaway_group.command(name="cancel", description="Cancels an active giveaway")
@@ -287,6 +291,34 @@ class GiveawayCog(commands.Cog):
 
         await interaction.response.send_message("Ending giveaway early...", ephemeral=True)
         await self.determine_winner(msg_id, gaw_data["channel_id"], gaw_data["view"], gaw_data["embed"], gaw_data["prize"])
+
+    @giveaway_group.command(name="reroll", description="Rerolls a completed giveaway to pick a new winner")
+    @app_commands.describe(message_id="The message ID of the ended giveaway")
+    async def reroll_giveaway(self, interaction: discord.Interaction, message_id: str):
+        EVENT_MANAGER_ROLE_ID = 1508333073668898996
+        if not (interaction.user.guild_permissions.administrator or any(role.id == EVENT_MANAGER_ROLE_ID for role in interaction.user.roles)):
+            return await interaction.response.send_message("❌ You do not have permission.", ephemeral=True)
+
+        try:
+            msg_id = int(message_id)
+        except ValueError:
+            return await interaction.response.send_message("❌ Invalid message ID formatting.", ephemeral=True)
+
+        if msg_id not in self.ended_giveaways:
+            return await interaction.response.send_message("❌ Giveaway not found! (Note: Restarting the bot clears giveaway history)", ephemeral=True)
+
+        gaw_data = self.ended_giveaways[msg_id]
+        tickets = gaw_data["tickets"]
+        prize_name = gaw_data["prize"]
+
+        if not tickets:
+            return await interaction.response.send_message("❌ This giveaway had no entries, cannot reroll.", ephemeral=True)
+
+        winner_id = random.choice(tickets)
+        winner_user = await self.bot.fetch_user(winner_id)
+        
+        await interaction.response.send_message("✅ Rerolling giveaway...", ephemeral=True)
+        await interaction.channel.send(f"🎊 **REROLL!** The heavens have chosen a new winner! {winner_user.mention} has won **{prize_name}**! Open a ticket to claim in <#1509258805777666180>")
 
 async def setup(bot):
     await bot.add_cog(GiveawayCog(bot))
