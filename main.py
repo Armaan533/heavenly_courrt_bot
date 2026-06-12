@@ -303,6 +303,14 @@ async def bot_start():
 @bot.command(name="hide", help="Hides the current or specified channel from @everyone")
 @commands.has_permissions(manage_channels=True)
 async def hide_channel(ctx, channel: discord.TextChannel = None):
+
+    allowed_roles = [1503987120572858511, 1508333073668898996]
+    is_admin = ctx.author.guild_permissions.administrator
+    has_role = any(role.id in allowed_roles for role in ctx.author.roles)
+    
+    if not (is_admin or has_role):
+        return await ctx.send("❌ You do not have permission to use this command.")
+    
     target_channel = channel or ctx.channel
     everyone_role = ctx.guild.default_role
     
@@ -321,6 +329,14 @@ async def hide_channel(ctx, channel: discord.TextChannel = None):
 @bot.command(name="unhide", help="Unhides the current or specified channel for @everyone")
 @commands.has_permissions(manage_channels=True)
 async def unhide_channel(ctx, channel: discord.TextChannel = None):
+
+    allowed_roles = [1503987120572858511, 1508333073668898996]
+    is_admin = ctx.author.guild_permissions.administrator
+    has_role = any(role.id in allowed_roles for role in ctx.author.roles)
+    
+    if not (is_admin or has_role):
+        return await ctx.send("❌ You do not have permission to use this command.")
+
     target_channel = channel or ctx.channel
     everyone_role = ctx.guild.default_role
     
