@@ -305,8 +305,12 @@ async def bot_start():
 async def hide_channel(ctx, channel: discord.TextChannel = None):
     target_channel = channel or ctx.channel
     everyone_role = ctx.guild.default_role
-
-    await target_channel.set_permissions(everyone_role, view_channel=False)
+    
+    overwrite = target_channel.overwrites_for(everyone_role)
+    
+    overwrite.view_channel = False
+    
+    await target_channel.set_permissions(everyone_role, overwrite=overwrite)
     
     embed = discord.Embed(
         description=f"✅ {target_channel.mention} is now hidden from `@everyone`.", 
@@ -320,7 +324,19 @@ async def unhide_channel(ctx, channel: discord.TextChannel = None):
     target_channel = channel or ctx.channel
     everyone_role = ctx.guild.default_role
     
-    await target_channel.set_permissions(everyone_role, view_channel=None)
+    overwrite = target_channel.overwrites_for(everyone_role)
+    
+    overwrite.view_channel = True
+    overwrite.send_messages = True
+    overwrite.read_message_history = True
+    
+    overwrite.mention_everyone = False
+    overwrite.manage_channels = False
+    overwrite.manage_messages = False
+    overwrite.manage_roles = False
+    overwrite.manage_webhooks = False
+    
+    await target_channel.set_permissions(everyone_role, overwrite=overwrite)
     
     embed = discord.Embed(
         description=f"✅ {target_channel.mention} is now visible to `@everyone` again.", 
