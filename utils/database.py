@@ -8,9 +8,10 @@ hcdb: AsyncDatabase
 pointsColl: AsyncCollection
 wishlistColl: AsyncCollection
 rewardedColl: AsyncCollection
+giveawaysColl: AsyncCollection
 
 async def init_db():
-    global connector, hcdb, pointsColl, wishlistColl, rewardedColl, auctionWinnersColl
+    global connector, hcdb, pointsColl, wishlistColl, rewardedColl, auctionWinnersColl, giveawaysColl
     connector = pymongo.AsyncMongoClient(os.getenv("MONGO_URI"), serverSelectionTimeoutMS=5000)
     info = await connector.server_info()  # Trigger connection to verify credentials and connectivity
     print("Connected to MongoDB")
@@ -22,6 +23,7 @@ async def init_db():
     wishlistColl = hcdb.whitelist
     rewardedColl = hcdb.rewarded
     auctionWinnersColl = hcdb.auction_winners
+    giveawaysColl = hcdb.giveaways
 
 
 #           Points System           #
@@ -144,3 +146,18 @@ async def remove_booster_points(user_id: int, amount: int) -> int:
 
 async def set_booster_points(user_id: int, amount: int) -> None:
     await pointsColl.update_one({"user_id": user_id}, {"$set": {"booster_points": amount}}, upsert=True)
+
+#giveaway stuff
+
+async def get_all_giveaways() -> dict:
+        doc = await giveawaysColl.find_one({"_id": "giveaways_data"})
+        if doc is None:
+            return {"active": {}, "ended": {}}
+        return {"active": doc.get("active", {}), "ended": doc.get("ended", {})}
+    
+async def save_giveaways_data(data: dict) -> None:
+        await giveawaysColl.update_one(
+            {"_id": "giveaways_data"},
+            {"$set": {"active": data.get("active", {}), "ended": data.get("ended", {})}},
+            upsert=True
+        )
