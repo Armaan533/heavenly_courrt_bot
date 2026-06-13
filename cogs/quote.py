@@ -1,0 +1,70 @@
+import discord
+from discord.ext import commands
+from discord import app_commands
+from constants import EMBED_COLOR
+
+class QuoteModal(discord.ui.Modal, title="create a Quote"):
+    quote_text = discord.ui.TextInput(
+        label="The Quote",
+        style=discord.TextStyle.paragraph,
+        placeholder="Type your quote here...",
+        required=True,
+        max_length=4000
+    )
+    thumbnail_url = discord.ui.TextInput(
+        label="Thumbnail URL (optional)",
+        style=discord.TextStyle.short,
+        placeholder="https://example.com/image.png",
+        required=False,
+    )
+    image_url = discord.ui.TextInput(
+        label="Bottom Image URL (optional)",
+        style=discord.TextStyle.short,
+        placeholder="https://example.com/image.png",
+        required=False,
+    )
+
+    async def on_submit(self, interaction: discord.Interaction):
+        embed = discord.Embed(
+            title="✦ Quote ✦",
+            description=self.quote_text.value.strip(),
+            color=EMBED_COLOR
+        )
+
+        if self.thumbnail_url.value:
+            embed.set_thumbnail(url=self.thumbnail_url.value.strip())
+
+        if self.image_url.value:
+            embed.set_image(url=self.image_url.value.strip())
+
+        embed.set_footer(text="✦ Heavenly Courrt ✦")
+
+        await self.target_channel.send(embed=embed)
+
+        await interaction.response.send_message(f"✅ Quote posted in {self.target_channel.mention}!", ephemeral=True)
+
+
+    class QuoteCog(commands.Cog):
+        def __init__(self, bot):
+            self.bot = bot
+
+        quote_group = app_commands.Group(name="quote", description="Manage the quote channel")
+
+        @quote_group.command(name="post", description="Post a quote to the quote channel")
+        @app_commands.describe(channel="The channel you want to send the quote to")
+        async def quote_post(self, interaction: discord.Interaction, channel: discord.TextChannel = None):
+            EVENT_MANAGER_ROLE_ID = 1508333073668898996
+            ADMIN_ROLE_ID = 1515097042131615775
+
+            is_admin = interaction.user.guild_permissions.administrator
+            has_role = any(role.id in [EVENT_MANAGER_ROLE_ID, ADMIN_ROLE_ID] for role in interaction.user.roles)
+
+            if not(is_admin or has_role):
+                return await interaction.response.send_message("❌ You don't have permission to post quotes.", ephemeral=True)
+            
+            target = channel or interaction.channel
+
+            await interaction.response.send_modal(QuoteModal(target_channel=target))
+
+async def setup(bot):
+    await bot.add_cog(QuoteCog(bot))
