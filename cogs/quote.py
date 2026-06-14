@@ -34,7 +34,7 @@ class QuoteModal(discord.ui.Modal, title="Create a Beautiful Quote"):
         embed = discord.Embed(
             title="✦ __Quote__ ✦",
             description=formatted_quote,
-            color=0xFFFFFF 
+            color=0x8b0000
         )
         
         if self.thumbnail_url.value:
