@@ -28,13 +28,15 @@ class QuoteModal(discord.ui.Modal, title="Create a Beautiful Quote"):
         self.target_channel = target_channel
 
     async def on_submit(self, interaction: discord.Interaction):
+        # Removes auto-quotes, appends your custom DM message in italics, 
+        # and keeps the invisible \u200B space to prevent the thumbnail gap!
         raw_quote = self.quote_text.value.strip()
-        formatted_quote = f"*\u201c{raw_quote}\u201d*\n\n\u200B\n\u200B"
+        formatted_quote = f"{raw_quote}\n\n*If anyone ever wants to suggest one just Dm me!*\n\u200B"
         
         embed = discord.Embed(
             title="✦ __Quote__ ✦",
             description=formatted_quote,
-            color=0x8b0000
+            color=0x8b0000 
         )
         
         if self.thumbnail_url.value:
