@@ -150,14 +150,14 @@ async def set_booster_points(user_id: int, amount: int) -> None:
 #giveaway stuff
 
 async def get_all_giveaways() -> dict:
-        doc = await giveawaysColl.find_one({"_id": "giveaways_data"})
-        if doc is None:
+    doc = await giveawaysColl.find_one({"_id": "giveaways_data"})
+    if doc is None:
             return {"active": {}, "ended": {}}
-        return {"active": doc.get("active", {}), "ended": doc.get("ended", {})}
+    return {"active": doc.get("active", {}), "ended": doc.get("ended", {})}
     
 async def save_giveaways_data(data: dict) -> None:
-        await giveawaysColl.update_one(
-            {"_id": "giveaways_data"},
+    await giveawaysColl.update_one(
+        {"_id": "giveaways_data"},
             {"$set": {"active": data.get("active", {}), "ended": data.get("ended", {})}},
-            upsert=True
-        )
+        upsert=True
+    )
