@@ -103,6 +103,7 @@ class ColorsCog(commands.Cog):
         )
         
         await interaction.channel.send(embed=embed, view=ColorView())
+        await interaction.channel.send("**━━━━━━━━━━━━━━━━━━━━ ✦ ━━━━━━━━━━━━━━━━━━━━**")
         await interaction.response.send_message("✦ Panel posted successfully!", ephemeral=True)
 
 async def setup(bot):
