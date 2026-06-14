@@ -82,7 +82,7 @@ class ColorsCog(commands.Cog):
     @app_commands.command(name="send_color_panel", description="Spawns the beautiful color role selection panel.")
     @app_commands.default_permissions(administrator=True)
     async def send_panel(self, interaction: discord.Interaction):
-        embed = discord.Embed(title="🎨 COLOR ROLES 🎨", color=EMBED_COLOR)
+        embed = discord.Embed(title="🎨 COLOR ROLES 🎨", color=0x8b0000)
         embed.description = (
             "✨ *choose an aura worthy of your cultivation path* ✨\n\n"
             "╭──────────୨୧──────────╮\n\n"
