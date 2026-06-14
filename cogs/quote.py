@@ -31,7 +31,7 @@ class QuoteModal(discord.ui.Modal, title="Create a Beautiful Quote"):
         # Removes auto-quotes, appends your custom DM message in italics, 
         # and keeps the invisible \u200B space to prevent the thumbnail gap!
         raw_quote = self.quote_text.value.strip()
-        formatted_quote = f"{raw_quote}\n\n*If anyone ever wants to suggest one just Dm me!*\n\u200B"
+        formatted_quote = f"{raw_quote}\n\u200B"
         
         embed = discord.Embed(
             title="✦ __Quote__ ✦",
@@ -45,7 +45,7 @@ class QuoteModal(discord.ui.Modal, title="Create a Beautiful Quote"):
         if self.image_url.value:
             embed.set_image(url=self.image_url.value.strip())
             
-        embed.set_footer(text="Heavenly Court ✦")
+        embed.set_footer(text="Heavenly Court ✦ *If anyone ever wants to suggest one just Dm <@846366974325424158>!*")
 
         await self.target_channel.send(embed=embed)
         await interaction.response.send_message(f"✅ Quote beautifully posted in {self.target_channel.mention}!", ephemeral=True)
