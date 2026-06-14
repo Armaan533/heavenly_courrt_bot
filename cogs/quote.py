@@ -1,13 +1,12 @@
 import discord
 from discord.ext import commands
 from discord import app_commands
-from constants import EMBED_COLOR
 
 class QuoteModal(discord.ui.Modal, title="Create a Beautiful Quote"):
     quote_text = discord.ui.TextInput(
         label="The Quote",
         style=discord.TextStyle.paragraph,
-        placeholder="Type your quote here...\n(You can use Discord formatting like *italics* or **bold**)",
+        placeholder="Type your quote here...",
         required=True,
         max_length=4000
     )
@@ -29,10 +28,13 @@ class QuoteModal(discord.ui.Modal, title="Create a Beautiful Quote"):
         self.target_channel = target_channel
 
     async def on_submit(self, interaction: discord.Interaction):
+        raw_quote = self.quote_text.value.strip()
+        formatted_quote = f"*\u201c{raw_quote}\u201d*\n\n\u200B\n\u200B"
+        
         embed = discord.Embed(
-            title="✦ Quote ✦",
-            description=self.quote_text.value.strip(),
-            color=EMBED_COLOR
+            title="✦ __Quote__ ✦",
+            description=formatted_quote,
+            color=0xFFFFFF 
         )
         
         if self.thumbnail_url.value:
@@ -41,10 +43,9 @@ class QuoteModal(discord.ui.Modal, title="Create a Beautiful Quote"):
         if self.image_url.value:
             embed.set_image(url=self.image_url.value.strip())
             
-        embed.set_footer(text="✦ Heavenly Court ✦")
+        embed.set_footer(text="Heavenly Court ✦")
 
         await self.target_channel.send(embed=embed)
-        
         await interaction.response.send_message(f"✅ Quote beautifully posted in {self.target_channel.mention}!", ephemeral=True)
 
 class QuoteCog(commands.Cog):
@@ -66,7 +67,6 @@ class QuoteCog(commands.Cog):
             return await interaction.response.send_message("❌ You do not have permission to post quotes.", ephemeral=True)
 
         target = channel or interaction.channel
-        
         await interaction.response.send_modal(QuoteModal(target))
 
 async def setup(bot):
