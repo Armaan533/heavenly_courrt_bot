@@ -163,7 +163,9 @@ class RolesCog(commands.Cog):
         await interaction.response.send_message("Deploying role menus...", ephemeral=True)
         
         await interaction.channel.send(embed=notif_embed, view=RolesView("notification"))
+        await interaction.channel.send("**━━━━━━━━━━━━━━━━━━━━ ✦ ━━━━━━━━━━━━━━━━━━━━**")
         await interaction.channel.send(embed=region_embed, view=RolesView("region"))
+        await interaction.channel.send("**━━━━━━━━━━━━━━━━━━━━ ✦ ━━━━━━━━━━━━━━━━━━━━**")
 
 async def setup(bot):
     await bot.add_cog(RolesCog(bot))
