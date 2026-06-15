@@ -15,7 +15,7 @@ class StatsCog(commands.Cog):
         self.start_time = time.time() 
 
     @app_commands.command(name="status", description="Displays advanced system telemetry and diagnostic data")
-    async def bot_status(self, interaction: discord.Interaction):
+    async def status_telemetry(self, interaction: discord.Interaction):
         await interaction.response.defer(ephemeral=False)
 
         uptime_seconds = int(time.time() - self.start_time)
