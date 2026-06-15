@@ -1,35 +1,28 @@
 import discord
 from discord.ext import commands
 import re
-import random
 import traceback
 
 class EffortView(discord.ui.View):
-    def __init__(self, mint_core, dye, frame, base_val, current_quality):
+    def __init__(self, naked_effort, dye, frame, mystic, base_val):
         super().__init__(timeout=300)
-        self.mint_core = mint_core
+        self.naked_effort = naked_effort
         self.dye = dye
         self.frame = frame
+        self.mystic = mystic
         self.base_val = base_val
-        self.current_quality = current_quality
 
     @discord.ui.button(label="Advanced Diagnostics", style=discord.ButtonStyle.secondary, emoji="⚙️")
     async def advanced_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         ticks = chr(96) * 3
         adv_desc = f"**⟡ Identified Baseline:** `{self.base_val} ✧`\n"
-        
-        if self.current_quality != "Mint":
-            adv_desc += f"**⟡ Projected Mint Effort:** `{self.mint_core} ✧` (Currently {self.current_quality})\n"
-        else:
-            adv_desc += f"**⟡ Current Mint Effort:** `{self.mint_core} ✧`\n"
-            
         adv_desc += "━━━━━━━━━━━━━━━━━━━━━━\n"
         adv_desc += "**🎨 Cosmetics Optimization:**\n"
         adv_desc += f"{ticks}ini\n"
-        adv_desc += f"[ Dye ]          -> {self.mint_core + self.dye} [+ {self.dye}]\n"
-        adv_desc += f"[ Frame ]        -> {self.mint_core + self.frame} [+ {self.frame}]\n"
-        adv_desc += f"[ Dye & Frame ]  -> {self.mint_core + self.dye + self.frame} [+ {self.dye + self.frame}]\n"
-        adv_desc += f"[ Mystic Frame ] -> {self.mint_core + self.frame * 2} [+ {self.frame * 2}]\n"
+        adv_desc += f"[ Dye ]          -> {self.naked_effort + self.dye} [+ {self.dye}]\n"
+        adv_desc += f"[ Frame ]        -> {self.naked_effort + self.frame} [+ {self.frame}]\n"
+        adv_desc += f"[ Dye & Frame ]  -> {self.naked_effort + self.dye + self.frame} [+ {self.dye + self.frame}]\n"
+        adv_desc += f"[ Mystic Frame ] -> {self.naked_effort + self.mystic} [+ {self.mystic}]\n"
         adv_desc += f"{ticks}\n"
         adv_desc += "━━━━━━━━━━━━━━━━━━━━━━\n"
         adv_desc += "**⚙️ S-Style + Vanity & Toughness:**\n"
@@ -43,7 +36,7 @@ class EffortView(discord.ui.View):
         adv_desc += f"D Vanity     :: [+0]\n"
         adv_desc += f"Max A Vanity :: [+{max_vanity}]\n\n"
         
-        max_optimized = self.mint_core + (self.frame * 2) + self.base_val + max_vanity
+        max_optimized = self.naked_effort + self.mystic + self.base_val + max_vanity
         adv_desc += f"[ Maximum Theoretical ]\n"
         adv_desc += f"Max Vanity + S Toughness -> {max_optimized}\n"
         adv_desc += f"{ticks}"
@@ -53,6 +46,7 @@ class EffortView(discord.ui.View):
         
         button.disabled = True
         await interaction.response.edit_message(embed=embed, view=self)
+
 
 class EffortListener(commands.Cog):
     def __init__(self, bot):
@@ -88,7 +82,7 @@ class EffortListener(commands.Cog):
             
         raw_text = " ".join(content_parts)
         
-        # Violent text sanitization to completely remove markdown and weird invisible characters
+        # Violent text sanitization to completely remove markdown
         clean_text = re.sub(r'[*`~_]', ' ', raw_text)
         clean_text = re.sub(r'[^\x20-\x7E]', ' ', clean_text)
         clean_text = re.sub(r'\s+', ' ', clean_text)
@@ -105,72 +99,41 @@ class EffortListener(commands.Cog):
             self.processed_cache.append(message.id)
             if len(self.processed_cache) > 100:
                 self.processed_cache.pop(0)
-                
-            print(f"[Effort Radar] ✅ Math Sequence Started! Base Value: {base_val}")
-
-            reaction_emojis = ["🧮", "📈", "⚙️", "💠", "📡", "🧩"]
-            try:
-                await message.add_reaction(random.choice(reaction_emojis))
-            except:
-                pass
 
             def parse_stat(stat_name):
-                # FIXED: Changed [S-F] to explicitly list [SABCDEF] to prevent ASCII range crash
                 match = re.search(r'(\d+)\s+\(([SABCDEF])\)\s+' + stat_name, clean_text, re.IGNORECASE)
                 if match:
                     return int(match.group(1)), match.group(2).upper()
                 return 0, "F"
 
-            _, well_grade = parse_stat("Wellness")
-            _, pur_grade = parse_stat("Purity")
-            _, quick_grade = parse_stat("Quickness")
-            _, grab_grade = parse_stat("Grabber")
-            _, drop_grade = parse_stat("Dropper")
+            # Check if the card already has cosmetics applied to prevent double stacking math
+            style_val, _ = parse_stat("Style")
             
             effort_match = re.search(r'Effort\s+(\d+)', clean_text, re.IGNORECASE)
             current_effort = int(effort_match.group(1)) if effort_match else base_val
-
-            def get_mint_potential(grade, cap_pct):
-                grade_mults = {"S": 1.0, "A": 0.85, "B": 0.70, "C": 0.55, "D": 0.40, "E": 0.25, "F": 0.10}
-                return base_val * cap_pct * grade_mults.get(grade, 0.10)
-                
-            well_mint = get_mint_potential(well_grade, 0.25)
-            pur_mint = get_mint_potential(pur_grade, 0.25)
-            quick_mint = get_mint_potential(quick_grade, 0.20)
-            grab_mint = get_mint_potential(grab_grade, 0.15)
-            drop_mint = get_mint_potential(drop_grade, 0.15)
             
-            mint_core = round(base_val + well_mint + pur_mint + quick_mint + grab_mint + drop_mint)
-            
-            ratio = current_effort / mint_core if mint_core > 0 else 1
-            if ratio >= 0.95:
-                quality = "Mint"
-            elif ratio >= 0.80:
-                quality = "Excellent"
-            elif ratio >= 0.60:
-                quality = "Good"
-            elif ratio >= 0.40:
-                quality = "Poor"
-            else:
-                quality = "Damaged"
+            # The "Naked" effort strips out current cosmetics so projections are mathematically accurate
+            naked_effort = current_effort - style_val
 
+            # Standard Community Cosmetic Deltas
             dye_mod = base_val
             frame_mod = 30 
+            mystic_mod = base_val + 40 # Standard S Style scaling
 
             ticks = chr(96) * 3
             desc = f"**⟡ Identified Baseline:** `{base_val} ✧`\n"
-            if quality != "Mint":
-                desc += f"**⟡ Projected Mint Effort:** `{mint_core} ✧` (Currently {quality})\n"
-            else:
-                desc += f"**⟡ Current Mint Effort:** `{mint_core} ✧`\n"
+            desc += f"**⟡ Current Total Effort:** `{current_effort} ✧`\n"
+            
+            if style_val > 0:
+                desc += f"*(Note: Card has active cosmetics. Projections below use naked effort of {naked_effort} ✧)*\n"
                 
             desc += "━━━━━━━━━━━━━━━━━━━━━━\n"
             desc += "**🎨 Cosmetics Optimization:**\n"
             desc += f"{ticks}ini\n"
-            desc += f"[ Dye ]          -> {mint_core + dye_mod} [+ {dye_mod}]\n"
-            desc += f"[ Frame ]        -> {mint_core + frame_mod} [+ {frame_mod}]\n"
-            desc += f"[ Dye & Frame ]  -> {mint_core + dye_mod + frame_mod} [+ {dye_mod + frame_mod}]\n"
-            desc += f"[ Mystic Frame ] -> {mint_core + frame_mod * 2} [+ {frame_mod * 2}]\n"
+            desc += f"[ Dye ]          -> {naked_effort + dye_mod} [+ {dye_mod}]\n"
+            desc += f"[ Frame ]        -> {naked_effort + frame_mod} [+ {frame_mod}]\n"
+            desc += f"[ Dye & Frame ]  -> {naked_effort + dye_mod + frame_mod} [+ {dye_mod + frame_mod}]\n"
+            desc += f"[ Mystic Frame ] -> {naked_effort + mystic_mod} [+ {mystic_mod}]\n"
             desc += f"{ticks}"
 
             embed_response = discord.Embed(
@@ -180,11 +143,8 @@ class EffortListener(commands.Cog):
             )
             embed_response.set_footer(text=f"Node: Fang Yuan // Heavenly Court ✦")
 
-            view = EffortView(mint_core, dye_mod, frame_mod, base_val, quality)
-            
-            print("[Effort Radar] 📊 Math calculated! Attempting to send to Discord...")
+            view = EffortView(naked_effort, dye_mod, frame_mod, mystic_mod, base_val)
             await message.channel.send(embed=embed_response, view=view)
-            print("[Effort Radar] ✅ MISSION ACCOMPLISHED! Message Sent.")
 
         except Exception as e:
             print("\n================== CRASH REPORT ==================")
