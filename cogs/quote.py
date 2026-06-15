@@ -34,7 +34,7 @@ class QuoteModal(discord.ui.Modal, title="Create a Beautiful Quote"):
         formatted_quote = f"{raw_quote}\n\u200B"
         
         embed = discord.Embed(
-            title="✦ __Quote__ ✦",
+            title="✦ Quote ✦",
             description=formatted_quote,
             color=0x8b0000 
         )
