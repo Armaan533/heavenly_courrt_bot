@@ -115,7 +115,8 @@ class EffortListener(commands.Cog):
                 pass
 
             def parse_stat(stat_name):
-                match = re.search(r'(\d+)\s+\(([S-F])\)\s+' + stat_name, clean_text, re.IGNORECASE)
+                # FIXED: Changed [S-F] to explicitly list [SABCDEF] to prevent ASCII range crash
+                match = re.search(r'(\d+)\s+\(([SABCDEF])\)\s+' + stat_name, clean_text, re.IGNORECASE)
                 if match:
                     return int(match.group(1)), match.group(2).upper()
                 return 0, "F"
