@@ -1,74 +1,154 @@
 import discord
 from discord.ext import commands
 import re
-import traceback
 
-class EffortView(discord.ui.View):
-    def __init__(self, base_val, current_effort, naked_effort, pure_core, style_val, style_grade, style_str, tough_val, vanity_val, dye_val, frame_val, dye_frame_val, mystic_frame_val):
+class EffortResultView(discord.ui.View):
+    def __init__(self, mint_core, style_grade, dye_add, frame_add, dye_frame_add, mystic_add, tough_add, vanity_add):
         super().__init__(timeout=300)
-        self.base_val = base_val
-        self.current_effort = current_effort
-        self.naked_effort = naked_effort
-        self.pure_core = pure_core
-        self.style_val = style_val
+        self.mint_core = mint_core
         self.style_grade = style_grade
-        self.style_str = style_str
-        self.tough_val = tough_val
-        self.vanity_val = vanity_val
-        self.dye_val = dye_val
-        self.frame_val = frame_val
-        self.dye_frame_val = dye_frame_val
-        self.mystic_frame_val = mystic_frame_val
+        self.dye_add = dye_add
+        self.frame_add = frame_add
+        self.dye_frame_add = dye_frame_add
+        self.mystic_add = mystic_add
+        self.tough_add = tough_add
+        self.vanity_add = vanity_add
 
     @discord.ui.button(label="Advanced Diagnostics", style=discord.ButtonStyle.secondary, emoji="⚙️")
     async def advanced_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         ticks = chr(96) * 3
         
-        desc = f"**⟡ Identified Baseline:** `{self.base_val} ✧`\n"
-        desc += f"**⟡ Current Total Effort:** `{self.current_effort} ✧`\n"
-        if self.style_val > 0:
-            desc += f"**⟡ Style Applied:** `{self.style_str}`\n"
+        desc = f"⟡ **Projected Mint Core:** `{self.mint_core} ✧`\n"
         desc += "━━━━━━━━━━━━━━━━━━━━━━\n"
 
         if self.style_grade == 'S':
-            desc += "**🎨 Cosmetics Optimization:**\n"
+            desc += "🎨 **Cosmetics Optimization:**\n"
             desc += f"{ticks}ini\n"
-            desc += f"[ Max Cosmetics Already Applied ]\n"
+            desc += f"[ Max Cosmetics (Mystic & Frame) Already Applied ]\n"
             desc += f"{ticks}\n"
         else:
-            desc += "**🎨 Cosmetics Optimization:**\n"
+            desc += "🎨 **Cosmetics Optimization:**\n"
             desc += f"{ticks}ini\n"
-            if self.style_grade in ['F', 'C', 'A']:
-                desc += f"[ Dye ]          -> {self.naked_effort + self.dye_val} [{(self.naked_effort + self.dye_val) - self.current_effort:+d}]\n"
-                desc += f"[ Frame ]        -> {self.naked_effort + self.frame_val} [{(self.naked_effort + self.frame_val) - self.current_effort:+d}]\n"
+            if self.style_grade in ['F', 'C', 'A', 'D']:
+                desc += f"[ Dye ]          -> {self.mint_core + self.dye_add} [+ {self.dye_add}]\n"
+                desc += f"[ Frame ]        -> {self.mint_core + self.frame_add} [+ {self.frame_add}]\n"
             
-            desc += f"[ Dye & Frame ]  -> {self.naked_effort + self.dye_frame_val} [{(self.naked_effort + self.dye_frame_val) - self.current_effort:+d}]\n"
-            desc += f"[ Mystic Frame ] -> {self.naked_effort + self.mystic_frame_val} [{(self.naked_effort + self.mystic_frame_val) - self.current_effort:+d}]\n"
+            if self.style_grade == 'B':
+                desc += f"; Card currently has Frame OR Mystic Dye applied\n"
+            
+            desc += f"[ Dye & Frame ]  -> {self.mint_core + self.dye_frame_add} [+ {self.dye_frame_add}]\n"
+            desc += f"[ Mystic Frame ] -> {self.mint_core + self.mystic_add} [+ {self.mystic_add}]\n"
             desc += f"{ticks}\n"
 
         desc += "━━━━━━━━━━━━━━━━━━━━━━\n"
-        desc += "**⚙️ S-Style + Vanity & Toughness:**\n"
+        desc += "⚙️ **S-Style + Vanity & Toughness:**\n"
         desc += f"{ticks}ini\n"
         desc += f"[ Toughness ]\n"
-        desc += f"Current Toughness :: [+{self.tough_val}]\n"
-        desc += f"S-Tier Toughness  :: [+{self.base_val}]\n\n"
+        desc += f"D Toughness  :: [+0]\n"
+        desc += f"S Toughness  :: [+{self.tough_add}]\n\n"
         
-        max_vanity = self.base_val * 2
         desc += f"[ Vanity ]\n"
-        desc += f"Current Vanity    :: [+{self.vanity_val}]\n"
-        desc += f"Max A-Tier Vanity :: [+{max_vanity}]\n\n"
+        desc += f"D Vanity     :: [+0]\n"
+        desc += f"Max A Vanity :: [+{self.vanity_add}]\n\n"
         
-        max_optimized = self.pure_core + self.mystic_frame_val + self.base_val + max_vanity
+        max_optimized = self.mint_core + self.mystic_add + self.tough_add + self.vanity_add
         desc += f"[ Maximum Theoretical ]\n"
         desc += f"Max Vanity + S Toughness -> {max_optimized}\n"
         desc += f"{ticks}\n"
-        desc += "*(Note: If your card is High-Printed, ignore the Max A Vanity projection.)*\n"
+        
+        desc += "*( ⚠️ Effort telemetry is currently in testing. Please report any math inconsistencies! )*"
         
         embed = interaction.message.embeds[0]
         embed.description = desc
         
         button.disabled = True
         await interaction.response.edit_message(embed=embed, view=self)
+
+
+class QualityPromptView(discord.ui.View):
+    def __init__(self, base_val, current_effort, style_grade, style_val, tough_val, vanity_val):
+        super().__init__(timeout=60)
+        self.base_val = base_val
+        self.current_effort = current_effort
+        self.style_grade = style_grade
+        self.style_val = style_val
+        self.tough_val = tough_val
+        self.vanity_val = vanity_val
+
+    async def generate_result(self, interaction: discord.Interaction, multiplier: float):
+        naked_core = self.current_effort - self.style_val - self.tough_val - self.vanity_val
+        
+        mint_core = round(naked_core * multiplier)
+
+        dye_add = self.base_val
+        frame_add = 30
+        mystic_add = max(self.base_val + 10, 30) + 30
+        tough_add = self.base_val
+        vanity_add = self.base_val * 2
+
+        if mint_core < 20: 
+            dye_add = max(1, round(self.base_val * 0.25))
+            frame_add = self.base_val
+            mystic_add = self.base_val * 2
+            tough_add = max(1, round(self.base_val * 0.5))
+            vanity_add = max(1, round(self.base_val * 0.75))
+
+        dye_frame_add = dye_add + frame_add
+        ticks = chr(96) * 3
+        
+        desc = f"⟡ **Projected Mint Core:** `{mint_core} ✧`\n"
+        desc += "━━━━━━━━━━━━━━━━━━━━━━\n"
+
+        if self.style_grade == 'S':
+            desc += "🎨 **Cosmetics Optimization:**\n"
+            desc += f"{ticks}ini\n"
+            desc += f"[ Max Cosmetics (Mystic & Frame) Already Applied ]\n"
+            desc += f"{ticks}\n"
+        else:
+            desc += "🎨 **Cosmetics Optimization:**\n"
+            desc += f"{ticks}ini\n"
+            if self.style_grade in ['F', 'C', 'A', 'D']:
+                desc += f"[ Dye ]          -> {mint_core + dye_add} [+ {dye_add}]\n"
+                desc += f"[ Frame ]        -> {mint_core + frame_add} [+ {frame_add}]\n"
+            if self.style_grade == 'B':
+                desc += f"; Card currently has Frame OR Mystic Dye applied\n"
+            
+            desc += f"[ Dye & Frame ]  -> {mint_core + dye_frame_add} [+ {dye_frame_add}]\n"
+            desc += f"[ Mystic Frame ] -> {mint_core + mystic_add} [+ {mystic_add}]\n"
+            desc += f"{ticks}\n"
+
+        desc += "*( ⚠️ Effort telemetry is currently in testing. Please report any math inconsistencies! )*"
+
+        embed = discord.Embed(
+            title="[ EFFORT TELEMETRY LOG ]",
+            description=desc,
+            color=0x8b0000
+        )
+        embed.set_footer(text=f"Node: Fang Yuan // Heavenly Court ✦")
+
+        view = EffortResultView(mint_core, self.style_grade, dye_add, frame_add, dye_frame_add, mystic_add, tough_add, vanity_add)
+        await interaction.response.edit_message(embed=embed, view=view)
+
+    @discord.ui.button(label="Damaged", style=discord.ButtonStyle.danger)
+    async def btn_damaged(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self.generate_result(interaction, 4.0) 
+
+    @discord.ui.button(label="Poor", style=discord.ButtonStyle.secondary)
+    async def btn_poor(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self.generate_result(interaction, 2.22) 
+
+    @discord.ui.button(label="Good", style=discord.ButtonStyle.success)
+    async def btn_good(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self.generate_result(interaction, 1.53) 
+
+    @discord.ui.button(label="Excellent", style=discord.ButtonStyle.primary)
+    async def btn_excellent(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self.generate_result(interaction, 1.17) 
+
+    @discord.ui.button(label="Mint", style=discord.ButtonStyle.primary, emoji="✨")
+    async def btn_mint(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self.generate_result(interaction, 1.0) 
+
 
 class EffortListener(commands.Cog):
     def __init__(self, bot):
@@ -126,69 +206,26 @@ class EffortListener(commands.Cog):
                 return 0, "F"
 
             style_val, style_grade = parse_stat("Style")
-            tough_val, tough_grade = parse_stat("Toughness")
-            vanity_val, vanity_grade = parse_stat("Vanity")
+            tough_val, _ = parse_stat("Toughness")
+            vanity_val, _ = parse_stat("Vanity")
             
             effort_match = re.search(r'Effort\s+(\d+)', clean_text, re.IGNORECASE)
             current_effort = int(effort_match.group(1)) if effort_match else base_val
-            
-            naked_effort = current_effort - style_val
-            pure_core = naked_effort - tough_val - vanity_val
 
-            style_str = "None"
-            if style_grade == 'D': style_str = "Regular Dye Only"
-            elif style_grade == 'B': style_str = "Frame OR Mystic Dye"
-            elif style_grade == 'S': style_str = "Mystic & Frame (Maxed)"
-            elif style_grade in ['F', 'C', 'A']: style_str = "None"
-            else: style_str = f"Custom (Grade {style_grade})"
+            prompt_desc = f"To calculate accurate cosmetics, what is the current quality of this card?\n\n"
+            prompt_desc += "*(Select a condition below to generate the telemetry log)*"
 
-            dye_val = base_val
-            frame_val = 30
-            mystic_frame_val = max(base_val + 10, 30) + 30
-            dye_frame_val = dye_val + frame_val
-
-            ticks = chr(96) * 3
-            desc = f"**⟡ Identified Baseline:** `{base_val} ✧`\n"
-            desc += f"**⟡ Current Total Effort:** `{current_effort} ✧`\n"
-            if style_val > 0:
-                desc += f"**⟡ Style Applied:** `{style_str}`\n"
-            desc += "━━━━━━━━━━━━━━━━━━━━━━\n"
-
-            if style_grade == 'S':
-                desc += "**🎨 Cosmetics Optimization:**\n"
-                desc += f"{ticks}ini\n"
-                desc += f"[ Max Cosmetics Already Applied ]\n"
-                desc += f"{ticks}\n"
-            else:
-                desc += "**🎨 Cosmetics Optimization:**\n"
-                desc += f"{ticks}ini\n"
-                if style_grade in ['F', 'C', 'A']:
-                    desc += f"[ Dye ]          -> {naked_effort + dye_val} [{(naked_effort + dye_val) - current_effort:+d}]\n"
-                    desc += f"[ Frame ]        -> {naked_effort + frame_val} [{(naked_effort + frame_val) - current_effort:+d}]\n"
-                
-                desc += f"[ Dye & Frame ]  -> {naked_effort + dye_frame_val} [{(naked_effort + dye_frame_val) - current_effort:+d}]\n"
-                desc += f"[ Mystic Frame ] -> {naked_effort + mystic_frame_val} [{(naked_effort + mystic_frame_val) - current_effort:+d}]\n"
-                desc += f"{ticks}\n"
-
-            desc += "*( ⚠️ Effort telemetry is currently in testing. Please report any math inconsistencies! )*"
-
-            embed_response = discord.Embed(
-                title="[ EFFORT TELEMETRY LOG ]",
-                description=desc,
-                color=0x8b0000
+            prompt_embed = discord.Embed(
+                title="[ EFFORT CALIBRATION ]",
+                description=prompt_desc,
+                color=0x2b2d31
             )
-            embed_response.set_footer(text=f"Node: Fang Yuan // Heavenly Court ✦")
 
-            view = EffortView(base_val, current_effort, naked_effort, pure_core, style_val, style_grade, style_str, tough_val, vanity_val, dye_val, frame_val, dye_frame_val, mystic_frame_val)
-            
-            print(f"[Effort Radar] 📊 Heavenly Court UI Generated for Base {base_val}. Sending silently...")
-            await message.channel.send(embed=embed_response, view=view)
+            view = QualityPromptView(base_val, current_effort, style_grade, style_val, tough_val, vanity_val)
+            await message.reply(embed=prompt_embed, view=view, mention_author=False)
 
-        except Exception as e:
-            print("\n================== CRASH REPORT ==================")
-            traceback.print_exc()
-            print(f"[Effort Radar] ❌ FATAL ERROR: {e}")
-            print("==================================================\n")
+        except Exception:
+            pass
 
 async def setup(bot):
     await bot.add_cog(EffortListener(bot))
