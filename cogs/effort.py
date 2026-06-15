@@ -2,6 +2,7 @@ import discord
 from discord.ext import commands
 import re
 import random
+import traceback
 
 class EffortView(discord.ui.View):
     def __init__(self, mint_core, dye, frame, base_val, current_quality):
@@ -75,99 +76,120 @@ class EffortListener(commands.Cog):
             return
 
         embed = message.embeds[0]
-
-        raw_dict = str(embed.to_dict()).replace('\\n', ' ').replace('\\xb7', ' ')
-        content = re.sub(r'[`\*_~:;]', ' ', raw_dict)
-
-        if "base value" not in content.lower():
-            return
+        
+        # Pull all text directly from embed fields safely
+        content_parts = []
+        if embed.author and embed.author.name: content_parts.append(embed.author.name)
+        if embed.title: content_parts.append(embed.title)
+        if embed.description: content_parts.append(embed.description)
+        for field in embed.fields:
+            content_parts.append(field.name)
+            content_parts.append(field.value)
             
-        base_match = re.search(r'(\d+)[^\w\d]*base[^\w\d]*value', content, re.IGNORECASE)
-        if not base_match:
-            print("[Effort Radar] ❌ Regex Failed. Hidden formatting blocked the reader.")
+        raw_text = " ".join(content_parts)
+        
+        # Violent text sanitization to completely remove markdown and weird invisible characters
+        clean_text = re.sub(r'[*`~_]', ' ', raw_text)
+        clean_text = re.sub(r'[^\x20-\x7E]', ' ', clean_text)
+        clean_text = re.sub(r'\s+', ' ', clean_text)
+
+        if "base value" not in clean_text.lower():
             return
-            
-        base_val = int(base_match.group(1))
 
-        self.processed_cache.append(message.id)
-        if len(self.processed_cache) > 100:
-            self.processed_cache.pop(0)
-
-        print(f"[Effort Radar] ✅ Success! Base Value isolated as: {base_val}")
-
-        reaction_emojis = ["🧮", "📈", "⚙️", "💠", "📡", "🧩"]
         try:
-            await message.add_reaction(random.choice(reaction_emojis))
-        except:
-            pass
-
-        def parse_stat(stat_name):
-            match = re.search(r'(\d+)[^\w\d]*\(([S-F])\)[^\w\d]*' + stat_name, content, re.IGNORECASE)
-            if match:
-                return int(match.group(1)), match.group(2).upper()
-            return 0, "F"
-
-        _, well_grade = parse_stat("Wellness")
-        _, pur_grade = parse_stat("Purity")
-        _, quick_grade = parse_stat("Quickness")
-        _, grab_grade = parse_stat("Grabber")
-        _, drop_grade = parse_stat("Dropper")
-        
-        effort_match = re.search(r'effort[^\w\d]+(\d+)', content, re.IGNORECASE)
-        current_effort = int(effort_match.group(1)) if effort_match else base_val
-
-        def get_mint_potential(grade, cap_pct):
-            grade_mults = {"S": 1.0, "A": 0.85, "B": 0.70, "C": 0.55, "D": 0.40, "E": 0.25, "F": 0.10}
-            return base_val * cap_pct * grade_mults.get(grade, 0.10)
+            base_match = re.search(r'(\d+)\s+base\s+value', clean_text, re.IGNORECASE)
+            if not base_match:
+                return
+            base_val = int(base_match.group(1))
             
-        well_mint = get_mint_potential(well_grade, 0.25)
-        pur_mint = get_mint_potential(pur_grade, 0.25)
-        quick_mint = get_mint_potential(quick_grade, 0.20)
-        grab_mint = get_mint_potential(grab_grade, 0.15)
-        drop_mint = get_mint_potential(drop_grade, 0.15)
-        
-        mint_core = round(base_val + well_mint + pur_mint + quick_mint + grab_mint + drop_mint)
-        
-        ratio = current_effort / mint_core if mint_core > 0 else 1
-        if ratio >= 0.95:
-            quality = "Mint"
-        elif ratio >= 0.80:
-            quality = "Excellent"
-        elif ratio >= 0.60:
-            quality = "Good"
-        elif ratio >= 0.40:
-            quality = "Poor"
-        else:
-            quality = "Damaged"
+            self.processed_cache.append(message.id)
+            if len(self.processed_cache) > 100:
+                self.processed_cache.pop(0)
+                
+            print(f"[Effort Radar] ✅ Math Sequence Started! Base Value: {base_val}")
 
-        dye_mod = base_val
-        frame_mod = 30 
+            reaction_emojis = ["🧮", "📈", "⚙️", "💠", "📡", "🧩"]
+            try:
+                await message.add_reaction(random.choice(reaction_emojis))
+            except:
+                pass
 
-        ticks = chr(96) * 3
-        desc = f"**⟡ Identified Baseline:** `{base_val} ✧`\n"
-        if quality != "Mint":
-            desc += f"**⟡ Projected Mint Effort:** `{mint_core} ✧` (Currently {quality})\n"
-        else:
-            desc += f"**⟡ Current Mint Effort:** `{mint_core} ✧`\n"
+            def parse_stat(stat_name):
+                match = re.search(r'(\d+)\s+\(([S-F])\)\s+' + stat_name, clean_text, re.IGNORECASE)
+                if match:
+                    return int(match.group(1)), match.group(2).upper()
+                return 0, "F"
+
+            _, well_grade = parse_stat("Wellness")
+            _, pur_grade = parse_stat("Purity")
+            _, quick_grade = parse_stat("Quickness")
+            _, grab_grade = parse_stat("Grabber")
+            _, drop_grade = parse_stat("Dropper")
             
-        desc += "━━━━━━━━━━━━━━━━━━━━━━\n"
-        desc += "**🎨 Cosmetics Optimization:**\n"
-        desc += f"{ticks}ini\n"
-        desc += f"[ Dye ]          -> {mint_core + dye_mod} [+ {dye_mod}]\n"
-        desc += f"[ Frame ]        -> {mint_core + frame_mod} [+ {frame_mod}]\n"
-        desc += f"[ Dye & Frame ]  -> {mint_core + dye_mod + frame_mod} [+ {dye_mod + frame_mod}]\n"
-        desc += f"[ Mystic Frame ] -> {mint_core + frame_mod * 2} [+ {frame_mod * 2}]\n"
-        desc += f"{ticks}"
+            effort_match = re.search(r'Effort\s+(\d+)', clean_text, re.IGNORECASE)
+            current_effort = int(effort_match.group(1)) if effort_match else base_val
 
-        embed_response = discord.Embed(
-            title="[ EFFORT TELEMETRY LOG ]",
-            description=desc,
-            color=0x8b0000
-        )
-        embed_response.set_footer(text=f"Node: Fang Yuan // Heavenly Court ✦")
+            def get_mint_potential(grade, cap_pct):
+                grade_mults = {"S": 1.0, "A": 0.85, "B": 0.70, "C": 0.55, "D": 0.40, "E": 0.25, "F": 0.10}
+                return base_val * cap_pct * grade_mults.get(grade, 0.10)
+                
+            well_mint = get_mint_potential(well_grade, 0.25)
+            pur_mint = get_mint_potential(pur_grade, 0.25)
+            quick_mint = get_mint_potential(quick_grade, 0.20)
+            grab_mint = get_mint_potential(grab_grade, 0.15)
+            drop_mint = get_mint_potential(drop_grade, 0.15)
+            
+            mint_core = round(base_val + well_mint + pur_mint + quick_mint + grab_mint + drop_mint)
+            
+            ratio = current_effort / mint_core if mint_core > 0 else 1
+            if ratio >= 0.95:
+                quality = "Mint"
+            elif ratio >= 0.80:
+                quality = "Excellent"
+            elif ratio >= 0.60:
+                quality = "Good"
+            elif ratio >= 0.40:
+                quality = "Poor"
+            else:
+                quality = "Damaged"
 
-        view = EffortView(mint_core, dye_mod, frame_mod, base_val, quality)
-        await message.channel.send(embed=embed_response, view=view)
+            dye_mod = base_val
+            frame_mod = 30 
+
+            ticks = chr(96) * 3
+            desc = f"**⟡ Identified Baseline:** `{base_val} ✧`\n"
+            if quality != "Mint":
+                desc += f"**⟡ Projected Mint Effort:** `{mint_core} ✧` (Currently {quality})\n"
+            else:
+                desc += f"**⟡ Current Mint Effort:** `{mint_core} ✧`\n"
+                
+            desc += "━━━━━━━━━━━━━━━━━━━━━━\n"
+            desc += "**🎨 Cosmetics Optimization:**\n"
+            desc += f"{ticks}ini\n"
+            desc += f"[ Dye ]          -> {mint_core + dye_mod} [+ {dye_mod}]\n"
+            desc += f"[ Frame ]        -> {mint_core + frame_mod} [+ {frame_mod}]\n"
+            desc += f"[ Dye & Frame ]  -> {mint_core + dye_mod + frame_mod} [+ {dye_mod + frame_mod}]\n"
+            desc += f"[ Mystic Frame ] -> {mint_core + frame_mod * 2} [+ {frame_mod * 2}]\n"
+            desc += f"{ticks}"
+
+            embed_response = discord.Embed(
+                title="[ EFFORT TELEMETRY LOG ]",
+                description=desc,
+                color=0x8b0000
+            )
+            embed_response.set_footer(text=f"Node: Fang Yuan // Heavenly Court ✦")
+
+            view = EffortView(mint_core, dye_mod, frame_mod, base_val, quality)
+            
+            print("[Effort Radar] 📊 Math calculated! Attempting to send to Discord...")
+            await message.channel.send(embed=embed_response, view=view)
+            print("[Effort Radar] ✅ MISSION ACCOMPLISHED! Message Sent.")
+
+        except Exception as e:
+            print("\n================== CRASH REPORT ==================")
+            traceback.print_exc()
+            print(f"[Effort Radar] ❌ FATAL ERROR: {e}")
+            print("==================================================\n")
 
 async def setup(bot):
     await bot.add_cog(EffortListener(bot))
