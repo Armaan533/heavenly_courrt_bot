@@ -57,34 +57,44 @@ class EffortListener(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.karuta_id = 646937666251915264
+        self.processed_cache = []
 
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message):
+        await self.process_effort_data(message)
+
+    @commands.Cog.listener()
+    async def on_message_edit(self, before: discord.Message, after: discord.Message):
+        await self.process_effort_data(after)
+
+    async def process_effort_data(self, message: discord.Message):
         if message.author.id != self.karuta_id:
             return
         if not message.embeds:
             return
-            
+        if message.id in self.processed_cache:
+            return
+
         embed = message.embeds[0]
         
-        embed_title = str(embed.title) if embed.title else ""
-        embed_author = str(embed.author.name) if embed.author else ""
-        if "Worker Details" not in embed_title and "Worker Details" not in embed_author:
+        content = f"{embed.title} {embed.author.name if embed.author else ''} {embed.description if embed.description else ''} "
+        for field in embed.fields:
+            content += f"{field.name} {field.value} "
+            
+        content = content.replace('*', '')
+
+        if "base value" not in content.lower() or "wellness" not in content.lower():
             return
+
+        self.processed_cache.append(message.id)
+        if len(self.processed_cache) > 100:
+            self.processed_cache.pop(0)
 
         reaction_emojis = ["🧮"]
         try:
             await message.add_reaction(random.choice(reaction_emojis))
         except:
             pass
-
-        content = ""
-        if embed.description:
-            content += embed.description + "\n"
-        for field in embed.fields:
-            content += f"{field.name}\n{field.value}\n"
-            
-        content = content.replace('*', '')
 
         base_match = re.search(r'(\d+)\s+Base\s+value', content, re.IGNORECASE)
         if not base_match:
@@ -103,7 +113,7 @@ class EffortListener(commands.Cog):
         _, grab_grade = parse_stat("Grabber")
         _, drop_grade = parse_stat("Dropper")
         
-        effort_match = re.search(r'Effort\s*[·\-\:]\s*(\d+)', content, re.IGNORECASE)
+        effort_match = re.search(r'Effort\s*[·\-\:\s]\s*(\d+)', content, re.IGNORECASE)
         current_effort = int(effort_match.group(1)) if effort_match else base_val
 
         def get_mint_potential(grade, cap_pct):
