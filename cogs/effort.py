@@ -131,7 +131,7 @@ class QualityPromptView(discord.ui.View):
         embed = discord.Embed(
             title="[ EFFORT TELEMETRY LOG ]",
             description=desc,
-            color=0x6B1614
+            color=0x2b2d31
         )
         embed.set_footer(text=f"Node: Fang Yuan // Heavenly Court ✦")
 
