@@ -72,7 +72,7 @@ class EffortListener(commands.Cog):
         if "Worker Details" not in embed_title and "Worker Details" not in embed_author:
             return
 
-        reaction_emojis = ["🧮", "📈", "⚙️", "💠", "📡", "🧩"]
+        reaction_emojis = ["🧮"]
         try:
             await message.add_reaction(random.choice(reaction_emojis))
         except:
