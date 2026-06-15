@@ -59,14 +59,6 @@ class EffortListener(commands.Cog):
         self.processed_cache = []
 
     @commands.Cog.listener()
-    async def on_ready(self):
-        print("EFFORT CALCULATOR MODULE IS ONLINE")
-
-    @commands.command(name="ping_effort")
-    async def test_effort(self, ctx):
-        await ctx.send("✅ The Effort Module is perfectly loaded and listening to the server!")
-
-    @commands.Cog.listener()
     async def on_message(self, message: discord.Message):
         await self.process_effort_data(message)
 
@@ -83,33 +75,34 @@ class EffortListener(commands.Cog):
             return
 
         embed = message.embeds[0]
-        
-        content = str(embed.to_dict()).replace('\\n', ' ')
+
+        raw_dict = str(embed.to_dict()).replace('\\n', ' ').replace('\\xb7', ' ')
+        content = re.sub(r'[`\*_~:;]', ' ', raw_dict)
 
         if "base value" not in content.lower():
             return
+            
+        base_match = re.search(r'(\d+)[^\w\d]*base[^\w\d]*value', content, re.IGNORECASE)
+        if not base_match:
+            print("[Effort Radar] ❌ Regex Failed. Hidden formatting blocked the reader.")
+            return
+            
+        base_val = int(base_match.group(1))
 
         self.processed_cache.append(message.id)
         if len(self.processed_cache) > 100:
             self.processed_cache.pop(0)
 
-        print("[Effort Radar] 📡 Intercepted a Karuta Worker Embed! Analyzing data...")
+        print(f"[Effort Radar] ✅ Success! Base Value isolated as: {base_val}")
 
         reaction_emojis = ["🧮", "📈", "⚙️", "💠", "📡", "🧩"]
         try:
             await message.add_reaction(random.choice(reaction_emojis))
         except:
-            print("[Effort Radar] ⚠️ Missing permission to add emojis, continuing anyway...")
             pass
 
-        base_match = re.search(r'(\d+)\s+Base\s+value', content, re.IGNORECASE)
-        if not base_match:
-            print("[Effort Radar] ❌ Failed to isolate the Base Value.")
-            return
-        base_val = int(base_match.group(1))
-
         def parse_stat(stat_name):
-            match = re.search(r'(\d+)\s+\(([S-F])\)\s+' + stat_name, content, re.IGNORECASE)
+            match = re.search(r'(\d+)[^\w\d]*\(([S-F])\)[^\w\d]*' + stat_name, content, re.IGNORECASE)
             if match:
                 return int(match.group(1)), match.group(2).upper()
             return 0, "F"
@@ -120,7 +113,7 @@ class EffortListener(commands.Cog):
         _, grab_grade = parse_stat("Grabber")
         _, drop_grade = parse_stat("Dropper")
         
-        effort_match = re.search(r'Effort[^\w\d]+(\d+)', content, re.IGNORECASE)
+        effort_match = re.search(r'effort[^\w\d]+(\d+)', content, re.IGNORECASE)
         current_effort = int(effort_match.group(1)) if effort_match else base_val
 
         def get_mint_potential(grade, cap_pct):
@@ -175,7 +168,6 @@ class EffortListener(commands.Cog):
 
         view = EffortView(mint_core, dye_mod, frame_mod, base_val, quality)
         await message.channel.send(embed=embed_response, view=view)
-        print("[Effort Radar] ✅ Calculation complete and sent to Discord!")
 
 async def setup(bot):
     await bot.add_cog(EffortListener(bot))
