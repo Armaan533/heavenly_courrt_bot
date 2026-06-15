@@ -66,7 +66,10 @@ class EffortListener(commands.Cog):
             return
             
         embed = message.embeds[0]
-        if not embed.title or "Worker Details" not in embed.title:
+        
+        embed_title = str(embed.title) if embed.title else ""
+        embed_author = str(embed.author.name) if embed.author else ""
+        if "Worker Details" not in embed_title and "Worker Details" not in embed_author:
             return
 
         reaction_emojis = ["🧮", "📈", "⚙️", "💠", "📡", "🧩"]
@@ -80,6 +83,8 @@ class EffortListener(commands.Cog):
             content += embed.description + "\n"
         for field in embed.fields:
             content += f"{field.name}\n{field.value}\n"
+            
+        content = content.replace('*', '')
 
         base_match = re.search(r'(\d+)\s+Base\s+value', content, re.IGNORECASE)
         if not base_match:
@@ -92,13 +97,13 @@ class EffortListener(commands.Cog):
                 return int(match.group(1)), match.group(2).upper()
             return 0, "F"
 
-        well_val, well_grade = parse_stat("Wellness")
-        pur_val, pur_grade = parse_stat("Purity")
-        quick_val, quick_grade = parse_stat("Quickness")
-        grab_val, grab_grade = parse_stat("Grabber")
-        drop_val, drop_grade = parse_stat("Dropper")
+        _, well_grade = parse_stat("Wellness")
+        _, pur_grade = parse_stat("Purity")
+        _, quick_grade = parse_stat("Quickness")
+        _, grab_grade = parse_stat("Grabber")
+        _, drop_grade = parse_stat("Dropper")
         
-        effort_match = re.search(r'Effort\s*·\s*\*\*(\d+)\*\*', content, re.IGNORECASE)
+        effort_match = re.search(r'Effort\s*[·\-\:]\s*(\d+)', content, re.IGNORECASE)
         current_effort = int(effort_match.group(1)) if effort_match else base_val
 
         def get_mint_potential(grade, cap_pct):
@@ -126,7 +131,7 @@ class EffortListener(commands.Cog):
             quality = "Damaged"
 
         dye_mod = base_val
-        frame_mod = round(base_val * 3.8)
+        frame_mod = 30 
 
         ticks = chr(96) * 3
         desc = f"**⟡ Identified Baseline:** `{base_val} ✧`\n"
