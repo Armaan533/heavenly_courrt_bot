@@ -3,66 +3,72 @@ from discord.ext import commands
 import re
 
 class EffortResultView(discord.ui.View):
-    def __init__(self, mint_core, style_grade, dye_add, frame_add, dye_frame_add, mystic_add, tough_add, vanity_add):
+    def __init__(self, base_val, current_effort, mint_core, style_grade, style_val, tough_val, vanity_val, dye_delta, frame_delta, dye_frame_delta, mystic_delta, target_mystic_frame, target_tough, target_vanity):
         super().__init__(timeout=300)
+        self.base_val = base_val
+        self.current_effort = current_effort
         self.mint_core = mint_core
         self.style_grade = style_grade
-        self.dye_add = dye_add
-        self.frame_add = frame_add
-        self.dye_frame_add = dye_frame_add
-        self.mystic_add = mystic_add
-        self.tough_add = tough_add
-        self.vanity_add = vanity_add
+        self.style_val = style_val
+        self.tough_val = tough_val
+        self.vanity_val = vanity_val
+        self.dye_delta = dye_delta
+        self.frame_delta = frame_delta
+        self.dye_frame_delta = dye_frame_delta
+        self.mystic_delta = mystic_delta
+        self.target_mystic_frame = target_mystic_frame
+        self.target_tough = target_tough
+        self.target_vanity = target_vanity
 
     @discord.ui.button(label="Advanced Diagnostics", style=discord.ButtonStyle.secondary, emoji="⚙️")
     async def advanced_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         ticks = chr(96) * 3
         
+        # Absolute base layout with maxed cosmetics, stripped of current combat stats
+        cosmetic_base = self.mint_core + self.target_mystic_frame
+
         desc = f"⟡ **Projected Mint Core:** `{self.mint_core} ✧`\n"
         desc += "━━━━━━━━━━━━━━━━━━━━━━\n"
 
         if self.style_grade == 'S':
             desc += "🎨 **Cosmetics Optimization:**\n"
             desc += f"{ticks}ini\n"
-            desc += f"[ Max Cosmetics (Mystic & Frame) Already Applied ]\n"
+            desc += f"[ Max Cosmetics Already Applied ]\n"
             desc += f"{ticks}\n"
         else:
             desc += "🎨 **Cosmetics Optimization:**\n"
             desc += f"{ticks}ini\n"
-            if self.style_grade in ['F', 'C', 'A', 'D']:
-                desc += f"[ Dye ]          -> {self.mint_core + self.dye_add} [+ {self.dye_add}]\n"
-                desc += f"[ Frame ]        -> {self.mint_core + self.frame_add} [+ {self.frame_add}]\n"
-            
-            if self.style_grade == 'B':
-                desc += f"; Card currently has Frame OR Mystic Dye applied\n"
-            
-            desc += f"[ Dye & Frame ]  -> {self.mint_core + self.dye_frame_add} [+ {self.dye_frame_add}]\n"
-            desc += f"[ Mystic Frame ] -> {self.mint_core + self.mystic_add} [+ {self.mystic_add}]\n"
+            desc += f"[ Mystic Frame ] -> {self.current_effort + self.mystic_delta} [+ {self.mystic_delta}]\n"
             desc += f"{ticks}\n"
 
         desc += "━━━━━━━━━━━━━━━━━━━━━━\n"
         desc += "⚙️ **S-Style + Vanity & Toughness:**\n"
         desc += f"{ticks}ini\n"
+        
+        d_tough_val = max(1, round(self.base_val * 0.05)) if self.base_val >= 20 else 0
+        d_vanity_val = max(1, round(self.base_val * 0.12)) if self.base_val >= 20 else 0
+
         desc += f"[ Toughness ]\n"
-        desc += f"D Toughness  :: [+0]\n"
-        desc += f"S Toughness  :: [+{self.tough_add}]\n\n"
+        desc += f"D Toughness  :: [{d_tough_val}]   -> {cosmetic_base + d_tough_val}\n"
+        desc += f"S Toughness  :: [{self.target_tough}]  -> {cosmetic_base + self.target_tough}\n\n"
         
         desc += f"[ Vanity ]\n"
-        desc += f"D Vanity     :: [+0]\n"
-        desc += f"Max A Vanity :: [+{self.vanity_add}]\n\n"
+        desc += f"D Vanity     :: [0-{d_vanity_val}] -> {cosmetic_base} - {cosmetic_base + d_vanity_val}\n"
+        desc += f"Max A Vanity :: [{self.target_vanity}]  -> {cosmetic_base + self.target_vanity}\n\n"
         
-        max_optimized = self.mint_core + self.mystic_add + self.tough_add + self.vanity_add
         desc += f"[ Maximum Theoretical ]\n"
-        desc += f"Max Vanity + S Toughness -> {max_optimized}\n"
+        desc += f"D Vanity + S Tough.    -> {cosmetic_base + d_vanity_val + self.target_tough}\n"
+        desc += f"Max A Vanity + S Tough -> {cosmetic_base + self.target_tough + self.target_vanity}\n"
         desc += f"{ticks}\n"
-        desc += "*( ⚠️ Effort telemetry is currently in testing. Please report any math inconsistencies! )*"
+        
+        desc += "*( ⚠️ Effort telemetry is currently in beta testing. Please report any math inconsistencies! )*\n"
+        desc += "*(Note: True global scale may vary outcomes by ±1%)*"
         
         embed = interaction.message.embeds[0]
         embed.description = desc
         
         button.disabled = True
         await interaction.response.edit_message(embed=embed, view=self)
-
 
 class QualityPromptView(discord.ui.View):
     def __init__(self, base_val, current_effort, style_grade, style_val, tough_val, vanity_val):
@@ -75,36 +81,33 @@ class QualityPromptView(discord.ui.View):
         self.vanity_val = vanity_val
 
     async def generate_result(self, interaction: discord.Interaction, multiplier: float):
-        naked_core = self.current_effort - self.style_val - self.tough_val - self.vanity_val
-        mint_core = round(naked_core * multiplier)
+        pure_naked_core = self.current_effort - self.style_val - self.tough_val - self.vanity_val
+        mint_core = round(pure_naked_core * multiplier)
 
-        # High-Fidelity Scaling Logic derived directly from Keqing benchmarks
+        # Flawless Karuta Cosmetic Formulas
+        target_dye = max(1, round(self.base_val * 0.25))
+        target_tough = max(1, round(self.base_val * 0.25))
+        target_vanity = self.base_val // 2
+
         if self.base_val >= 20:
-            # Standard Pool Scaling Rules
-            target_dye = round(self.base_val * 0.25)
-            target_frame = round(self.base_val * 0.75)
-            target_dye_frame = round(self.base_val * 1.0)
-            target_mystic_frame = round(self.base_val * 1.68)
-            
-            tough_add = round(self.base_val * 0.32)
-            vanity_add = round(self.base_val * 0.60)
+            target_frame = round(self.base_val * 0.3) + 33
+            mystic_dye = round(self.base_val * (14 / 15))
         else:
-            # Low-Tier Scaling Anti-Bloat Measures (Golem Patch)
-            target_dye = max(1, round(self.base_val * 0.25))
-            target_frame = round(self.base_val * 1.0)
-            target_dye_frame = round(self.base_val * 1.25)
-            target_mystic_frame = round(self.base_val * 2.0)
-            
-            tough_add = max(1, round(self.base_val * 0.25))
-            vanity_add = max(1, round(self.base_val * 0.75))
+            # Golem-Tier Anti-Bloat Measures
+            target_frame = self.base_val
+            mystic_dye = self.base_val
 
-        # Dynamically calculate the remaining delta needed based on what is currently applied
-        dye_add = max(0, target_dye - self.style_val)
-        frame_add = max(0, target_frame - self.style_val)
-        dye_frame_add = max(0, target_dye_frame - self.style_val)
-        mystic_add = max(0, target_mystic_frame - self.style_val)
+        target_dye_frame = target_dye + target_frame
+        target_mystic_frame = target_frame + mystic_dye
+
+        # Calculate exact deltas needed from the card's current applied style
+        dye_delta = max(0, target_dye - self.style_val)
+        frame_delta = max(0, target_frame - self.style_val)
+        dye_frame_delta = max(0, target_dye_frame - self.style_val)
+        mystic_delta = max(0, target_mystic_frame - self.style_val)
 
         ticks = chr(96) * 3
+        
         desc = f"⟡ **Projected Mint Core:** `{mint_core} ✧`\n"
         desc += "━━━━━━━━━━━━━━━━━━━━━━\n"
 
@@ -117,13 +120,13 @@ class QualityPromptView(discord.ui.View):
             desc += "🎨 **Cosmetics Optimization:**\n"
             desc += f"{ticks}ini\n"
             if self.style_grade in ['F', 'C', 'A', 'D']:
-                desc += f"[ Dye ]          -> {self.current_effort + dye_add} [+ {dye_add}]\n"
-                desc += f"[ Frame ]        -> {self.current_effort + frame_add} [+ {frame_add}]\n"
+                desc += f"[ Dye ]          -> {self.current_effort + dye_delta} [+ {dye_delta}]\n"
+                desc += f"[ Frame ]        -> {self.current_effort + frame_delta} [+ {frame_delta}]\n"
             if self.style_grade == 'B':
                 desc += f"; Card currently has Frame OR Mystic Dye applied\n"
             
-            desc += f"[ Dye & Frame ]  -> {self.current_effort + dye_frame_add} [+ {dye_frame_add}]\n"
-            desc += f"[ Mystic Frame ] -> {self.current_effort + mystic_add} [+ {mystic_add}]\n"
+            desc += f"[ Dye & Frame ]  -> {self.current_effort + dye_frame_delta} [+ {dye_frame_delta}]\n"
+            desc += f"[ Mystic Frame ] -> {self.current_effort + mystic_delta} [+ {mystic_delta}]\n"
             desc += f"{ticks}\n"
 
         desc += "*( ⚠️ Effort telemetry is currently in testing. Please report any math inconsistencies! )*"
@@ -135,7 +138,7 @@ class QualityPromptView(discord.ui.View):
         )
         embed.set_footer(text=f"Node: Fang Yuan // Heavenly Court ✦")
 
-        view = EffortResultView(mint_core, self.style_grade, dye_add, frame_add, dye_frame_add, mystic_add, tough_add, vanity_add)
+        view = EffortResultView(self.base_val, self.current_effort, mint_core, self.style_grade, self.style_val, self.tough_val, self.vanity_val, dye_delta, frame_delta, dye_frame_delta, mystic_delta, target_mystic_frame, target_tough, target_vanity)
         await interaction.response.edit_message(embed=embed, view=view)
 
     @discord.ui.button(label="Damaged", style=discord.ButtonStyle.danger)
