@@ -16,10 +16,10 @@ class EffortView(discord.ui.View):
     async def advanced_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         ticks = chr(96) * 3
         
-        adv_desc = f"⟡ **Identified Baseline:** `{self.base_val} ✧`\n"
-        adv_desc += f"⟡ **Projected Mint Core:** `{self.mint_core} ✧`\n"
+        adv_desc = f"**⟡ Identified Baseline:** `{self.base_val} ✧`\n"
+        adv_desc += f"**⟡ Projected Mint Core:** `{self.mint_core} ✧`\n"
         adv_desc += "━━━━━━━━━━━━━━━━━━━━━━\n"
-        adv_desc += "🎨 **Cosmetics Optimization:**\n"
+        adv_desc += "**🎨 Cosmetics Optimization:**\n"
         adv_desc += f"{ticks}ini\n"
         adv_desc += f"[ Dye ]          -> {self.mint_core + self.dye} [+ {self.dye}]\n"
         adv_desc += f"[ Frame ]        -> {self.mint_core + self.frame} [+ {self.frame}]\n"
@@ -27,7 +27,7 @@ class EffortView(discord.ui.View):
         adv_desc += f"[ Mystic Frame ] -> {self.mint_core + self.mystic_frame} [+ {self.mystic_frame}]\n"
         adv_desc += f"{ticks}\n"
         adv_desc += "━━━━━━━━━━━━━━━━━━━━━━\n"
-        adv_desc += "⚙️ **S-Style + Vanity & Toughness:**\n"
+        adv_desc += "**⚙️ S-Style + Vanity & Toughness:**\n"
         adv_desc += f"{ticks}ini\n"
         adv_desc += f"[ Toughness ]\n"
         adv_desc += f"D Toughness  :: [+0]\n"
@@ -41,7 +41,8 @@ class EffortView(discord.ui.View):
         max_optimized = self.mint_core + self.mystic_frame + self.base_val + max_vanity
         adv_desc += f"[ Maximum Theoretical ]\n"
         adv_desc += f"Max Vanity + S Toughness -> {max_optimized}\n"
-        adv_desc += f"{ticks}"
+        adv_desc += f"{ticks}\n"
+        adv_desc += "*( ⚠️ Effort telemetry is currently in testing. Please report any math inconsistencies! )*"
         
         embed = interaction.message.embeds[0]
         embed.description = adv_desc
@@ -83,6 +84,7 @@ class EffortListener(commands.Cog):
             
         raw_text = " ".join(content_parts)
         
+        # Strip all markdown formatting to make reading numbers bulletproof
         clean_text = re.sub(r'[*`~_]', ' ', raw_text)
         clean_text = re.sub(r'[^\x20-\x7E]', ' ', clean_text)
         clean_text = re.sub(r'\s+', ' ', clean_text)
@@ -106,6 +108,7 @@ class EffortListener(commands.Cog):
                     return int(match.group(1)), match.group(2).upper()
                 return 0, "F"
 
+            # Extract combat and cosmetic mods to find the "Naked" core
             style_val, _ = parse_stat("Style")
             tough_val, _ = parse_stat("Toughness")
             vanity_val, _ = parse_stat("Vanity")
@@ -115,6 +118,7 @@ class EffortListener(commands.Cog):
             
             naked_core = current_effort - style_val - tough_val - vanity_val
 
+            # Dynamically scale Damaged/Poor cards up to their 100% Mint potential
             if naked_core < 25:
                 mint_core = round(naked_core * 3.5)
             elif naked_core < 50:
@@ -124,6 +128,7 @@ class EffortListener(commands.Cog):
             else:
                 mint_core = naked_core
 
+            # Flawless Karuta Cosmetic Math
             dye_val = base_val
             frame_val = 30
             mystic_dye_val = max(base_val + 10, 30)
@@ -131,21 +136,22 @@ class EffortListener(commands.Cog):
 
             ticks = chr(96) * 3
             
-            desc = f"⟡ **Identified Baseline:** `{base_val} ✧`\n"
-            desc += f"⟡ **Projected Mint Core:** `{mint_core} ✧`\n"
+            desc = f"**⟡ Identified Baseline:** `{base_val} ✧`\n"
+            desc += f"**⟡ Projected Mint Core:** `{mint_core} ✧`\n"
             desc += "━━━━━━━━━━━━━━━━━━━━━━\n"
-            desc += "🎨 **Cosmetics Optimization:**\n"
+            desc += "**🎨 Cosmetics Optimization:**\n"
             desc += f"{ticks}ini\n"
             desc += f"[ Dye ]          -> {mint_core + dye_val} [+ {dye_val}]\n"
             desc += f"[ Frame ]        -> {mint_core + frame_val} [+ {frame_val}]\n"
             desc += f"[ Dye & Frame ]  -> {mint_core + dye_val + frame_val} [+ {dye_val + frame_val}]\n"
             desc += f"[ Mystic Frame ] -> {mint_core + mystic_frame_val} [+ {mystic_frame_val}]\n"
-            desc += f"{ticks}"
+            desc += f"{ticks}\n"
+            desc += "*( ⚠️ Effort telemetry is currently in testing. Please report any math inconsistencies! )*"
 
             embed_response = discord.Embed(
                 title="[ EFFORT TELEMETRY LOG ]",
                 description=desc,
-                color=0x151515 
+                color=0x8b0000
             )
             embed_response.set_footer(text=f"Node: Fang Yuan // Heavenly Court ✦")
 
