@@ -45,7 +45,7 @@ class QuoteModal(discord.ui.Modal, title="Create a Beautiful Quote"):
         if self.image_url.value:
             embed.set_image(url=self.image_url.value.strip())
             
-        embed.set_footer(text="Heavenly Court ✦ *If anyone ever wants to suggest one just Dm Oddný!*")
+        embed.set_footer(text="Heavenly Court ✦ If anyone ever wants to suggest one just Dm Oddný!")
 
         await self.target_channel.send(embed=embed)
         await interaction.response.send_message(f"✅ Quote beautifully posted in {self.target_channel.mention}!", ephemeral=True)
