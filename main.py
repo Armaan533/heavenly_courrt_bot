@@ -57,7 +57,9 @@ class Bot(commands.Bot):
         await self.load_extension("cogs.autorole") 
         await self.load_extension("cogs.security")
         await self.load_extension("cogs.status")
-        await self.load_extension("cogs/effort.py")
+        await self.load_extension("cogs.effort")
+        #bro this nigger suggest me effort.py for this load i swear its jewgpt
+        #i had to edit i almost got heart attack wtf went wrong
         
         from cogs.colors import ColorView
         self.add_view(ColorView())
