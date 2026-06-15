@@ -56,8 +56,15 @@ class EffortView(discord.ui.View):
 class EffortListener(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
-        self.karuta_id = 646937666251915264
         self.processed_cache = []
+
+    @commands.Cog.listener()
+    async def on_ready(self):
+        print("EFFORT CALCULATOR MODULE IS ONLINE")
+
+    @commands.command(name="ping_effort")
+    async def test_effort(self, ctx):
+        await ctx.send("✅ The Effort Module is perfectly loaded and listening to the server!")
 
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message):
@@ -68,7 +75,7 @@ class EffortListener(commands.Cog):
         await self.process_effort_data(after)
 
     async def process_effort_data(self, message: discord.Message):
-        if message.author.id != self.karuta_id:
+        if not message.author.bot or "karuta" not in message.author.name.lower():
             return
         if not message.embeds:
             return
@@ -77,27 +84,27 @@ class EffortListener(commands.Cog):
 
         embed = message.embeds[0]
         
-        content = f"{embed.title} {embed.author.name if embed.author else ''} {embed.description if embed.description else ''} "
-        for field in embed.fields:
-            content += f"{field.name} {field.value} "
-            
-        content = content.replace('*', '')
+        content = str(embed.to_dict()).replace('\\n', ' ')
 
-        if "base value" not in content.lower() or "wellness" not in content.lower():
+        if "base value" not in content.lower():
             return
 
         self.processed_cache.append(message.id)
         if len(self.processed_cache) > 100:
             self.processed_cache.pop(0)
 
-        reaction_emojis = ["🧮"]
+        print("[Effort Radar] 📡 Intercepted a Karuta Worker Embed! Analyzing data...")
+
+        reaction_emojis = ["🧮", "📈", "⚙️", "💠", "📡", "🧩"]
         try:
             await message.add_reaction(random.choice(reaction_emojis))
         except:
+            print("[Effort Radar] ⚠️ Missing permission to add emojis, continuing anyway...")
             pass
 
         base_match = re.search(r'(\d+)\s+Base\s+value', content, re.IGNORECASE)
         if not base_match:
+            print("[Effort Radar] ❌ Failed to isolate the Base Value.")
             return
         base_val = int(base_match.group(1))
 
@@ -113,7 +120,7 @@ class EffortListener(commands.Cog):
         _, grab_grade = parse_stat("Grabber")
         _, drop_grade = parse_stat("Dropper")
         
-        effort_match = re.search(r'Effort\s*[·\-\:\s]\s*(\d+)', content, re.IGNORECASE)
+        effort_match = re.search(r'Effort[^\w\d]+(\d+)', content, re.IGNORECASE)
         current_effort = int(effort_match.group(1)) if effort_match else base_val
 
         def get_mint_potential(grade, cap_pct):
@@ -168,6 +175,7 @@ class EffortListener(commands.Cog):
 
         view = EffortView(mint_core, dye_mod, frame_mod, base_val, quality)
         await message.channel.send(embed=embed_response, view=view)
+        print("[Effort Radar] ✅ Calculation complete and sent to Discord!")
 
 async def setup(bot):
     await bot.add_cog(EffortListener(bot))
