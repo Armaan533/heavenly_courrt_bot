@@ -56,6 +56,7 @@ class Bot(commands.Bot):
         await self.load_extension("cogs.roles")
         await self.load_extension("cogs.autorole") 
         await self.load_extension("cogs.security")
+        await self.load_extension("cogs.status")
         
         from cogs.colors import ColorView
         self.add_view(ColorView())
