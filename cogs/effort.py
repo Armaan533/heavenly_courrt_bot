@@ -131,7 +131,7 @@ class QualityPromptView(discord.ui.View):
         embed = discord.Embed(
             title="[ EFFORT TELEMETRY LOG ]",
             description=desc,
-            color=0x2b2d31
+            color=0x8b0000
         )
         embed.set_footer(text=f"Node: Fang Yuan // Heavenly Court ✦")
 
@@ -227,7 +227,7 @@ class EffortListener(commands.Cog):
             prompt_embed = discord.Embed(
                 title="[ EFFORT CALIBRATION ]",
                 description=prompt_desc,
-                color=0x2b2d31
+                color=0x8b0000
             )
 
             view = QualityPromptView(base_val, current_effort, style_grade, style_val, tough_val, vanity_val)
