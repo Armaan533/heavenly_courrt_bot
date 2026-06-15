@@ -55,7 +55,6 @@ class EffortResultView(discord.ui.View):
         desc += f"[ Maximum Theoretical ]\n"
         desc += f"Max Vanity + S Toughness -> {max_optimized}\n"
         desc += f"{ticks}\n"
-        
         desc += "*( ⚠️ Effort telemetry is currently in testing. Please report any math inconsistencies! )*"
         
         embed = interaction.message.embeds[0]
@@ -77,25 +76,35 @@ class QualityPromptView(discord.ui.View):
 
     async def generate_result(self, interaction: discord.Interaction, multiplier: float):
         naked_core = self.current_effort - self.style_val - self.tough_val - self.vanity_val
-        
         mint_core = round(naked_core * multiplier)
 
-        dye_add = self.base_val
-        frame_add = 30
-        mystic_add = max(self.base_val + 10, 30) + 30
-        tough_add = self.base_val
-        vanity_add = self.base_val * 2
-
-        if mint_core < 20: 
-            dye_add = max(1, round(self.base_val * 0.25))
-            frame_add = self.base_val
-            mystic_add = self.base_val * 2
-            tough_add = max(1, round(self.base_val * 0.5))
+        # High-Fidelity Scaling Logic derived directly from Keqing benchmarks
+        if self.base_val >= 20:
+            # Standard Pool Scaling Rules
+            target_dye = round(self.base_val * 0.25)
+            target_frame = round(self.base_val * 0.75)
+            target_dye_frame = round(self.base_val * 1.0)
+            target_mystic_frame = round(self.base_val * 1.68)
+            
+            tough_add = round(self.base_val * 0.32)
+            vanity_add = round(self.base_val * 0.60)
+        else:
+            # Low-Tier Scaling Anti-Bloat Measures (Golem Patch)
+            target_dye = max(1, round(self.base_val * 0.25))
+            target_frame = round(self.base_val * 1.0)
+            target_dye_frame = round(self.base_val * 1.25)
+            target_mystic_frame = round(self.base_val * 2.0)
+            
+            tough_add = max(1, round(self.base_val * 0.25))
             vanity_add = max(1, round(self.base_val * 0.75))
 
-        dye_frame_add = dye_add + frame_add
+        # Dynamically calculate the remaining delta needed based on what is currently applied
+        dye_add = max(0, target_dye - self.style_val)
+        frame_add = max(0, target_frame - self.style_val)
+        dye_frame_add = max(0, target_dye_frame - self.style_val)
+        mystic_add = max(0, target_mystic_frame - self.style_val)
+
         ticks = chr(96) * 3
-        
         desc = f"⟡ **Projected Mint Core:** `{mint_core} ✧`\n"
         desc += "━━━━━━━━━━━━━━━━━━━━━━\n"
 
@@ -108,13 +117,13 @@ class QualityPromptView(discord.ui.View):
             desc += "🎨 **Cosmetics Optimization:**\n"
             desc += f"{ticks}ini\n"
             if self.style_grade in ['F', 'C', 'A', 'D']:
-                desc += f"[ Dye ]          -> {mint_core + dye_add} [+ {dye_add}]\n"
-                desc += f"[ Frame ]        -> {mint_core + frame_add} [+ {frame_add}]\n"
+                desc += f"[ Dye ]          -> {self.current_effort + dye_add} [+ {dye_add}]\n"
+                desc += f"[ Frame ]        -> {self.current_effort + frame_add} [+ {frame_add}]\n"
             if self.style_grade == 'B':
                 desc += f"; Card currently has Frame OR Mystic Dye applied\n"
             
-            desc += f"[ Dye & Frame ]  -> {mint_core + dye_frame_add} [+ {dye_frame_add}]\n"
-            desc += f"[ Mystic Frame ] -> {mint_core + mystic_add} [+ {mystic_add}]\n"
+            desc += f"[ Dye & Frame ]  -> {self.current_effort + dye_frame_add} [+ {dye_frame_add}]\n"
+            desc += f"[ Mystic Frame ] -> {self.current_effort + mystic_add} [+ {mystic_add}]\n"
             desc += f"{ticks}\n"
 
         desc += "*( ⚠️ Effort telemetry is currently in testing. Please report any math inconsistencies! )*"
