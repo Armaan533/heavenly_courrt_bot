@@ -3,7 +3,7 @@ from discord.ext import commands
 import re
 
 class EffortResultView(discord.ui.View):
-    def __init__(self, base_val, current_effort, mint_core, style_grade, style_val, dye_delta, frame_delta, dye_frame_delta, mystic_delta, target_mystic_frame, target_tough, target_vanity):
+    def __init__(self, base_val, current_effort, mint_core, style_grade, style_val, dye_delta, frame_delta, dye_frame_delta, mystic_delta, target_mystic_frame, target_tough, target_vanity, show_dye_frame):
         super().__init__(timeout=300)
         self.base_val = base_val
         self.current_effort = current_effort
@@ -17,6 +17,7 @@ class EffortResultView(discord.ui.View):
         self.target_mystic_frame = target_mystic_frame
         self.target_tough = target_tough
         self.target_vanity = target_vanity
+        self.show_dye_frame = show_dye_frame
 
     @discord.ui.button(label="Advanced Diagnostics", style=discord.ButtonStyle.secondary, emoji="⚙️")
     async def advanced_button(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -35,8 +36,8 @@ class EffortResultView(discord.ui.View):
             desc += "🎨 **Cosmetics Optimization:**\n"
             desc += f"{ticks}ini\n"
             
-            # Hide Dye & Frame if it's already basically applied
-            if self.dye_frame_delta > 5:
+            # Dynamically hide Dye & Frame if it's already applied
+            if self.show_dye_frame:
                 desc += f"[ Dye & Frame ]  -> {self.mint_core + self.dye_frame_delta} [+ {self.dye_frame_delta}]\n"
                 
             desc += f"[ Mystic Frame ] -> {self.mint_core + self.mystic_delta} [+ {self.mystic_delta}]\n"
@@ -97,6 +98,9 @@ class QualityPromptView(discord.ui.View):
         dye_frame_delta = max(0, target_dye_frame - round(mint_style))
         mystic_delta = max(0, target_mystic_frame - round(mint_style))
 
+        # Dynamic Hiding Threshold: If the delta is less than a Dye (plus a 2 point safety buffer), it means both are already applied!
+        show_dye_frame = dye_frame_delta > (target_dye + 2)
+
         # Combat & Vanity Targets
         target_tough = max(1, round(mint_base * 0.25))
         target_vanity = int(mint_base // 2)
@@ -120,13 +124,13 @@ class QualityPromptView(discord.ui.View):
                 desc += f"[ Frame ]        -> {mint_effort + frame_delta} [+ {frame_delta}]\n"
             
             if self.style_grade == 'B':
-                if dye_frame_delta > 5:
+                if show_dye_frame:
                     desc += f"; Card currently has Frame OR Mystic Dye applied\n"
                 else:
                     desc += f"; Card currently has Frame AND Regular Dye applied\n"
             
-            # Hide Dye & Frame if it is already functionally applied
-            if dye_frame_delta > 5:
+            # Cleanly hide Dye & Frame if the logic check triggered
+            if show_dye_frame:
                 desc += f"[ Dye & Frame ]  -> {mint_effort + dye_frame_delta} [+ {dye_frame_delta}]\n"
                 
             desc += f"[ Mystic Frame ] -> {mint_effort + mystic_delta} [+ {mystic_delta}]\n"
@@ -141,7 +145,7 @@ class QualityPromptView(discord.ui.View):
         )
         embed.set_footer(text=f"Node: Fang Yuan // Heavenly Court ✦")
 
-        view = EffortResultView(self.base_val, self.current_effort, mint_effort, self.style_grade, self.style_val, dye_delta, frame_delta, dye_frame_delta, mystic_delta, target_mystic_frame, target_tough, target_vanity)
+        view = EffortResultView(self.base_val, self.current_effort, mint_effort, self.style_grade, self.style_val, dye_delta, frame_delta, dye_frame_delta, mystic_delta, target_mystic_frame, target_tough, target_vanity, show_dye_frame)
         await interaction.response.edit_message(embed=embed, view=view)
 
     # Calculate exact missing stars to plug into the 1.89 multiplier
