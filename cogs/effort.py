@@ -238,4 +238,3 @@ class EffortListener(commands.Cog):
 
 async def setup(bot):
     await bot.add_cog(EffortListener(bot))
-message.txt
