@@ -60,6 +60,8 @@ class Bot(commands.Bot):
         await self.load_extension("cogs.effort")
         #bro this nigger suggest me effort.py for this load i swear its jewgpt
         #i had to edit i almost got heart attack wtf went wrong
+        await self.load_extension("cogs.help")
+        await self.load_extension("cogs.lentlist")
         
         from cogs.colors import ColorView
         self.add_view(ColorView())
