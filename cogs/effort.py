@@ -143,8 +143,8 @@ class QualityPromptView(discord.ui.View):
 
         embed = discord.Embed(
             title="[ EFFORT TELEMETRY LOG ]",
-            description= "> 💡 **Tip:** *Run `kci` right before `kwi` for the most accurate Mint projections!*",
-            color=0x8b0000
+            description= desc,
+            color=0x6B1614
         )
         embed.set_footer(text=f"Node: Fang Yuan // Heavenly Court ✦")
 
@@ -226,12 +226,12 @@ class EffortListener(commands.Cog):
             current_effort = int(effort_match.group(1)) if effort_match else base_val
 
             prompt_desc = f"To calculate accurate cosmetics, what is the current quality of this card?\n\n"
-            prompt_desc += "*(Select a condition below to generate the telemetry log)*"
+            prompt_desc +=  "> 💡 **Tip:** *Run `kci` right before `kwi` for the most accurate Mint projections!*"
 
             prompt_embed = discord.Embed(
                 title="[ EFFORT CALIBRATION ]",
                 description=prompt_desc,
-                color=0x8b0000
+                color=0x6B1614
             )
 
             view = QualityPromptView(base_val, current_effort, style_grade, style_val, tough_val, vanity_val)
