@@ -12,7 +12,6 @@ class LentRemoveSelect(discord.ui.Select):
         self.callback_func = callback_func
         options = []
         
-        # Discord limits select menus to 25 items max
         for code, info in list(lent_cards.items())[:25]:
             options.append(discord.SelectOption(
                 label=f"{info['character']}",
@@ -87,7 +86,7 @@ class LentListCog(commands.Cog):
         
         prompt_embed = discord.Embed(
             title="[ LENT TRACKER CALIBRATION ]",
-            description=f"⟡ Please run `kci` on the card you lent to **{member.display_name}**.\n\n*(Waiting for Karuta's response in this channel...)*",
+            description=f"⟡ Please run `kci` (or `kwi`) on the card you lent to **{member.display_name}**.\n\n*(Waiting for Karuta's response in this channel...)*",
             color=0x2b2d31
         )
         prompt_msg = await ctx.send(embed=prompt_embed)
@@ -100,29 +99,39 @@ class LentListCog(commands.Cog):
             if not m.embeds:
                 return False
             
-            embed_dict = str(m.embeds[0].to_dict()).lower()
-            if "owner" not in embed_dict and "character" not in embed_dict:
-                return False
-            return True
+            title = str(m.embeds[0].title).lower()
+            if "card details" in title or "worker details" in title:
+                return True
+            return False
 
         try:
             msg = await self.bot.wait_for('message', timeout=60.0, check=check)
             
             embed = msg.embeds[0]
-            raw_text = " ".join([embed.author.name or "", embed.title or "", embed.description or ""] + [f.name + f.value for f in embed.fields])
+            desc = embed.description or ""
+            title = str(embed.title).lower()
             
-            code_match = re.search(r'🎴\s*\*\*([a-zA-Z0-9]{5,7})\*\*', raw_text)
-            if not code_match:
-                code_match = re.search(r'\(\s*([a-zA-Z0-9]{5,7})\s*\)', raw_text) 
+            first_line = desc.split('\n')[0] if desc else ""
             
-            if not code_match:
-                await prompt_msg.edit(embed=discord.Embed(description="❌ **Error:** Could not identify the card code from that embed. Please try again.", color=0xff0000))
-                return
-            
-            code = code_match.group(1)
+            code = None
+            character = "Unknown Character"
 
-            char_match = re.search(r'\*\*([^\*]+)\*\*', embed.description or "")
-            character = char_match.group(1).strip() if char_match else "Unknown Character"
+            if "card details" in title and "·" in first_line and "#" in first_line:
+                parts = first_line.split('·')
+                code = re.sub(r'[^a-zA-Z0-9]', '', parts[0])
+                character = parts[-1].replace('*', '').strip()
+                
+            elif "worker details" in title:
+                code_match = re.search(r'\(\s*([a-zA-Z0-9]{5,7})\s*\)', first_line)
+                if code_match:
+                    code = code_match.group(1)
+                char_match = re.search(r'Character\s*·\s*\**([^\*\(]+)\**', first_line)
+                if char_match:
+                    character = char_match.group(1).strip()
+            
+            if not code:
+                await prompt_msg.edit(embed=discord.Embed(description="❌ **Error:** Could not extract the card code. Make sure you are using `kci` or `kwi`.", color=0xff0000))
+                return
 
             # Save to Database
             if user_id not in self.data:
