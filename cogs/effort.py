@@ -2,149 +2,148 @@ import discord
 from discord.ext import commands
 import re
 
-class EffortResultView(discord.ui.View):
-    def __init__(self, scaled_base, current_effort, mint_core, style_grade, style_val, tough_val, vanity_val, dye_frame_delta, mystic_delta, target_mystic_frame, target_tough, target_vanity):
-        super().__init__(timeout=300)
-        self.scaled_base = scaled_base
-        self.current_effort = current_effort
-        self.mint_core = mint_core
-        self.style_grade = style_grade
-        self.style_val = style_val
-        self.tough_val = tough_val
-        self.vanity_val = vanity_val
-        self.dye_frame_delta = dye_frame_delta
-        self.mystic_delta = mystic_delta
-        self.target_mystic_frame = target_mystic_frame
-        self.target_tough = target_tough
-        self.target_vanity = target_vanity
+class EffortListener(commands.Cog):
+    def __init__(self, bot):
+        self.bot = bot
+        self.processed_cache = []
 
-    @discord.ui.button(label="Advanced Diagnostics", style=discord.ButtonStyle.secondary, emoji="⚙️")
-    async def advanced_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        ticks = chr(96) * 3
-        cosmetic_base = self.mint_core + self.target_mystic_frame
+    @commands.Cog.listener()
+    async def on_message(self, message: discord.Message):
+        await self.process_effort_data(message)
 
-        desc = f"⟡ **Projected Mint Core:** `{self.mint_core} ✧`\n"
-        desc += "━━━━━━━━━━━━━━━━━━━━━━\n"
+    @commands.Cog.listener()
+    async def on_message_edit(self, before: discord.Message, after: discord.Message):
+        await self.process_effort_data(after)
 
-        if self.style_grade == 'S':
-            desc += "🎨 **Cosmetics Optimization:**\n"
-            desc += f"{ticks}ini\n[ Max Cosmetics Already Applied ]\n{ticks}\n"
-        else:
+    async def process_effort_data(self, message: discord.Message):
+        if not message.author.bot or "karuta" not in message.author.name.lower():
+            return
+        if not message.embeds:
+            return
+        if message.id in self.processed_cache:
+            return
+
+        embed = message.embeds[0]
+        
+        # Safely extract all text from the embed
+        content_parts = []
+        if embed.author and embed.author.name: content_parts.append(embed.author.name)
+        if embed.title: content_parts.append(embed.title)
+        if embed.description: content_parts.append(embed.description)
+        for field in embed.fields:
+            content_parts.append(field.name)
+            content_parts.append(field.value)
+            
+        raw_text = " ".join(content_parts)
+        
+        # Strip markdown and invisible characters to make parsing bulletproof
+        clean_text = re.sub(r'[*`~_]', ' ', raw_text)
+        clean_text = re.sub(r'[^\x20-\x7E]', ' ', clean_text)
+        clean_text = re.sub(r'\s+', ' ', clean_text)
+
+        if "base value" not in clean_text.lower():
+            return
+
+        try:
+            # Isolate the Base Value
+            base_match = re.search(r'(\d+)\s+base\s+value', clean_text, re.IGNORECASE)
+            if not base_match:
+                return
+            base_val = int(base_match.group(1))
+            
+            self.processed_cache.append(message.id)
+            if len(self.processed_cache) > 100:
+                self.processed_cache.pop(0)
+
+            # Bulletproof stat parser
+            def parse_stat(stat_name):
+                match = re.search(r'(\d+)\s+\(([SABCDEF])\)\s+' + stat_name, clean_text, re.IGNORECASE)
+                return (int(match.group(1)), match.group(2).upper()) if match else (0, "F")
+
+            style_val, style_grade = parse_stat("Style")
+            tough_val, _ = parse_stat("Toughness")
+            
+            # Isolate Current Effort
+            effort_match = re.search(r'Effort[^\d]+(\d+)', clean_text, re.IGNORECASE)
+            current_effort = int(effort_match.group(1)) if effort_match else base_val
+
+            # THE MASTER FORMULAS (0.9375 = 15/16)
+            target_dye = max(1, round(base_val * 0.25))
+            target_frame = round(base_val * 0.9375)
+            target_mystic = round(base_val * 0.9375)
+            
+            target_dye_frame = target_dye + target_frame
+            target_mystic_frame = target_frame + target_mystic
+            
+            target_tough = round(base_val * 0.25)
+            target_vanity = base_val // 2
+
+            # Calculate exact missing deltas
+            dye_delta = max(0, target_dye - style_val)
+            frame_delta = max(0, target_frame - style_val)
+            dye_frame_delta = max(0, target_dye_frame - style_val)
+            mystic_frame_delta = max(0, target_mystic_frame - style_val)
+
+            ticks = chr(96) * 3
+            
+            # Construct the Heavenly Court UI
+            desc = f"⟡ **Identified Baseline:** `{base_val} ✧`\n"
+            desc += "━━━━━━━━━━━━━━━━━━━━━━\n"
             desc += "🎨 **Cosmetics Optimization:**\n"
             desc += f"{ticks}ini\n"
-            if self.dye_frame_delta > 5:
-                desc += f"[ Dye & Frame ]  -> {self.current_effort + self.dye_frame_delta} [+ {self.dye_frame_delta}]\n"
-            desc += f"[ Mystic Frame ] -> {self.current_effort + self.mystic_delta} [+ {self.mystic_delta}]\n"
-            desc += f"{ticks}\n"
-
-        desc += "⚙️ **S-Style + Vanity & Toughness:**\n"
-        desc += f"{ticks}ini\n"
-        d_tough_val = max(1, round(self.scaled_base * 0.05)) if self.scaled_base >= 20 else 0
-        d_vanity_val = max(1, round(self.scaled_base * 0.12)) if self.scaled_base >= 20 else 0
-
-        desc += f"[ Toughness ]\n"
-        desc += f"D Toughness  :: [{d_tough_val}]   -> {cosmetic_base + d_tough_val}\n"
-        desc += f"S Toughness  :: [{self.target_tough}]  -> {cosmetic_base + self.target_tough}\n\n"
-        desc += f"[ Vanity ]\n"
-        desc += f"D Vanity     :: [0-{d_vanity_val}] -> {cosmetic_base} - {cosmetic_base + d_vanity_val}\n"
-        desc += f"Max A Vanity :: [{self.target_vanity}]  -> {cosmetic_base + self.target_vanity}\n\n"
-        desc += f"[ Max Theoretical ]\n"
-        desc += f"Max A Vanity + S Tough -> {cosmetic_base + self.target_tough + self.target_vanity}\n"
-        desc += f"{ticks}\n"
-        
-        desc += "*( ⚠️ Beta: Report any math inconsistencies! )*"
-        
-        embed = interaction.message.embeds[0]
-        embed.description = desc
-        button.disabled = True
-        await interaction.response.edit_message(embed=embed, view=self)
-
-
-class QualityPromptView(discord.ui.View):
-    def __init__(self, base_val, current_effort, style_grade, style_val, tough_val, vanity_val):
-        super().__init__(timeout=60)
-        self.base_val, self.current_effort = base_val, current_effort
-        self.style_grade, self.style_val = style_grade, style_val
-        self.tough_val, self.vanity_val = tough_val, vanity_val
-
-    async def generate_result(self, interaction: discord.Interaction, multiplier: float):
-        pure_naked_core = self.current_effort - self.style_val - self.tough_val - self.vanity_val
-        mint_core = round(pure_naked_core * multiplier)
-        
-        # CRITICAL FIX: Scale the Base Value to Mint BEFORE calculating cosmetics!
-        scaled_base = self.base_val * multiplier
-
-        # High-Fidelity Scaling Curves derived from True Mint Base
-        target_frame = round(scaled_base * 0.3) + 33 if scaled_base >= 20 else round(scaled_base)
-        target_dye = max(1, round(scaled_base * 0.25))
-        target_dye_frame = target_dye + target_frame
-        target_mystic = round(scaled_base * (14/15)) + target_frame
-        
-        target_tough = round(scaled_base * 0.32) if scaled_base >= 20 else max(1, round(scaled_base * 0.25))
-        target_vanity = round(scaled_base * 0.60) if scaled_base >= 20 else max(1, round(scaled_base * 0.75))
-
-        dye_frame_delta = max(0, target_dye_frame - self.style_val)
-        mystic_delta = max(0, target_mystic - self.style_val)
-
-        ticks = chr(96) * 3
-        desc = f"⟡ **Projected Mint Core:** `{mint_core} ✧`\n"
-        desc += "━━━━━━━━━━━━━━━━━━━━━━\n"
-        desc += "🎨 **Cosmetics Optimization:**\n"
-        desc += f"{ticks}ini\n"
-        
-        if self.style_grade == 'S':
-            desc += f"[ Max Cosmetics Already Applied ]\n"
-        else:
-            if self.style_grade == 'B':
-                if dye_frame_delta > 5:
-                    desc += f"; Card currently has Frame OR Mystic Dye applied\n"
-                else:
-                    desc += f"; Card currently has Frame AND Regular Dye applied\n"
             
-            # Hide Dye & Frame if it is already basically maxed (delta less than 5)
-            if dye_frame_delta > 5:
-                desc += f"[ Dye & Frame ]  -> {self.current_effort + dye_frame_delta} [+ {dye_frame_delta}]\n"
+            if style_grade == 'S':
+                desc += f"[ Max Cosmetics Already Applied ]\n"
+            else:
+                if style_grade in ['F', 'C', 'A', 'D']:
+                    desc += f"[ Dye ]          -> {current_effort + dye_delta} [+ {dye_delta}]\n"
+                    desc += f"[ Frame ]        -> {current_effort + frame_delta} [+ {frame_delta}]\n"
+                elif style_grade == 'B':
+                    if dye_frame_delta > 5:
+                        desc += f"; Card currently has Frame OR Mystic Dye applied\n"
+                    else:
+                        desc += f"; Card currently has Frame AND Regular Dye applied\n"
                 
-            desc += f"[ Mystic Frame ] -> {self.current_effort + mystic_delta} [+ {mystic_delta}]\n"
+                # Hide Dye & Frame if it's already maxed out
+                if dye_frame_delta > 5:
+                    desc += f"[ Dye & Frame ]  -> {current_effort + dye_frame_delta} [+ {dye_frame_delta}]\n"
+                    
+                desc += f"[ Mystic Frame ] -> {current_effort + mystic_frame_delta} [+ {mystic_frame_delta}]\n"
+                
+            desc += f"{ticks}\n"
             
-        desc += f"{ticks}\n"
-        desc += "*( ⚠️ Note: Keqing estimates using a database. Fang Yuan calculates mathematically from your exact card. )*"
+            # S-Style + Vanity & Toughness Section
+            cosmetic_base = (current_effort - style_val) + target_mystic_frame
+            d_tough_val = max(1, round(base_val * 0.05)) if base_val >= 20 else 0
+            d_vanity_val = max(1, round(base_val * 0.12)) if base_val >= 20 else 0
 
-        embed = discord.Embed(title="[ EFFORT TELEMETRY LOG ]", description=desc, color=0x8b0000)
-        embed.set_footer(text=f"Node: Fang Yuan // Heavenly Court ✦")
+            desc += "⚙️ **S-Style + Vanity & Toughness:**\n"
+            desc += f"{ticks}ini\n"
+            desc += f"[ Toughness ]\n"
+            desc += f"D Toughness  :: [{d_tough_val}]   -> {cosmetic_base + d_tough_val}\n"
+            desc += f"S Toughness  :: [{target_tough}]  -> {cosmetic_base + target_tough}\n\n"
+            
+            desc += f"[ Vanity ]\n"
+            desc += f"D Vanity     :: [0-{d_vanity_val}] -> {cosmetic_base} - {cosmetic_base + d_vanity_val}\n"
+            desc += f"Max A Vanity :: [{target_vanity}]  -> {cosmetic_base + target_vanity}\n\n"
+            
+            desc += f"[ Max Theoretical ]\n"
+            desc += f"Max A Vanity + S Tough -> {cosmetic_base + target_tough + target_vanity}\n"
+            desc += f"{ticks}\n"
+            
+            desc += "*( 💡 Pro Tip: Run `k!ci` before running `kwi` to see true Mint projections! )*"
 
-        view = EffortResultView(scaled_base, self.current_effort, mint_core, self.style_grade, self.style_val, self.tough_val, self.vanity_val, dye_frame_delta, mystic_delta, target_mystic, target_tough, target_vanity)
-        await interaction.response.edit_message(embed=embed, view=view)
+            embed_response = discord.Embed(
+                title="[ EFFORT TELEMETRY LOG ]",
+                description=desc,
+                color=0x8b0000
+            )
+            embed_response.set_footer(text=f"Node: Fang Yuan // Heavenly Court ✦")
 
-    # Multipliers set to perfectly mirror Karuta's internal halving mechanic
-    @discord.ui.button(label="Damaged", style=discord.ButtonStyle.danger)
-    async def btn_damaged(self, i: discord.Interaction, b: discord.ui.Button): await self.generate_result(i, 16.0)
-    @discord.ui.button(label="Poor", style=discord.ButtonStyle.secondary)
-    async def btn_poor(self, i: discord.Interaction, b: discord.ui.Button): await self.generate_result(i, 8.0)
-    @discord.ui.button(label="Good", style=discord.ButtonStyle.success)
-    async def btn_good(self, i: discord.Interaction, b: discord.ui.Button): await self.generate_result(i, 4.0)
-    @discord.ui.button(label="Excellent", style=discord.ButtonStyle.primary)
-    async def btn_excellent(self, i: discord.Interaction, b: discord.ui.Button): await self.generate_result(i, 2.0)
-    @discord.ui.button(label="Mint", style=discord.ButtonStyle.primary, emoji="✨")
-    async def btn_mint(self, i: discord.Interaction, b: discord.ui.Button): await self.generate_result(i, 1.0)
+            await message.reply(embed=embed_response, mention_author=False)
 
+        except Exception:
+            pass
 
-class EffortListener(commands.Cog):
-    def __init__(self, bot): self.bot = bot
-    @commands.Cog.listener()
-    async def on_message(self, m: discord.Message): await self.process(m)
-    @commands.Cog.listener()
-    async def on_message_edit(self, b, a: discord.Message): await self.process(a)
-
-    async def process(self, m: discord.Message):
-        if not m.author.bot or "karuta" not in m.author.name.lower() or not m.embeds or "base value" not in str(m.embeds[0].to_dict()).lower(): return
-        e = m.embeds[0]
-        txt = re.sub(r'[*`~_]', ' ', " ".join([e.author.name or "", e.title or "", e.description or ""] + [f.name + f.value for f in e.fields]))
-        base = int(re.search(r'(\d+)\s+base\s+value', txt, re.IGNORECASE).group(1))
-        
-        def p(n): return int(re.search(r'(\d+)\s+\([SABCDEF]\)\s+'+n, txt, re.IGNORECASE).group(1)) if re.search(r'(\d+)\s+\([SABCDEF]\)\s+'+n, txt, re.IGNORECASE) else 0
-        
-        view = QualityPromptView(base, int(re.search(r'Effort\s+(\d+)', txt, re.IGNORECASE).group(1)), re.search(r'\(([SABCDEF])\)\s+Style', txt, re.IGNORECASE).group(1).upper() if re.search(r'\(([SABCDEF])\)\s+Style', txt, re.IGNORECASE) else "F", p("Style"), p("Toughness"), p("Vanity"))
-        await m.reply(embed=discord.Embed(title="[ EFFORT CALIBRATION ]", description="**What is the quality of this card?**\n*Select a condition below to generate the log:*", color=0x8b0000), view=view, mention_author=False)
-
-async def setup(bot): await bot.add_cog(EffortListener(bot))
+async def setup(bot):
+    await bot.add_cog(EffortListener(bot))
