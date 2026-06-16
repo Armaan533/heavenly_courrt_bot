@@ -2,6 +2,10 @@ import discord
 from discord.ext import commands
 import re
 
+def s_round(n):
+    """Standard math rounding (half up) to match Karuta's exact internal rounding."""
+    return int(n + 0.5)
+
 class EffortResultView(discord.ui.View):
     def __init__(self, base_val, current_effort, mint_core, style_grade, style_val, dye_delta, frame_delta, dye_frame_delta, mystic_delta, target_mystic_frame, target_tough, target_vanity, show_dye_frame):
         super().__init__(timeout=300)
@@ -22,8 +26,6 @@ class EffortResultView(discord.ui.View):
     @discord.ui.button(label="Advanced Diagnostics", style=discord.ButtonStyle.secondary, emoji="⚙️")
     async def advanced_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         ticks = chr(96) * 3
-        
-        # Calculate the absolute maxed cosmetic baseline at Mint
         cosmetic_base = self.mint_core + self.mystic_delta
 
         desc = f"⟡ **Projected Mint Core:** `{self.mint_core} ✧`\n"
@@ -35,11 +37,8 @@ class EffortResultView(discord.ui.View):
         else:
             desc += "🎨 **Cosmetics Optimization:**\n"
             desc += f"{ticks}ini\n"
-            
-            # Dynamically hide Dye & Frame if it's already applied
             if self.show_dye_frame:
                 desc += f"[ Dye & Frame ]  -> {self.mint_core + self.dye_frame_delta} [+ {self.dye_frame_delta}]\n"
-                
             desc += f"[ Mystic Frame ] -> {self.mint_core + self.mystic_delta} [+ {self.mystic_delta}]\n"
             desc += f"{ticks}\n"
 
@@ -58,12 +57,13 @@ class EffortResultView(discord.ui.View):
         desc += f"Max A Vanity + S Tough -> {cosmetic_base + self.target_tough + self.target_vanity}\n"
         desc += f"{ticks}\n"
         
-        desc += "*( ⚠️ Beta: Report any math inconsistencies! )*"
+        desc += "*( 💡 Math Note: True gain tracking accounts for automatic Wellness scaling. )*"
         
         embed = interaction.message.embeds[0]
         embed.description = desc
         button.disabled = True
         await interaction.response.edit_message(embed=embed, view=self)
+
 
 class QualityPromptView(discord.ui.View):
     def __init__(self, base_val, current_effort, style_grade, style_val, tough_val, vanity_val):
@@ -76,33 +76,38 @@ class QualityPromptView(discord.ui.View):
         self.vanity_val = vanity_val
 
     async def generate_result(self, interaction: discord.Interaction, missing_stars: int):
-        # The Master Key Multiplier
+        # 1. Reverse the degradation to find the True Mint state
         multiplier = 1.89 ** missing_stars
-        
-        # Scale current values up to their True Mint equivalent
         mint_base = self.base_val * multiplier
-        mint_effort = round(self.current_effort * multiplier)
+        mint_effort = s_round(self.current_effort * multiplier)
         mint_style = self.style_val * multiplier
-        
-        # Calculate exactly what cosmetics SHOULD be adding at True Mint
-        target_dye = max(1, round(mint_base * 0.25))
-        target_frame = round(mint_base * 0.9375)
-        target_mystic = round(mint_base * 0.9375)
-        
-        target_dye_frame = target_dye + target_frame
-        target_mystic_frame = target_frame + target_mystic
-        
-        # Determine how much Effort they actually gain by applying the upgrade
-        dye_delta = max(0, target_dye - round(mint_style))
-        frame_delta = max(0, target_frame - round(mint_style))
-        dye_frame_delta = max(0, target_dye_frame - round(mint_style))
-        mystic_delta = max(0, target_mystic_frame - round(mint_style))
 
-        # Dynamic Hiding Threshold: If the delta is less than a Dye (plus a 2 point safety buffer), it means both are already applied!
-        show_dye_frame = dye_frame_delta > (target_dye + 2)
+        # 2. Calculate the theoretical Style caps at Mint condition
+        target_dye_s = max(1, s_round(mint_base * 0.25))
+        target_frame_s = s_round(mint_base * 0.9375)
+        target_dye_frame_s = target_dye_s + target_frame_s
+        target_mystic_s = s_round(mint_base * 1.5) # The ultimate hard cap
 
-        # Combat & Vanity Targets
-        target_tough = max(1, round(mint_base * 0.25))
+        # 3. Dynamic Gain Calculator (Accounts for Style AND the 25% Wellness Drag)
+        def calc_true_gain(target_style, current_style):
+            t_s = s_round(target_style)
+            c_s = s_round(current_style)
+            if t_s <= c_s:
+                return 0
+            delta_style = t_s - c_s
+            wellness_bonus = s_round(t_s * 0.25) - s_round(c_s * 0.25)
+            return delta_style + wellness_bonus
+
+        dye_delta = calc_true_gain(target_dye_s, mint_style)
+        frame_delta = calc_true_gain(target_frame_s, mint_style)
+        dye_frame_delta = calc_true_gain(target_dye_frame_s, mint_style)
+        mystic_delta = calc_true_gain(target_mystic_s, mint_style)
+
+        # 4. Smart hide logic: If their style is higher than just a frame, they already have a dye.
+        show_dye_frame = s_round(mint_style) <= target_frame_s
+
+        # 5. Combat & Vanity Targets
+        target_tough = max(1, s_round(mint_base * 0.25))
         target_vanity = int(mint_base // 2)
 
         ticks = chr(96) * 3
@@ -118,7 +123,6 @@ class QualityPromptView(discord.ui.View):
             desc += "🎨 **Cosmetics Optimization:**\n"
             desc += f"{ticks}ini\n"
             
-            # Show base Dye/Frame only if there is practically nothing applied
             if self.style_grade in ['F', 'C', 'A', 'D']:
                 desc += f"[ Dye ]          -> {mint_effort + dye_delta} [+ {dye_delta}]\n"
                 desc += f"[ Frame ]        -> {mint_effort + frame_delta} [+ {frame_delta}]\n"
@@ -129,7 +133,6 @@ class QualityPromptView(discord.ui.View):
                 else:
                     desc += f"; Card currently has Frame AND Regular Dye applied\n"
             
-            # Cleanly hide Dye & Frame if the logic check triggered
             if show_dye_frame:
                 desc += f"[ Dye & Frame ]  -> {mint_effort + dye_frame_delta} [+ {dye_frame_delta}]\n"
                 
@@ -145,10 +148,9 @@ class QualityPromptView(discord.ui.View):
         )
         embed.set_footer(text=f"Node: Fang Yuan // Heavenly Court ✦")
 
-        view = EffortResultView(self.base_val, self.current_effort, mint_effort, self.style_grade, self.style_val, dye_delta, frame_delta, dye_frame_delta, mystic_delta, target_mystic_frame, target_tough, target_vanity, show_dye_frame)
+        view = EffortResultView(self.base_val, self.current_effort, mint_effort, self.style_grade, self.style_val, dye_delta, frame_delta, dye_frame_delta, mystic_delta, target_mystic_s, target_tough, target_vanity, show_dye_frame)
         await interaction.response.edit_message(embed=embed, view=view)
 
-    # Calculate exact missing stars to plug into the 1.89 multiplier
     @discord.ui.button(label="Damaged", style=discord.ButtonStyle.danger)
     async def btn_damaged(self, i: discord.Interaction, b: discord.ui.Button): await self.generate_result(i, 4) 
     @discord.ui.button(label="Poor", style=discord.ButtonStyle.secondary)
