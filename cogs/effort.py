@@ -38,6 +38,9 @@ class EffortResultView(discord.ui.View):
         else:
             desc += "🎨 **Cosmetics Optimization:**\n"
             desc += f"{ticks}ini\n"
+            # HIDE DYE & FRAME IF IT'S ALREADY APPLIED (Delta is less than 5)
+            if self.dye_frame_delta > 5:
+                desc += f"[ Dye & Frame ]  -> {self.current_effort + self.dye_frame_delta} [+ {self.dye_frame_delta}]\n"
             desc += f"[ Mystic Frame ] -> {self.current_effort + self.mystic_delta} [+ {self.mystic_delta}]\n"
             desc += f"{ticks}\n"
 
@@ -119,10 +122,16 @@ class QualityPromptView(discord.ui.View):
             if self.style_grade in ['F', 'C', 'A', 'D']:
                 desc += f"[ Dye ]          -> {self.current_effort + dye_delta} [+ {dye_delta}]\n"
                 desc += f"[ Frame ]        -> {self.current_effort + frame_delta} [+ {frame_delta}]\n"
-            if self.style_grade == 'B':
-                desc += f"; Card currently has Frame OR Mystic Dye applied\n"
             
-            desc += f"[ Dye & Frame ]  -> {self.current_effort + dye_frame_delta} [+ {dye_frame_delta}]\n"
+            if self.style_grade == 'B':
+                if dye_frame_delta > 5:
+                    desc += f"; Card currently has Frame OR Mystic Dye applied\n"
+                else:
+                    desc += f"; Card currently has Frame AND Regular Dye applied\n"
+            
+            if dye_frame_delta > 5:
+                desc += f"[ Dye & Frame ]  -> {self.current_effort + dye_frame_delta} [+ {dye_frame_delta}]\n"
+                
             desc += f"[ Mystic Frame ] -> {self.current_effort + mystic_delta} [+ {mystic_delta}]\n"
             desc += f"{ticks}\n"
 
