@@ -10,44 +10,49 @@ class CustomHelp(commands.Cog):
     def cog_unload(self):
         self.bot.help_command = self.original_help
 
-    @commands.command(name="help", aliases=["h", "commands", "cmds"])
+    @commands.command(name="help", aliases=["h", "cmds"])
     async def custom_help(self, ctx):
         """Displays the Heavenly Court system directory"""
         
-        ticks = chr(96) * 3
-        
-        desc = "⟡ **Accessing Heavenly Court terminal...**\n\n"
-        desc += "Below is the directory of all active modules and commands currently loaded into the Fang Yuan node.\n"
-        desc += "━━━━━━━━━━━━━━━━━━━━━━\n"
-
         embed = discord.Embed(
-            title="[ SYSTEM DIRECTORY & COMMANDS ]",
-            description=desc,
-            color=0x8b0000
+            title="✦ Heavenly Court",
+            description="Contribution system and utility commands",
+            color=0x2b2d31
         )
 
-        lent_cmds = (
-            "`> ,lent` or `,lentlist`\n"
-            "Displays your personal, private ledger of cards you have lent out.\n\n"
-            "`> ,lent add @user`\n"
-            "Initializes the tracker. The bot will prompt you to run `kci` on the card, automatically extracting the code and saving the data.\n\n"
-            "`> ,lent remove`\n"
-            "Opens a secure dropdown menu to instantly clear returned cards from your ledger."
+        members_text = (
+            "` ,points ` — check your points\n"
+            "` ,points @user ` — check someone's points\n"
+            "` ,leaderboard ` — top 10 members"
         )
-        embed.add_field(name="📦 **Lent Ledger Module**", value=lent_cmds, inline=False)
+        embed.add_field(name="👤 Members", value=members_text, inline=False)
 
-        effort_cmds = (
-            "*( Passive Module - No prefix command required )*\n\n"
-            "Fang Yuan automatically intercepts any Karuta worker embed (`kwi`) dropped in the chat. It bypasses Karuta's visual data to calculate the exact True Mint Core, precise cosmetic stat deltas, and absolute S-Style scaling caps.\n\n"
-            "> 💡 **Pro-Tip:** *Run `kci` right before running `kwi` to force the engine to calculate based on absolute True Mint values!*"
+        staff_text = (
+            "` ,points add @user amount ` — give points\n"
+            "` ,points remove @user amount ` — remove points\n"
+            "` ,points set @user amount ` — set exact points\n"
+            "` ,points reset @user ` — wipe to zero\n"
+            "` ,clan add @user ` — add to kwork whitelist\n"
+            "` ,clan remove @user ` — remove from whitelist\n"
+            "` ,clan list ` — view whitelist"
         )
-        embed.add_field(name="📊 **Effort Telemetry Engine**", value=effort_cmds, inline=False)
+        embed.add_field(name="⚙️ Staff", value=staff_text, inline=False)
 
+        lent_text = (
+            "` ,lent ` or ` ,lentlist ` — view your lent cards ledger\n"
+            "` ,lent add @user ` — track a card you lent out (run `kci` when prompted)\n"
+            "` ,lent remove ` — open a menu to easily remove returned cards"
+        )
+        embed.add_field(name="📦 Lent Tracker", value=lent_text, inline=False)
 
-        embed.set_footer(text="Node: Fang Yuan // Heavenly Court ✦")
-        
-        if self.bot.user.display_avatar:
-            embed.set_thumbnail(url=self.bot.user.display_avatar.url)
+        effort_text = (
+            "*( Works automatically — no command needed )*\n"
+            "Drop a Karuta `kwi` (Worker Details) embed in chat, and Fang Yuan will automatically calculate the exact cosmetics needed to maximize its effort.\n"
+            "> 💡 **Tip:** *Run `kci` right before `kwi` for the most accurate Mint projections!*"
+        )
+        embed.add_field(name="📊 Effort Calculator", value=effort_text, inline=False)
+
+        embed.set_footer(text="Heavenly Court ✦ system directory")
 
         await ctx.send(embed=embed)
 

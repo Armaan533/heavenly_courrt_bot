@@ -143,7 +143,7 @@ class QualityPromptView(discord.ui.View):
 
         embed = discord.Embed(
             title="[ EFFORT TELEMETRY LOG ]",
-            description=desc,
+            description= "> 💡 **Tip:** *Run `kci` right before `kwi` for the most accurate Mint projections!*",
             color=0x8b0000
         )
         embed.set_footer(text=f"Node: Fang Yuan // Heavenly Court ✦")
