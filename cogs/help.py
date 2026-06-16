@@ -17,7 +17,7 @@ class CustomHelp(commands.Cog):
         embed = discord.Embed(
             title="✦ Heavenly Court",
             description="Contribution system and utility commands",
-            color=0x2b2d31
+            color=0x6B1614
         )
 
         members_text = (
