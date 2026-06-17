@@ -17,10 +17,10 @@ class CustomHelp(commands.Cog):
         embed = discord.Embed(
             title="✦ Heavenly Court",
             description="Contribution system and utility commands",
-            color=0x2b2d31
+            color=0x6b1614
         )
 
-        # 1. Original Members Section
+        # 1. Members Section
         members_text = (
             "` ,points ` — check your points\n"
             "` ,points @user ` — check someone's points\n"
@@ -28,7 +28,7 @@ class CustomHelp(commands.Cog):
         )
         embed.add_field(name="👤 Members", value=members_text, inline=False)
 
-        # 2. Original Staff Section
+        # 2. Staff Section
         staff_text = (
             "` ,points add @user amount ` — give points\n"
             "` ,points remove @user amount ` — remove points\n"
