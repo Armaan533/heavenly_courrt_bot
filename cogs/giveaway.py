@@ -15,7 +15,6 @@ E_TIME    = "<:celestial_hourglass:1516684938509029396>"
 E_SUCCESS = "✅"    
 E_ERROR   = "❌"    
 
-
 def parse_time(time_str: str) -> int:
     time_str = time_str.lower().strip()
     if time_str.endswith('d'): return int(time_str[:-1]) * 86400
