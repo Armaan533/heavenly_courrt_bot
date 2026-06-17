@@ -247,7 +247,6 @@ class GiveawayCog(commands.Cog):
         series = parts[3] if len(parts) > 3 else "Unknown"
         character_name = parts[-1] if len(parts) > 0 else "Unknown"
         
-        # Original, unbroken thumbnail grabber
         card_image_url = embed_data.thumbnail.url if embed_data.thumbnail else None
 
         end_time = int(time.time()) + seconds
@@ -276,16 +275,11 @@ class GiveawayCog(commands.Cog):
         giveaway_embed.set_footer(text=f"Hosted by {author.display_name}")
         if card_image_url: giveaway_embed.set_thumbnail(url=card_image_url)
 
-        # We delete the "Configuration saved!" message
         try:
             setup_msg = await interaction.original_response()
             await setup_msg.delete()
         except: pass
 
-        # WE DO NOT DELETE KARUTA'S MESSAGE. If Karuta's image is an attachment, 
-        # deleting the message deletes the attachment, causing a blank image link!
-        
-        # We delete your 'kci' command text
         try:
             async for hist_msg in channel.history(limit=10):
                 if hist_msg.author.id == author.id and hist_msg.content.lower().startswith("kci"):
@@ -309,6 +303,14 @@ class GiveawayCog(commands.Cog):
 
         task = asyncio.create_task(self.manage_giveaway_timer(seconds, msg.id, channel.id, character_name))
         self.active_tasks[msg.id] = task
+
+        async def delayed_karuta_delete():
+            await asyncio.sleep(10)
+            try:
+                await karuta_msg.delete()
+            except: pass
+
+        self.bot.loop.create_task(delayed_karuta_delete())
 
     @giveaway_group.command(name="start", description="Starts a giveaway")
     async def start_wizard(self, interaction: discord.Interaction, clan_bonus: int = 0, booster_bonus: int = 0):
