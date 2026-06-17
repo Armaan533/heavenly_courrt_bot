@@ -62,6 +62,7 @@ class Bot(commands.Bot):
         #i had to edit i almost got heart attack wtf went wrong
         await self.load_extension("cogs.help")
         await self.load_extension("cogs.lentlist")
+        await self.load_extension("cogs.ticket")
         
         from cogs.colors import ColorView
         self.add_view(ColorView())
