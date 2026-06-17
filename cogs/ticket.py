@@ -1,5 +1,6 @@
 import discord
 from discord.ext import commands
+from discord import app_commands
 import asyncio
 
 E_SPARKLE = "<:eight_side_sparkle:1516681364806570105>"    
@@ -63,11 +64,12 @@ class TicketPanel(discord.ui.View):
 
         ping_str = " ".join([f"<@&{r}>" for r in ROLES_TO_PING])
         
+        # Inside the Ticket UI
         desc = f"{E_SPARKLE} **{user.display_name} has connected to the Heavenly Dao.**\n"
         desc += "━━━━━━━━━━━━━━━━━━━━━━\n"
-        desc += f"{E_FLOWERS} Please state the nature of your tribulation.\n"
+        desc += f"{E_FLOWERS} Please state the nature of your bottleneck or inquiry.\n"
         desc += f"{E_BOOK} The Wisdom Path elders will begin their deductions shortly.\n\n"
-        desc += f"*(To sever this connection, press the red seal below)*"
+        desc += f"*(To sever this connection, press the red seal below or use `/ticket delete`)*"
 
         embed = discord.Embed(title="✦ . HEAVENLY DAO DEDUCTION . ✦", description=desc, color=0x6b1614)
         embed.set_footer(text=f"Node: Fang Yuan // Heavenly Court ✦")
@@ -81,14 +83,50 @@ class TicketCog(commands.Cog):
         self.bot.add_view(TicketPanel())
         self.bot.add_view(TicketControls())
 
+    ticket_group = app_commands.Group(name="ticket", description="Manage Heavenly Dao connections")
+
+    @ticket_group.command(name="close", description="Seal the connection (Removes the user, keeps channel for Elders)")
+    async def close_ticket_cmd(self, interaction: discord.Interaction):
+        """Removes the ticket creator's permissions so they can no longer see or type in the channel."""
+        if "inspiration-" not in interaction.channel.name:
+            return await interaction.response.send_message("❌ This command can only be used in an Inspiration channel.", ephemeral=True)
+        
+        user_removed = False
+        for target in list(interaction.channel.overwrites.keys()):
+            if isinstance(target, discord.Member) and target != interaction.guild.me:
+                await interaction.channel.set_permissions(target, overwrite=None)
+                user_removed = True
+                
+        if user_removed:
+            embed = discord.Embed(
+                title="✦ . CONNECTION SEALED . ✦",
+                description=f"{E_LOTUS} The cultivator's connection to the Heavenly Dao has been severed.\n\nElders may review the remnants of this deduction, or use `/ticket delete` to shatter this realm completely.",
+                color=0x6b1614
+            )
+            await interaction.response.send_message(embed=embed)
+        else:
+            await interaction.response.send_message("⚠️ The connection is already sealed. The mortal has already been removed.", ephemeral=True)
+
+    @ticket_group.command(name="delete", description="Shatter this isolated realm (Deletes the channel entirely)")
+    async def delete_ticket_cmd(self, interaction: discord.Interaction):
+        """Triggers the dramatic 5-second countdown and deletes the channel."""
+        if "inspiration-" not in interaction.channel.name:
+            return await interaction.response.send_message("❌ This command can only be used in an Inspiration channel.", ephemeral=True)
+            
+        await interaction.response.send_message(f"{E_TIME} **Shattering this isolated realm...** This space will collapse in 5 seconds.")
+        await asyncio.sleep(5)
+        await interaction.channel.delete()
+
+    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
     @commands.command(name="setup_tickets", aliases=["ticketpanel"])
     @commands.has_permissions(administrator=True)
     async def setup_tickets(self, ctx):
         
-        desc = f"{E_SPARKLE} *Are you seeking the profound truths of the Great Dao?* {E_SPARKLE}\n"
+        desc = f"{E_SPARKLE} *Are you facing a bottleneck, or seeking the profound truths of the Great Dao?* {E_SPARKLE}\n"
         desc += "━━━━━━━━━━━━━━━━━━━━━━\n"
         desc += f"{E_BOOK} **Initiate a Natural Inspiration to:**\n"
-        desc += f"✦ Karuta mechanics or inquiries\n"
+        desc += f"✦ Deduce Karuta mechanics and worldly laws\n"
         desc += f"✦ Resolve Contribution & Clan tribulations\n"
         desc += f"✦ Report deviations in the Heavenly Dao (Bugs/Issues)\n"
         desc += f"✦ Seek general guidance from the sect's Wisdom Path elders\n\n"
