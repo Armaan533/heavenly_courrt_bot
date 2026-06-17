@@ -38,7 +38,6 @@ class LentListCog(commands.Cog):
         self.load_data()
 
     def load_data(self):
-        """Loads lent list data from JSON"""
         if os.path.exists(DATA_FILE):
             with open(DATA_FILE, "r") as f:
                 self.data = json.load(f)
@@ -46,21 +45,22 @@ class LentListCog(commands.Cog):
             self.data = {}
 
     def save_data(self):
-        """Saves lent list data to JSON"""
         with open(DATA_FILE, "w") as f:
             json.dump(self.data, f, indent=4)
 
     @commands.group(invoke_without_command=True, aliases=['lentlist'])
-    async def lent(self, ctx):
-        """Displays the user's lent list. Triggered by ,lent or ,lentlist"""
-        user_id = str(ctx.author.id)
+    async def lent(self, ctx, target: discord.Member = None):
+        """Displays a user's lent list. Triggered by ,lent or ,lent @user"""
+        target = target or ctx.author
+        user_id = str(target.id)
         user_data = self.data.get(user_id, {})
 
         if not user_data:
+            desc = "⟡ *Your ledger is currently empty.*\n\nUse `,lent add @user` to start tracking cards!" if target == ctx.author else f"⟡ *{target.display_name}'s ledger is currently empty.*"
             embed = discord.Embed(
-                title=f"[ {ctx.author.display_name.upper()}'S LENT LIST ]",
-                description="⟡ *Your ledger is currently empty.*\n\nUse `,lent add @user` to start tracking cards!",
-                color=0x6B1614
+                title=f"[ {target.display_name.upper()}'S LENT LIST ]",
+                description=desc,
+                color=0x2b2d31
             )
             embed.set_footer(text=f"Node: Fang Yuan // Heavenly Court ✦")
             await ctx.send(embed=embed)
@@ -72,7 +72,46 @@ class LentListCog(commands.Cog):
         desc += "━━━━━━━━━━━━━━━━━━━━━━"
 
         embed = discord.Embed(
-            title=f"[ {ctx.author.display_name.upper()}'S LENT LIST ]",
+            title=f"[ {target.display_name.upper()}'S LENT LIST ]",
+            description=desc,
+            color=0x8b0000
+        )
+        embed.set_footer(text=f"Node: Fang Yuan // Heavenly Court ✦")
+        await ctx.send(embed=embed)
+
+    @lent.command(name="borrowed", aliases=["borrow", "held"])
+    async def borrowed(self, ctx, target: discord.Member = None):
+        """Reverse lookup: Shows what a user is currently borrowing from others."""
+        target = target or ctx.author
+        target_id = str(target.id)
+
+        borrowed_cards = []
+        for lender_id, lender_data in self.data.items():
+            for code, info in lender_data.items():
+                if info.get('lent_to') == target_id:
+                    borrowed_cards.append({
+                        "code": code,
+                        "character": info['character'],
+                        "lender_id": lender_id
+                    })
+        
+        if not borrowed_cards:
+            embed = discord.Embed(
+                title=f"[ {target.display_name.upper()}'S BORROWED CARDS ]",
+                description="⟡ *No borrowed cards found on the ledger.*",
+                color=0x2b2d31
+            )
+            embed.set_footer(text=f"Node: Fang Yuan // Heavenly Court ✦")
+            await ctx.send(embed=embed)
+            return
+
+        desc = "━━━━━━━━━━━━━━━━━━━━━━\n"
+        for i, card in enumerate(borrowed_cards, 1):
+            desc += f"**{i}. `{card['code']}` - ** \n> 📦 Borrowed from: <@{card['lender_id']}>\n\n"
+        desc += "━━━━━━━━━━━━━━━━━━━━━━"
+
+        embed = discord.Embed(
+            title=f"[ {target.display_name.upper()}'S BORROWED CARDS ]",
             description=desc,
             color=0x8b0000
         )
@@ -81,27 +120,21 @@ class LentListCog(commands.Cog):
 
     @lent.command(name="add")
     async def add_lent(self, ctx, member: discord.Member):
-        """Interactive command to add a card to the lent list"""
         user_id = str(ctx.author.id)
         
         prompt_embed = discord.Embed(
             title="[ LENT TRACKER CALIBRATION ]",
-            description=f"⟡ Please run `kci` on the card you lent to **{member.display_name}**.\n\n*(Waiting for Karuta's response in this channel...)*",
-            color=0x6B1614
+            description=f"⟡ Please run `kci` (or `kwi`) on the card you lent to **{member.display_name}**.\n\n*(Waiting for Karuta's response in this channel...)*",
+            color=0x2b2d31
         )
         prompt_msg = await ctx.send(embed=prompt_embed)
 
         def check(m):
-            if not m.author.bot or "karuta" not in m.author.name.lower():
-                return False
-            if m.channel != ctx.channel:
-                return False
-            if not m.embeds:
-                return False
-            
+            if not m.author.bot or "karuta" not in m.author.name.lower(): return False
+            if m.channel != ctx.channel: return False
+            if not m.embeds: return False
             title = str(m.embeds[0].title).lower()
-            if "card details" in title or "worker details" in title:
-                return True
+            if "card details" in title or "worker details" in title: return True
             return False
 
         try:
@@ -110,7 +143,6 @@ class LentListCog(commands.Cog):
             embed = msg.embeds[0]
             desc = embed.description or ""
             title = str(embed.title).lower()
-            
             first_line = desc.split('\n')[0] if desc else ""
             
             code = None
@@ -120,22 +152,28 @@ class LentListCog(commands.Cog):
                 parts = first_line.split('·')
                 code = re.sub(r'[^a-zA-Z0-9]', '', parts[0])
                 character = parts[-1].replace('*', '').strip()
-                
             elif "worker details" in title:
                 code_match = re.search(r'\(\s*([a-zA-Z0-9]{5,7})\s*\)', first_line)
-                if code_match:
-                    code = code_match.group(1)
+                if code_match: code = code_match.group(1)
                 char_match = re.search(r'Character\s*·\s*\**([^\*\(]+)\**', first_line)
-                if char_match:
-                    character = char_match.group(1).strip()
+                if char_match: character = char_match.group(1).strip()
             
             if not code:
-                await prompt_msg.edit(embed=discord.Embed(description="❌ **Error:** Could not extract the card code. Make sure you are using `kci`.", color=0x6B1614))
+                await prompt_msg.edit(embed=discord.Embed(description="❌ **Error:** Could not extract the card code. Make sure you are using `kci` or `kwi`.", color=0xff0000))
                 return
 
-            # Save to Database
-            if user_id not in self.data:
-                self.data[user_id] = {}
+            if user_id in self.data and code in self.data[user_id]:
+                existing_user_id = self.data[user_id][code]['lent_to']
+                warning_embed = discord.Embed(
+                    title="[ LENT TRACKER CONFLICT ]",
+                    description=f"⚠️ **Wait!** `{code}` is already in your ledger!\n> 📦 It is currently marked as lent to: <@{existing_user_id}>\n\n*(If you want to update it, remove it from your list first using `,lent remove`)*",
+                    color=0xffaa00
+                )
+                warning_embed.set_footer(text=f"Node: Fang Yuan // Heavenly Court ✦")
+                await prompt_msg.edit(embed=warning_embed)
+                return
+
+            if user_id not in self.data: self.data[user_id] = {}
             
             self.data[user_id][code] = {
                 "character": character,
@@ -147,17 +185,16 @@ class LentListCog(commands.Cog):
             success_embed = discord.Embed(
                 title="[ LENT TRACKER UPDATED ]",
                 description=f"⟡ Successfully tracked **{character}** (`{code}`)\n> 📦 Lent to: <@{member.id}>",
-                color=0x6B1614
+                color=0x2b2d31
             )
             success_embed.set_footer(text=f"Node: Fang Yuan // Heavenly Court ✦")
             await prompt_msg.edit(embed=success_embed)
 
         except asyncio.TimeoutError:
-            await prompt_msg.edit(embed=discord.Embed(description="❌ Request timed out. You took too long to run `kci`.", color=0x6B1614))
+            await prompt_msg.edit(embed=discord.Embed(description="❌ Request timed out. You took too long to run `kci`.", color=0xff0000))
 
     @lent.command(name="remove")
     async def remove_lent(self, ctx):
-        """Dropdown UI to remove a card from the lent list"""
         user_id = str(ctx.author.id)
         user_data = self.data.get(user_id, {})
 
@@ -178,7 +215,7 @@ class LentListCog(commands.Cog):
                 updated_embed = discord.Embed(
                     title="[ LENT TRACKER MODIFICATION ]",
                     description=f"⟡ **{character}** (`{selected_code}`) has been successfully cleared from your ledger.",
-                    color=0x6B1614
+                    color=0x8b0000
                 )
                 updated_embed.set_footer(text=f"Node: Fang Yuan // Heavenly Court ✦")
                 await interaction.response.edit_message(embed=updated_embed, view=None)
@@ -188,7 +225,7 @@ class LentListCog(commands.Cog):
         embed = discord.Embed(
             title="[ LENT TRACKER MODIFICATION ]",
             description="⟡ Select a card from the dropdown below to remove it from your lent list.",
-            color=0x6B1614
+            color=0x2b2d31
         )
         embed.set_footer(text=f"Node: Fang Yuan // Heavenly Court ✦")
         await ctx.send(embed=embed, view=view)

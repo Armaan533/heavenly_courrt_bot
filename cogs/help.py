@@ -17,9 +17,10 @@ class CustomHelp(commands.Cog):
         embed = discord.Embed(
             title="✦ Heavenly Court",
             description="Contribution system and utility commands",
-            color=0x6B1614
+            color=0x2b2d31
         )
 
+        # 1. Original Members Section
         members_text = (
             "` ,points ` — check your points\n"
             "` ,points @user ` — check someone's points\n"
@@ -27,6 +28,7 @@ class CustomHelp(commands.Cog):
         )
         embed.add_field(name="👤 Members", value=members_text, inline=False)
 
+        # 2. Original Staff Section
         staff_text = (
             "` ,points add @user amount ` — give points\n"
             "` ,points remove @user amount ` — remove points\n"
@@ -38,13 +40,16 @@ class CustomHelp(commands.Cog):
         )
         embed.add_field(name="⚙️ Staff", value=staff_text, inline=False)
 
+        # 3. Lent Tracker Section
         lent_text = (
-            "` ,lent ` or ` ,lentlist ` — view your lent cards ledger\n"
+            "` ,lent ` or ` ,lent @user ` — view cards you (or someone else) have lent out\n"
+            "` ,lent borrowed ` — view all cards you are currently borrowing\n"
             "` ,lent add @user ` — track a card you lent out (run `kci` when prompted)\n"
             "` ,lent remove ` — open a menu to easily remove returned cards"
         )
         embed.add_field(name="📦 Lent Tracker", value=lent_text, inline=False)
 
+        # 4. Effort Calculator Section
         effort_text = (
             "*( Works automatically — no command needed )*\n"
             "Drop a Karuta `kwi` (Worker Details) embed in chat, and Fang Yuan will automatically calculate the exact cosmetics needed to maximize its effort.\n"
