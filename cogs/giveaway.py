@@ -94,7 +94,7 @@ class ItemSetupModal(discord.ui.Modal, title="Setup Item Giveaway"):
         desc += "━━━━━━━━━━━━━━━━━━━━━━\n"
         desc += f"{E_TIME} **Ends:** <t:{end_time}:R>"
         
-        embed = discord.Embed(title="✦ . __HEAVENLY COURT GIVEAWAY__ . ✦", description=desc, color=0x6b1614)
+        embed = discord.Embed(title="✦ . HEAVENLY COURT GIVEAWAY . ✦", description=desc, color=0x6b1614)
         embed.set_footer(text=f"Hosted by {interaction.user.display_name}")
 
         view = GiveawayEntryView()
@@ -227,13 +227,8 @@ class GiveawayCog(commands.Cog):
 
         try:
             karuta_msg = await self.bot.wait_for('message', timeout=120.0, check=karuta_check)
-            # ⏳ Delay to allow Discord to fully load and proxy the image URL
-            await asyncio.sleep(1.5)
-            karuta_msg = await channel.fetch_message(karuta_msg.id)
         except asyncio.TimeoutError:
             return await channel.send(f"{E_ERROR} Setup timed out.")
-        except discord.NotFound:
-            pass 
 
         embed_data = karuta_msg.embeds[0]
         lines = [l.strip() for l in (embed_data.description or "").split("\n") if l.strip()]
@@ -253,12 +248,8 @@ class GiveawayCog(commands.Cog):
         series = parts[3] if len(parts) > 3 else "Unknown"
         character_name = parts[-1] if len(parts) > 0 else "Unknown"
         
-        # Safely extract image whether Karuta formats it as a thumbnail or a full image
-        card_image_url = None
-        if embed_data.thumbnail and embed_data.thumbnail.url:
-            card_image_url = embed_data.thumbnail.url
-        elif embed_data.image and embed_data.image.url:
-            card_image_url = embed_data.image.url
+        # ROLLBACK: Exactly what you originally had
+        card_image_url = embed_data.thumbnail.url if embed_data.thumbnail else None
 
         end_time = int(time.time()) + seconds
 
