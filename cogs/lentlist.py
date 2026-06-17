@@ -60,7 +60,7 @@ class LentListCog(commands.Cog):
             embed = discord.Embed(
                 title=f"[ {target.display_name.upper()}'S LENT LIST ]",
                 description=desc,
-                color=0x2b2d31
+                color=0x6B1614
             )
             embed.set_footer(text=f"Node: Fang Yuan // Heavenly Court ✦")
             await ctx.send(embed=embed)
@@ -74,7 +74,7 @@ class LentListCog(commands.Cog):
         embed = discord.Embed(
             title=f"[ {target.display_name.upper()}'S LENT LIST ]",
             description=desc,
-            color=0x8b0000
+            color=0x6B1614
         )
         embed.set_footer(text=f"Node: Fang Yuan // Heavenly Court ✦")
         await ctx.send(embed=embed)
@@ -99,7 +99,7 @@ class LentListCog(commands.Cog):
             embed = discord.Embed(
                 title=f"[ {target.display_name.upper()}'S BORROWED CARDS ]",
                 description="⟡ *No borrowed cards found on the ledger.*",
-                color=0x2b2d31
+                color=0x6B1614
             )
             embed.set_footer(text=f"Node: Fang Yuan // Heavenly Court ✦")
             await ctx.send(embed=embed)
@@ -113,7 +113,7 @@ class LentListCog(commands.Cog):
         embed = discord.Embed(
             title=f"[ {target.display_name.upper()}'S BORROWED CARDS ]",
             description=desc,
-            color=0x8b0000
+            color=0x6B1614
         )
         embed.set_footer(text=f"Node: Fang Yuan // Heavenly Court ✦")
         await ctx.send(embed=embed)
@@ -125,7 +125,7 @@ class LentListCog(commands.Cog):
         prompt_embed = discord.Embed(
             title="[ LENT TRACKER CALIBRATION ]",
             description=f"⟡ Please run `kci` (or `kwi`) on the card you lent to **{member.display_name}**.\n\n*(Waiting for Karuta's response in this channel...)*",
-            color=0x2b2d31
+            color=0x6B1614
         )
         prompt_msg = await ctx.send(embed=prompt_embed)
 
@@ -159,7 +159,7 @@ class LentListCog(commands.Cog):
                 if char_match: character = char_match.group(1).strip()
             
             if not code:
-                await prompt_msg.edit(embed=discord.Embed(description="❌ **Error:** Could not extract the card code. Make sure you are using `kci` or `kwi`.", color=0xff0000))
+                await prompt_msg.edit(embed=discord.Embed(description="❌ **Error:** Could not extract the card code. Make sure you are using `kci` or `kwi`.", color=0x6B1614))
                 return
 
             if user_id in self.data and code in self.data[user_id]:
@@ -167,7 +167,7 @@ class LentListCog(commands.Cog):
                 warning_embed = discord.Embed(
                     title="[ LENT TRACKER CONFLICT ]",
                     description=f"⚠️ **Wait!** `{code}` is already in your ledger!\n> 📦 It is currently marked as lent to: <@{existing_user_id}>\n\n*(If you want to update it, remove it from your list first using `,lent remove`)*",
-                    color=0xffaa00
+                    color=0x6B1614
                 )
                 warning_embed.set_footer(text=f"Node: Fang Yuan // Heavenly Court ✦")
                 await prompt_msg.edit(embed=warning_embed)
@@ -185,13 +185,13 @@ class LentListCog(commands.Cog):
             success_embed = discord.Embed(
                 title="[ LENT TRACKER UPDATED ]",
                 description=f"⟡ Successfully tracked **{character}** (`{code}`)\n> 📦 Lent to: <@{member.id}>",
-                color=0x2b2d31
+                color=0x6B1614
             )
             success_embed.set_footer(text=f"Node: Fang Yuan // Heavenly Court ✦")
             await prompt_msg.edit(embed=success_embed)
 
         except asyncio.TimeoutError:
-            await prompt_msg.edit(embed=discord.Embed(description="❌ Request timed out. You took too long to run `kci`.", color=0xff0000))
+            await prompt_msg.edit(embed=discord.Embed(description="❌ Request timed out. You took too long to run `kci`.", color=0x6B1614))
 
     @lent.command(name="remove")
     async def remove_lent(self, ctx):
@@ -215,7 +215,7 @@ class LentListCog(commands.Cog):
                 updated_embed = discord.Embed(
                     title="[ LENT TRACKER MODIFICATION ]",
                     description=f"⟡ **{character}** (`{selected_code}`) has been successfully cleared from your ledger.",
-                    color=0x8b0000
+                    color=0x6B1614
                 )
                 updated_embed.set_footer(text=f"Node: Fang Yuan // Heavenly Court ✦")
                 await interaction.response.edit_message(embed=updated_embed, view=None)
@@ -225,7 +225,7 @@ class LentListCog(commands.Cog):
         embed = discord.Embed(
             title="[ LENT TRACKER MODIFICATION ]",
             description="⟡ Select a card from the dropdown below to remove it from your lent list.",
-            color=0x2b2d31
+            color=0x6B1614
         )
         embed.set_footer(text=f"Node: Fang Yuan // Heavenly Court ✦")
         await ctx.send(embed=embed, view=view)
