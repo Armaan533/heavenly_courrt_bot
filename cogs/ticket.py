@@ -13,36 +13,37 @@ ROLES_TO_PING = [1515096544364331128, 1515097042131615775, 1503987120572858511, 
 
 
 CUSTOM_LORE = {
+    # (me) - heavens path 
     846366974325424158: {
         "seal": "The First Supreme Elder, **{name}**, descends upon the will of Heaven itself.\n> Activating the Rank 9 Immortal Gu House **Heaven Overseeing Tower**, they invoke the supreme killer move **Fate Vanquishing Decree**. Under the judgment of fate, this Heavenly Dao connection is forcefully suppressed and sealed.",
-
         "delete": "{E_TIME} **The First Supreme Elder, {name}, gazes down from atop Heaven Overseeing Tower.**\n> *'That which is not recorded within fate has no right to exist.'*\n> With a single decree, countless fate dao chains descend and erase this isolated realm from the river of history itself. *(Dissipating in 5 seconds...)*"
     },
 
+    # armaan - Qi Path
     815099553032044576: {
-        "seal": "The Second Supreme Elder, **{name}**, calmly opens their eyes.\n> Countless thoughts collide like stars as the Wisdom Path killer move **Star Thought Deduction** unfolds. Having seen all possible outcomes, they conclude this matter and sever the Heavenly Dao connection.",
-
-        "delete": "{E_TIME} **The Second Supreme Elder, {name}, raises the legendary Immortal Gu, Wisdom Sword.**\n> A sword light flashes across heaven and earth. Before anyone can react, the causal threads sustaining this isolated realm are cleanly severed. *(Dissipating in 5 seconds...)*"
+        "seal": "The Second Supreme Elder, **{name}**, draws in heaven qi, earth qi, and human qi.\n> The legendary Qi Path killer move **Triple Qi Retraction** unfolds. As the three qi converge into one, all disturbances are suppressed and this Heavenly Dao connection is forcibly sealed.",
+        "delete": "{E_TIME} **The Second Supreme Elder, {name}, stands with hands clasped behind their back as the world trembles.**\n> Heaven qi descends, earth qi rises, and human qi surges forth. Under the terrifying pressure of **Triple Qi Retraction**, the isolated realm collapses layer by layer before returning to primordial qi. *(Dissipating in 5 seconds...)*"
     },
 
+    # karma - Wind Path
     1300911596033282048: {
-        "seal": "The Ceremony Elder, **{name}**, smiles gently.\n> *'Meeting is fate. Parting is also fate.'*\n> Summoning the renowned killer move **Farewell Friend Wind**, they send this Heavenly Dao connection drifting peacefully beyond the horizon.",
-
-        "delete": "{E_TIME} **The Ceremony Elder, {name}, watches as a gentle wind rises.**\n> *'This old friend has lingered long enough. Allow me to send you on your final journey.'*\n> The majestic **Farewell Friend Wind** sweeps across the isolated realm, carrying every trace away into the boundless heavens. *(Dissipating in 5 seconds...)*"
+        "seal": "The Ceremony Elder, **{name}**, waves a sleeve as countless peach blossoms fill the heavens.\n> The battlefield killer move **Peach Blossom Labyrinth** descends, isolating all disturbances from the outside world. Trapped within an endless sea of blossoms, this Heavenly Dao connection is peacefully sealed.",
+        "delete": "{E_TIME} **The Ceremony Elder, {name}, closes their fan as the final blossom falls.**\n> The battlefield killer move **Peach Blossom Labyrinth** collapses inward. Countless petals converge into a storm, shredding the isolated realm until not even a fragment remains. *(Dissipating in 5 seconds...)*"
     },
 
+    # kabser - Wisdom Path
     1239587136978550804: {
-        "seal": "Sect Elder **{name}** sits beneath the stars, unmoving as a mountain.\n> Employing the Wisdom Path killer move **Sitting and Forgetting Dao**, all disturbances are pacified. The petitioner's thoughts settle, and this matter is quietly sealed.",
-
-        "delete": "{E_TIME} **Sect Elder {name} waves a sleeve toward the night sky.**\n> Activating the Star Path killer move **Myriad Star Fireflies**, countless starlights descend like a celestial river and consume this isolated realm. *(Dissipating in 5 seconds...)*"
+        "seal": "Sect Elder **{name}** manifests the legendary **Star Constellation Chessboard**.\n> Countless stars illuminate the board as endless deductions unfold in an instant. Having calculated every possible outcome, they place the final piece and seal this Heavenly Dao connection.",
+        "delete": "{E_TIME} **Sect Elder {name} lowers a single chess piece upon the Star Constellation Chessboard.**\n> The heavens become a board and all beings become pieces. With one move, every possibility leading to this isolated realm is calculated and eliminated. The unfinished game reaches its inevitable conclusion. *(Dissipating in 5 seconds...)*"
     },
 
+    # ros - time path 
     978584340890013748: {
         "seal": "Sect Elder **{name}** traces a line through the River of Time.\n> Using the Time Path killer move **Time Cutting Edge**, they sever the future possibilities of this matter, bringing the deduction to its destined conclusion.",
-
         "delete": "{E_TIME} **Sect Elder {name} stands before the turbulent void.**\n> *'The destination has already been decided.'*\n> Activating **Fixed Immortal Travel**, the entire isolated realm vanishes from existence and is transported beyond mortal perception. *(Dissipating in 5 seconds...)*"
     }
 }
+
 
 def get_seal_message(user: discord.Member):
     if user.id in CUSTOM_LORE:
