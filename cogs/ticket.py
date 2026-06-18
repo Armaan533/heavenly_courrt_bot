@@ -12,36 +12,43 @@ E_TIME    = "<:celestial_hourglass:1516684938509029396>"
 ROLES_TO_PING = [1515096544364331128, 1515097042131615775, 1503987120572858511, 1508333073668898996]
 
 
+# ==========================================
+# ✦ IMMORTAL KILLER MOVE LORE (EASTER EGGS) ✦
+# ==========================================
 CUSTOM_LORE = {
-    # (me) - heavens path 
+    # (me) - Sword Path / Heaven's Path
     846366974325424158: {
-        "seal": "The First Supreme Elder, **{name}**, slowly brings their palms together before their chest.\n> Endless sword light gathers between their fingers, causing the surrounding space to fracture and distort.\n> The gathered experts feel their hearts sink as they recognize the legendary sword path killer move **Five Finger Fist Heart Sword**.\n>\n> The first finger rises.\n>\n> Sword intent pierces heaven and earth.\n>\n> Before the second finger can even appear, countless possibilities have already been cut apart.\n>\n> Under the overwhelming might of **Five Finger Fist Heart Sword**, the fate of this Heavenly Dao connection is decided.\n> Resistance is meaningless. This matter is hereby sealed.",
-        "seal": "The First Supreme Elder, **{name}**, clasps their palms before their chest.\n> Endless sword light converges into a single hand.\n> Heaven and earth fall silent.\n>\n> The first finger rises.\n>\n> The gathered experts tremble.\n>\n> The second finger rises.\n>\n> Space itself begins to crack.\n>\n> Before the third finger can even emerge, all outcomes have already been severed.\n>\n> Recognizing the legendary killer move **Five Finger Fist Heart Sword**, none dare oppose it.\n>\n> This Heavenly Dao connection has already been cut from fate.\n> The matter is hereby sealed.",
+        "seal": "The First Supreme Elder, **{name}**, slowly clasps their hands before their chest.\n> Heaven and earth fall dead silent as endless sword light gathers. The first finger rises, and sword intent pierces the firmament; the second finger rises, and space itself fractures. \n> Before the third can even emerge, all outcomes are ruthlessly severed. Under the absolute might of **Five Finger Fist Heart Sword**, this Heavenly Dao connection is forcibly sealed.",
+        "delete": "{E_TIME} **The First Supreme Elder, {name}, gazes down from atop Heaven Overseeing Tower.**\n> *'That which is not recorded within fate has no right to exist.'*\n> Channeling the overwhelming power of **Fate Vanquish**, countless dao chains descend, erasing this isolated realm from the river of history entirely. *(Dissipating in 5 seconds...)*",
         "image": "https://i.pinimg.com/736x/36/a1/25/36a12522ec7b926b3a5ea681e3775324.jpg" 
     },
 
     # armaan - Qi Path
     815099553032044576: {
-        "seal": "The Second Supreme Elder, {name}, draws in heaven qi, earth qi, and human qi.\n> The legendary Qi Path killer move Triple Qi Retraction unfolds. As the three qi converge into one, all disturbances are suppressed and this Heavenly Dao connection is forcibly sealed.",
-        "delete": "{E_TIME} The Second Supreme Elder, {name}, stands with hands clasped behind their back as the world trembles.\n> Heaven qi descends, earth qi rises, and human qi surges forth. Under the terrifying pressure of Triple Qi Retraction, the isolated realm collapses layer by layer before returning to primordial qi. (Dissipating in 5 seconds...)"
+        "seal": "The Second Supreme Elder, **{name}**, exhales slowly, drawing in heaven, earth, and human qi.\n> The legendary killer move **Triple Qi Retraction** unfolds. As the three qi converge into a single, terrifying singularity, all worldly disturbances are instantly crushed and the connection is sealed.",
+        "delete": "{E_TIME} **The Second Supreme Elder, {name}, clasps their hands behind their back as the void trembles.**\n> Heaven qi collapses, earth qi rises, and human qi suffocates. Under the apocalyptic pressure of **Triple Qi Retraction**, this isolated realm is ground down into primordial dust. *(Dissipating in 5 seconds...)*",
+        "image": "https://i.pinimg.com/736x/33/60/44/336044294efd5f45403842ae0343dda7.jpg"
     },
 
-    # karma - Wind Path
+    # karma - Wind / Wood Path
     1300911596033282048: {
-        "seal": "The Ceremony Elder, {name}, waves a sleeve as countless peach blossoms fill the heavens.\n> The battlefield killer move Peach Blossom Labyrinth descends, isolating all disturbances from the outside world. Trapped within an endless sea of blossoms, this Heavenly Dao connection is peacefully sealed.",
-        "delete": "{E_TIME} The Ceremony Elder, {name}, closes their fan as the final blossom falls.\n> The battlefield killer move Peach Blossom Labyrinth collapses inward. Countless petals converge into a storm, shredding the isolated realm until not even a fragment remains. (Dissipating in 5 seconds...)"
+        "seal": "The Ceremony Elder, **{name}**, gently waves a sleeve, and a sudden breeze scatters countless peach blossoms across the heavens.\n> The immortal battlefield **Peach Blossom Labyrinth** descends. Trapped within an endless, inescapable sea of pink petals, this Heavenly Dao connection slowly drifts into an eternal slumber.",
+        "delete": "{E_TIME} **The Ceremony Elder, {name}, gracefully snaps their fan shut.**\n> The endless sea of petals abruptly converges into a ferocious storm. Shredded by the collapsing **Peach Blossom Labyrinth**, the isolated realm is peacefully reduced to nothingness. *(Dissipating in 5 seconds...)*",
+        "image": "https://i.pinimg.com/736x/49/4c/72/494c720de1f759165e2c1a6101488653.jpg"
     },
 
     # kabser - Wisdom Path
     1239587136978550804: {
-        "seal": "Sect Elder {name} manifests the legendary Star Constellation Chessboard.\n> Countless stars illuminate the board as endless deductions unfold in an instant. Having calculated every possible outcome, they place the final piece and seal this Heavenly Dao connection.",
-        "delete": "{E_TIME} Sect Elder {name} lowers a single chess piece upon the Star Constellation Chessboard.\n> The heavens become a board and all beings become pieces. With one move, every possibility leading to this isolated realm is calculated and eliminated. The unfinished game reaches its inevitable conclusion. (Dissipating in 5 seconds...)"
+        "seal": "Sect Elder **{name}** raises a hand, manifesting the vast **Star Constellation Chessboard** in the sky above.\n> Countless stars flicker as endless deductions resolve in a fraction of a breath. Having calculated every variable, a single starlight piece is placed, locking the connection in an inescapable stalemate.",
+        "delete": "{E_TIME} **Sect Elder {name} coldly places the final chess piece upon the board.**\n> The heavens serve as the board; all living beings as pieces. With this ultimate move, every timeline sustaining this isolated realm is deduced and eliminated. Checkmate. *(Dissipating in 5 seconds...)*",
+        "image": "https://i.pinimg.com/736x/9f/4f/d3/9f4fd3aa0234e6e63ac74be1b0214e00.jpg"
     },
 
-    # ros - time path 
+    # ros - Time / Space Path 
     978584340890013748: {
-        "seal": "Sect Elder {name} traces a line through the River of Time.\n> Using the Time Path killer move Time Cutting Edge, they sever the future possibilities of this matter, bringing the deduction to its destined conclusion.",
-        "delete": "{E_TIME} Sect Elder {name} stands before the turbulent void.\n> 'The destination has already been decided.'\n> Activating Fixed Immortal Travel, the entire isolated realm vanishes from existence and is transported beyond mortal perception. (Dissipating in 5 seconds...)"
+        "seal": "Sect Elder **{name}** gazes into the flowing River of Time.\n> A formless blade flashes without warning. Using the peerless killer move **Time Cutting Edge**, the future possibilities of this inquiry are instantly severed, bringing the deduction to its destined, abrupt halt.",
+        "delete": "{E_TIME} **Sect Elder {name} stands silently before the turbulent void.**\n> *'The destination has already been decided.'*\n> Surging with the jade light of **Fixed Immortal Travel**, the spatial boundaries collapse, banishing this entire isolated realm into the chaotic ether. *(Dissipating in 5 seconds...)*",
+        "image": "https://i.pinimg.com/736x/4e/7d/52/4e7d5285a8d4de9caac66f7dd7188ea9.jpg"
     }
 }
 
@@ -53,7 +60,7 @@ def get_seal_data(user: discord.Member):
     else:
         lore_text = f"The cultivator's connection to the Heavenly Dao has been severed by **{user.display_name}**."
         
-    desc = f"{E_LOTUS} {lore_text}\n\nElders may review the remnants of this deduction, or use `/ticket delete` to shatter this realm completely."
+    desc = f"{E_LOTUS} {lore_text}\n\n*(The petitioner has been silenced but may still view this realm. Use `/ticket delete` to shatter it completely.)*"
     return desc, image_url
 
 def get_delete_message(user: discord.Member):
@@ -69,9 +76,12 @@ class TicketControls(discord.ui.View):
     @discord.ui.button(label="Sever Connection", style=discord.ButtonStyle.danger, custom_id="close_ticket_btn")
     async def close_ticket(self, interaction: discord.Interaction, button: discord.ui.Button):
         user_removed = False
+        
         for target in list(interaction.channel.overwrites.keys()):
             if isinstance(target, discord.Member) and target != interaction.guild.me:
-                await interaction.channel.set_permissions(target, overwrite=None)
+                overwrite = interaction.channel.overwrites[target]
+                overwrite.send_messages = False
+                await interaction.channel.set_permissions(target, overwrite=overwrite)
                 user_removed = True
                 
         if user_removed:
@@ -91,7 +101,7 @@ class TicketControls(discord.ui.View):
                 
             await interaction.channel.send(embed=embed)
         else:
-            await interaction.response.send_message("⚠️ The connection is already sealed. The mortal has already been removed.", ephemeral=True)
+            await interaction.response.send_message("⚠️ The connection is already sealed. The mortal has already been silenced.", ephemeral=True)
 
 
 class TicketPanel(discord.ui.View):
@@ -152,15 +162,18 @@ class TicketCog(commands.Cog):
 
     ticket_group = app_commands.Group(name="ticket", description="Manage Heavenly Dao connections")
 
-    @ticket_group.command(name="close", description="Seal the connection (Removes the user, keeps channel for Elders)")
+    @ticket_group.command(name="close", description="Seal the connection (Mutes the user, keeps channel for reading)")
     async def close_ticket_cmd(self, interaction: discord.Interaction):
         if "inspiration-" not in interaction.channel.name:
             return await interaction.response.send_message("❌ This command can only be used in an Inspiration channel.", ephemeral=True)
         
         user_removed = False
+        
         for target in list(interaction.channel.overwrites.keys()):
             if isinstance(target, discord.Member) and target != interaction.guild.me:
-                await interaction.channel.set_permissions(target, overwrite=None)
+                overwrite = interaction.channel.overwrites[target]
+                overwrite.send_messages = False
+                await interaction.channel.set_permissions(target, overwrite=overwrite)
                 user_removed = True
                 
         if user_removed:
@@ -170,13 +183,13 @@ class TicketCog(commands.Cog):
                 description=desc,
                 color=0x6b1614
             )
-        
+            
             if image_url:
                 embed.set_image(url=image_url)
                 
             await interaction.response.send_message(embed=embed)
         else:
-            await interaction.response.send_message("⚠️ The connection is already sealed. The mortal has already been removed.", ephemeral=True)
+            await interaction.response.send_message("⚠️ The connection is already sealed. The mortal has already been silenced.", ephemeral=True)
 
     @ticket_group.command(name="delete", description="Shatter this isolated realm (Deletes the channel entirely)")
     async def delete_ticket_cmd(self, interaction: discord.Interaction):
@@ -192,6 +205,7 @@ class TicketCog(commands.Cog):
         await asyncio.sleep(5)
         await interaction.channel.delete()
 
+    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
     @commands.command(name="setup_tickets", aliases=["ticketpanel"])
     @commands.has_permissions(administrator=True)
