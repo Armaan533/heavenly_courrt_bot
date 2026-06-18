@@ -116,8 +116,6 @@ class QualityPromptView(discord.ui.View):
         
         if self.true_effort != self.no_gd_effort:
             desc += f"*( ⚖️ True Base Core without G/D transfers as {self.no_gd_effort} )*\n\n"
-            
-        desc += "( 💡 *Engine Updated: 100% Karuta Accuracy* )"
 
         embed = discord.Embed(
             title="[ EFFORT TELEMETRY LOG ]",
