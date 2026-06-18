@@ -2,139 +2,87 @@ import discord
 from discord.ext import commands
 import re
 
-def s_round(n):
-    return int(n + 0.5)
-
 class EffortResultView(discord.ui.View):
-    def __init__(self, base_val, current_effort, mint_core, style_grade, style_val, frame_delta, dye_frame_delta, mystic_delta, target_tough, target_vanity):
+    def __init__(self, current_effort, no_gd_effort, mint_effort, dye_delta, frame_delta, dye_frame_delta, mystic_delta, target_tough, target_vanity):
         super().__init__(timeout=300)
-        self.base_val = base_val
         self.current_effort = current_effort
-        self.mint_core = mint_core
-        self.style_grade = style_grade
-        self.style_val = style_val
+        self.no_gd_effort = no_gd_effort
+        self.mint_effort = mint_effort
+        self.dye_delta = dye_delta
         self.frame_delta = frame_delta
         self.dye_frame_delta = dye_frame_delta
         self.mystic_delta = mystic_delta
         self.target_tough = target_tough
         self.target_vanity = target_vanity
 
-    @discord.ui.button(label="Advanced Diagnostics", style=discord.ButtonStyle.secondary, emoji="⚙️")
+    @discord.ui.button(label="Advanced Stats", style=discord.ButtonStyle.secondary, emoji="📊")
     async def advanced_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        ticks = chr(96) * 3
-        cosmetic_base = self.mint_core + self.mystic_delta
-
-        desc = f"⟡ **Projected Mint Core:** `{self.mint_core} ✧`\n"
-        desc += "━━━━━━━━━━━━━━━━━━━━━━\n"
-
-        if self.style_grade == 'S':
-            desc += "🎨 **Cosmetics Optimization:**\n"
-            desc += f"{ticks}ini\n[ Max Cosmetics Already Applied ]\n{ticks}\n"
-        else:
-            desc += "🎨 **Cosmetics Optimization:**\n"
-            desc += f"{ticks}ini\n"
-            if self.frame_delta > 0:
-                desc += f"[ Frame Only ]     -> {self.mint_core + self.frame_delta} [+ {self.frame_delta}]\n"
-            if self.dye_frame_delta > 0:
-                desc += f"[ Frame & Dye ]    -> {self.mint_core + self.dye_frame_delta} [+ {self.dye_frame_delta}]\n"
-            if self.mystic_delta > 0:
-                desc += f"[ Frame & Mystic ] -> {self.mint_core + self.mystic_delta} [+ {self.mystic_delta}]\n"
-            desc += f"{ticks}\n"
-
-        desc += "⚙️ **S-Style + Vanity & Toughness:**\n"
-        desc += f"{ticks}ini\n"
-
-        desc += f"[ Toughness ]\n"
-        desc += f"D Toughness  :: [0]   -> {cosmetic_base}\n"
-        desc += f"S Toughness  :: [{self.target_tough}]  -> {cosmetic_base + self.target_tough}\n\n"
+        cosmetic_base = self.mint_effort + self.mystic_delta
         
-        desc += f"[ Vanity ]\n"
-        desc += f"D Vanity     :: [0] -> {cosmetic_base}\n"
-        desc += f"Max A Vanity :: [{self.target_vanity}]  -> {cosmetic_base + self.target_vanity}\n\n"
+        desc = f"**Projected Mint Effort (No G/D):** `{self.mint_effort}`\n\n"
+        desc += "**Cosmetics Optimization:**\n"
+        desc += "```ini\n"
+        desc += f"Dye              -> {self.mint_effort + self.dye_delta} [+ {self.dye_delta}]\n"
+        desc += f"Frame            -> {self.mint_effort + self.frame_delta} [+ {self.frame_delta}]\n"
+        desc += f"Dye & Frame      -> {self.mint_effort + self.dye_frame_delta} [+ {self.dye_frame_delta}]\n"
+        desc += f"Mystic & Frame   -> {self.mint_effort + self.mystic_delta} [+ {self.mystic_delta}]\n"
+        desc += "```\n"
         
-        desc += f"[ Max Theoretical ]\n"
-        desc += f"Max A Vanity + S Tough -> {cosmetic_base + self.target_tough + self.target_vanity}\n"
-        desc += f"{ticks}\n"
-        
-        desc += "*( 💡 Math Note: True gain tracking accounts for automatic Wellness scaling. )*\n"
-        
+        desc += "**S Style + Vanity & Toughness (Max Potential):**\n"
+        desc += "```ini\n"
+        desc += f"D Toughness  :: [0]  -> {cosmetic_base}\n"
+        desc += f"S Toughness  :: [{self.target_tough}] -> {cosmetic_base + self.target_tough}\n\n"
+        desc += f"D Vanity     :: [0]  -> {cosmetic_base}\n"
+        desc += f"Max A Vanity :: [{self.target_vanity}] -> {cosmetic_base + self.target_vanity}\n\n"
+        desc += f"Max Theoretical -> {cosmetic_base + self.target_tough + self.target_vanity}\n"
+        desc += "```"
+
         embed = interaction.message.embeds[0]
         embed.description = desc
         button.disabled = True
         await interaction.response.edit_message(embed=embed, view=self)
 
-
 class QualityPromptView(discord.ui.View):
-    def __init__(self, base_val, current_effort, style_grade, style_val, base_sum, tough_val, vanity_val):
+    def __init__(self, char_name, base_val, true_effort, no_gd_effort):
         super().__init__(timeout=60)
+        self.char_name = char_name
         self.base_val = base_val
-        self.current_effort = current_effort
-        self.style_grade = style_grade
-        self.style_val = style_val
-        self.base_sum = base_sum
-        self.tough_val = tough_val
-        self.vanity_val = vanity_val
+        self.true_effort = true_effort
+        self.no_gd_effort = no_gd_effort
 
     async def generate_result(self, interaction: discord.Interaction, missing_stars: int):
         multiplier = 1.89 ** missing_stars
         mint_base = self.base_val * multiplier
-        mint_effort = s_round(self.current_effort * multiplier)
-        mint_style = self.style_val * multiplier
-        mint_base_sum = self.base_sum * multiplier
+        mint_effort = int(self.no_gd_effort * multiplier)
 
-        target_frame_s = s_round(mint_base * 0.70)
-        target_dye_frame_s = s_round(mint_base * 0.95)
-        target_mystic_s = s_round(mint_base * 1.20)
+        # Using exact community multipliers to match Keqing bot projections
+        dye_delta = int(mint_base * 0.25 + 0.5)
+        frame_delta = int(mint_base * 0.93 + 0.5)
+        dye_frame_delta = int(mint_base * 1.18 + 0.5)
+        mystic_delta = int(mint_base * 1.86 + 0.5)
 
-        def calc_true_gain(target_style):
-            t_s = s_round(target_style)
-            c_s = s_round(mint_style)
-            
-            if t_s <= c_s: 
-                return 0
-            
-            new_wellness = s_round( (mint_base_sum + t_s) * 0.25 )
-            new_effort = s_round(mint_base_sum) + t_s + new_wellness
-            
-            return new_effort - mint_effort
+        target_tough = int(mint_base * 0.48 + 0.5) # Matches Keqing's S Toughness scaling
+        target_vanity = int(mint_base * 0.5 + 0.5) # Max vanity caps at roughly half base
 
-        frame_delta = calc_true_gain(target_frame_s)
-        dye_frame_delta = calc_true_gain(target_dye_frame_s)
-        mystic_delta = calc_true_gain(target_mystic_s)
+        desc = f"🔍 **Identified:**\n"
+        desc += f"**Name:** {self.char_name}\n"
+        desc += f"**Current Effort:** {self.true_effort}\n"
+        
+        # Only show the "No G/D" line if the card actually has grabber/dropper stats applied
+        if self.true_effort != self.no_gd_effort:
+            desc += f"**No G/D Effort:** {self.no_gd_effort} *(Used for calculations)*\n"
+        
+        desc += f"\n🖼️ **Dyes and Frame (At Mint):**\n"
+        desc += "```ini\n"
+        desc += f"Dye              -> {mint_effort + dye_delta} [+ {dye_delta}]\n"
+        desc += f"Frame            -> {mint_effort + frame_delta} [+ {frame_delta}]\n"
+        desc += f"Dye & Frame      -> {mint_effort + dye_frame_delta} [+ {dye_frame_delta}]\n"
+        desc += f"Mystic & Frame   -> {mint_effort + mystic_delta} [+ {mystic_delta}]\n"
+        desc += "```"
 
-        target_tough = max(1, s_round(mint_base * 0.25))
-        target_vanity = int(mint_base // 2)
-
-        ticks = chr(96) * 3
-        desc = f"⟡ **Projected Mint Core:** `{mint_effort} ✧`\n"
-        desc += "━━━━━━━━━━━━━━━━━━━━━━\n"
-
-        if self.style_grade == 'S':
-            desc += "🎨 **Cosmetics Optimization:**\n"
-            desc += f"{ticks}ini\n[ Max Cosmetics Already Applied ]\n{ticks}\n"
-        else:
-            desc += "🎨 **Cosmetics Optimization:**\n"
-            desc += f"{ticks}ini\n"
-            
-            if frame_delta > 0:
-                desc += f"[ Frame Only ]     -> {mint_effort + frame_delta} [+ {frame_delta}]\n"
-            if dye_frame_delta > 0:
-                desc += f"[ Frame & Dye ]    -> {mint_effort + dye_frame_delta} [+ {dye_frame_delta}]\n"
-            if mystic_delta > 0:
-                desc += f"[ Frame & Mystic ] -> {mint_effort + mystic_delta} [+ {mystic_delta}]\n"
-                
-            desc += f"{ticks}\n"
-
-        desc += "*( 💡 Engine Updated: 100% Karuta Accuracy )*"
-
-        embed = discord.Embed(
-            title="[ EFFORT TELEMETRY LOG ]",
-            description=desc,
-            color=0x6b1614
-        )
-        embed.set_footer(text=f"Node: Fang Yuan // Heavenly Court ✦")
-
-        view = EffortResultView(self.base_val, self.current_effort, mint_effort, self.style_grade, self.style_val, frame_delta, dye_frame_delta, mystic_delta, target_tough, target_vanity)
+        embed = discord.Embed(title="Effort Calculator", description=desc, color=0x2b2d31)
+        
+        view = EffortResultView(self.true_effort, self.no_gd_effort, mint_effort, dye_delta, frame_delta, dye_frame_delta, mystic_delta, target_tough, target_vanity)
         await interaction.response.edit_message(embed=embed, view=view)
 
     @discord.ui.button(label="Damaged", style=discord.ButtonStyle.danger)
@@ -178,7 +126,6 @@ class EffortListener(commands.Cog):
             
         raw_text = " ".join(content_parts)
         clean_text = re.sub(r'[*`~_]', ' ', raw_text)
-        clean_text = re.sub(r'[^\x20-\x7E]', ' ', clean_text)
         clean_text = re.sub(r'\s+', ' ', clean_text)
 
         if "base value" not in clean_text.lower(): return
@@ -191,31 +138,41 @@ class EffortListener(commands.Cog):
             self.processed_cache.append(message.id)
             if len(self.processed_cache) > 100: self.processed_cache.pop(0)
 
+            char_name = "Unknown Character"
+            name_match = re.search(r'Character\s+\xb7\s+(.*?)\s+\(', raw_text)
+            if not name_match:
+                name_match = re.search(r'Character\s+·\s+(.*?)\s+\(', raw_text)
+            if name_match:
+                char_name = name_match.group(1).strip()
+
             def parse_stat(stat_name):
                 match = re.search(r'(\d+)\s+\(([SABCDEF])\)\s+' + stat_name, clean_text, re.IGNORECASE)
                 if match: return int(match.group(1)), match.group(2).upper()
                 return 0, "F"
 
-            style_val, style_grade = parse_stat("Style")
             wellness_val, _ = parse_stat("Wellness")
-            tough_val, _ = parse_stat("Toughness")
-            vanity_val, _ = parse_stat("Vanity")
+            grabber_val, _ = parse_stat("Grabber")
+            dropper_val, _ = parse_stat("Dropper")
             
             effort_match = re.search(r'Effort\s+(\d+)', clean_text, re.IGNORECASE)
-            current_effort = int(effort_match.group(1)) if effort_match else base_val
+            visible_effort = int(effort_match.group(1)) if effort_match else base_val
 
-            base_sum = current_effort - style_val - wellness_val
+            is_injured = "injured" in clean_text.lower() and "healthy" not in clean_text.lower()
+            if is_injured:
+                true_effort = (visible_effort * 2) + wellness_val
+            else:
+                true_effort = visible_effort
 
-            prompt_desc = f"To calculate accurate cosmetics, what is the current quality of this card?\n\n"
-            prompt_desc += "*(Select a condition below to generate the telemetry log)*"
+            no_gd_effort = true_effort - grabber_val - dropper_val
 
+            prompt_desc = "Select the card's current quality to calculate effort projections:"
             prompt_embed = discord.Embed(
-                title="[ EFFORT CALIBRATION ]",
+                title="Effort Calibration",
                 description=prompt_desc,
-                color=0x6b1614
+                color=0x2b2d31
             )
 
-            view = QualityPromptView(base_val, current_effort, style_grade, style_val, base_sum, tough_val, vanity_val)
+            view = QualityPromptView(char_name, base_val, true_effort, no_gd_effort)
             await message.reply(embed=prompt_embed, view=view, mention_author=False)
 
         except Exception:
