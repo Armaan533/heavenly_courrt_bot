@@ -13,7 +13,7 @@ E_SERIES  = "<:book_ig:1516683126066253844>"
 E_CARD    = "<:two_flowers:1516684386546880614>"    
 E_TIME    = "<:celestial_hourglass:1516684938509029396>"   
 E_SUCCESS = "✅"    
-E_ERROR   = "❌"    
+E_ERROR   = "❌" 
 
 def parse_time(time_str: str) -> int:
     time_str = time_str.lower().strip()
@@ -38,12 +38,16 @@ class GiveawayEntryView(discord.ui.View):
             
         gaw = data["active"][msg_id]
         user_id = interaction.user.id
+        user_role_ids = [role.id for role in interaction.user.roles]
+
+        req_role_id = gaw.get("required_role_id")
+        if req_role_id and req_role_id not in user_role_ids:
+            return await interaction.response.send_message(f"{E_ERROR} You lack the required qualifications! You need the <@&{req_role_id}> role to enter.", ephemeral=True)
         
         if user_id in gaw["participants"]:
             return await interaction.response.send_message(f"{E_ERROR} You have already entered this giveaway.", ephemeral=True)
             
         entries = 1 
-        user_role_ids = [role.id for role in interaction.user.roles]
         
         if 1504127544801366128 in user_role_ids:
             entries += gaw.get("clan_bonus", 0)
@@ -65,11 +69,13 @@ class ItemSetupModal(discord.ui.Modal, title="Setup Item Giveaway"):
     description = discord.ui.TextInput(label="Description", style=discord.TextStyle.paragraph)
     duration = discord.ui.TextInput(label="Duration (e.g., 10m, 2h, 1d)", placeholder="10m, 2h, 1d")
 
-    def __init__(self, cog, clan_bonus: int, booster_bonus: int):
+    def __init__(self, cog, clan_bonus: int, booster_bonus: int, winners: int, req_role_id: int):
         super().__init__()
         self.cog = cog
         self.clan_bonus = clan_bonus
         self.booster_bonus = booster_bonus
+        self.winners = winners
+        self.req_role_id = req_role_id
 
     async def on_submit(self, interaction: discord.Interaction):
         try:
@@ -84,10 +90,12 @@ class ItemSetupModal(discord.ui.Modal, title="Setup Item Giveaway"):
         desc += f"{E_ITEM} **Item:** {self.item_name.value}\n"
         desc += f"📜 **Description:** {self.description.value}\n\n"
         
-        if self.clan_bonus > 0 or self.booster_bonus > 0:
-            desc += f"{E_SPARKLE} **Bonus Entries:**\n"
-            if self.clan_bonus > 0: desc += f"✦ Clan Members: `+{self.clan_bonus}`\n"
-            if self.booster_bonus > 0: desc += f"✦ Boosters: `+{self.booster_bonus}`\n"
+        if self.clan_bonus > 0 or self.booster_bonus > 0 or self.winners > 1 or self.req_role_id:
+            desc += f"{E_SPARKLE} **Giveaway Details:**\n"
+            if self.winners > 1: desc += f"✦ Winners: `{self.winners}`\n"
+            if self.req_role_id: desc += f"✦ Requirement: <@&{self.req_role_id}>\n"
+            if self.clan_bonus > 0: desc += f"✦ Clan Bonus: `+{self.clan_bonus}` entries\n"
+            if self.booster_bonus > 0: desc += f"✦ Booster Bonus: `+{self.booster_bonus}` entries\n"
             desc += "\n"
             
         desc += "━━━━━━━━━━━━━━━━━━━━━━\n"
@@ -108,7 +116,9 @@ class ItemSetupModal(discord.ui.Modal, title="Setup Item Giveaway"):
             "tickets": [],
             "participants": [],
             "clan_bonus": self.clan_bonus,
-            "booster_bonus": self.booster_bonus
+            "booster_bonus": self.booster_bonus,
+            "winners_count": self.winners,
+            "required_role_id": self.req_role_id
         }
         await save_giveaways_data(data)
 
@@ -118,11 +128,13 @@ class ItemSetupModal(discord.ui.Modal, title="Setup Item Giveaway"):
 class CardConfigModal(discord.ui.Modal, title="Configure Card Giveaway"):
     duration = discord.ui.TextInput(label="Duration (e.g., 10m, 2h, 1d)", placeholder="10m, 2h, 1d")
 
-    def __init__(self, cog, clan_bonus: int, booster_bonus: int):
+    def __init__(self, cog, clan_bonus: int, booster_bonus: int, winners: int, req_role_id: int):
         super().__init__()
         self.cog = cog
         self.clan_bonus = clan_bonus
         self.booster_bonus = booster_bonus
+        self.winners = winners
+        self.req_role_id = req_role_id
 
     async def on_submit(self, interaction: discord.Interaction):
         try:
@@ -131,28 +143,30 @@ class CardConfigModal(discord.ui.Modal, title="Configure Card Giveaway"):
             return await interaction.response.send_message(f"{E_ERROR} Invalid duration.", ephemeral=True)
 
         await interaction.response.send_message(f"{E_SUCCESS} Configuration saved! **{interaction.user.mention}, please run `kci <card_code>` in this channel now.**", ephemeral=False)
-        await self.cog.wait_for_kci(interaction, seconds, self.clan_bonus, self.booster_bonus)
+        await self.cog.wait_for_kci(interaction, seconds, self.clan_bonus, self.booster_bonus, self.winners, self.req_role_id)
 
 class GiveawayTypeSelect(discord.ui.View):
-    def __init__(self, cog, author, clan_bonus, booster_bonus):
+    def __init__(self, cog, author, clan_bonus, booster_bonus, winners, req_role_id):
         super().__init__(timeout=60)
         self.cog = cog
         self.author = author
         self.clan_bonus = clan_bonus
         self.booster_bonus = booster_bonus
+        self.winners = winners
+        self.req_role_id = req_role_id
 
     @discord.ui.button(label="Karuta Card", style=discord.ButtonStyle.primary)
     async def card_choice(self, interaction: discord.Interaction, button: discord.ui.Button):
         if interaction.user.id != self.author.id:
             return await interaction.response.send_message(f"{E_ERROR} This belongs to someone else.", ephemeral=True)
-        await interaction.response.send_modal(CardConfigModal(self.cog, self.clan_bonus, self.booster_bonus))
+        await interaction.response.send_modal(CardConfigModal(self.cog, self.clan_bonus, self.booster_bonus, self.winners, self.req_role_id))
         self.stop()
 
     @discord.ui.button(label="Item", style=discord.ButtonStyle.secondary)
     async def item_choice(self, interaction: discord.Interaction, button: discord.ui.Button):
         if interaction.user.id != self.author.id:
             return await interaction.response.send_message(f"{E_ERROR} This belongs to someone else.", ephemeral=True)
-        await interaction.response.send_modal(ItemSetupModal(self.cog, self.clan_bonus, self.booster_bonus))
+        await interaction.response.send_modal(ItemSetupModal(self.cog, self.clan_bonus, self.booster_bonus, self.winners, self.req_role_id))
         self.stop()
 
 class GiveawayCog(commands.Cog):
@@ -191,6 +205,7 @@ class GiveawayCog(commands.Cog):
             
         gaw_data = data["active"].pop(msg_id_str)
         tickets = gaw_data["tickets"]
+        winners_count = gaw_data.get("winners_count", 1)
         
         data["ended"][msg_id_str] = {"tickets": tickets, "prize": prize_name}
         await save_giveaways_data(data)
@@ -211,13 +226,32 @@ class GiveawayCog(commands.Cog):
             await channel.send(f"The pavilion closes. The giveaway for **{prize_name}** ended with no entries.")
             return
 
-        winner_user = await self.bot.fetch_user(random.choice(tickets))
-        embed.description = f"{E_SPARKLE} *The giveaway has concluded.* {E_SPARKLE}\n━━━━━━━━━━━━━━━━━━━━━━\n{E_CHAR} **Winner:** {winner_user.mention}"
+        winner_ids = []
+        pool = tickets.copy()
+        
+        for _ in range(winners_count):
+            if not pool: 
+                break
+            chosen = random.choice(pool)
+            winner_ids.append(chosen)
+            pool = [t for t in pool if t != chosen]
+
+        winner_mentions = []
+        for wid in winner_ids:
+            try:
+                user = await self.bot.fetch_user(wid)
+                winner_mentions.append(user.mention)
+            except:
+                winner_mentions.append(f"<@{wid}>")
+                
+        winners_str = ", ".join(winner_mentions)
+        
+        embed.description = f"{E_SPARKLE} *The giveaway has concluded.* {E_SPARKLE}\n━━━━━━━━━━━━━━━━━━━━━━\n{E_CHAR} **Winner(s):** {winners_str}"
         await target_msg.edit(embed=embed, view=None)
         
-        await channel.send(f"🎊 The heavens have chosen! {winner_user.mention} has won **{prize_name}**! Open a ticket to claim in <#1509258805777666180>")
+        await channel.send(f"🎊 The heavens have chosen! {winners_str} won **{prize_name}**! Open a ticket to claim in <#1509258805777666180>")
 
-    async def wait_for_kci(self, interaction, seconds, clan_bonus, booster_bonus):
+    async def wait_for_kci(self, interaction, seconds, clan_bonus, booster_bonus, winners, req_role_id):
         channel = interaction.channel
         author = interaction.user
 
@@ -262,10 +296,12 @@ class GiveawayCog(commands.Cog):
         desc += f"{E_CARD} **Card Details:**\n"
         desc += f"> **Code:** `{code}`  |  **Print:** `{print_num}`  |  **Edition:** `{edition}`\n\n"
         
-        if clan_bonus > 0 or booster_bonus > 0:
-            desc += f"{E_SPARKLE} **Bonus Entries:**\n"
-            if clan_bonus > 0: desc += f"✦ Clan Members: `+{clan_bonus}`\n"
-            if booster_bonus > 0: desc += f"✦ Boosters: `+{booster_bonus}`\n"
+        if clan_bonus > 0 or booster_bonus > 0 or winners > 1 or req_role_id:
+            desc += f"{E_SPARKLE} **Giveaway Details:**\n"
+            if winners > 1: desc += f"✦ Winners: `{winners}`\n"
+            if req_role_id: desc += f"✦ Requirement: <@&{req_role_id}>\n"
+            if clan_bonus > 0: desc += f"✦ Clan Bonus: `+{clan_bonus}` entries\n"
+            if booster_bonus > 0: desc += f"✦ Booster Bonus: `+{booster_bonus}` entries\n"
             desc += "\n"
             
         desc += "━━━━━━━━━━━━━━━━━━━━━━\n"
@@ -297,7 +333,9 @@ class GiveawayCog(commands.Cog):
             "tickets": [],
             "participants": [],
             "clan_bonus": clan_bonus,
-            "booster_bonus": booster_bonus
+            "booster_bonus": booster_bonus,
+            "winners_count": winners,
+            "required_role_id": req_role_id
         }
         await save_giveaways_data(data)
 
@@ -313,11 +351,24 @@ class GiveawayCog(commands.Cog):
         self.bot.loop.create_task(delayed_karuta_delete())
 
     @giveaway_group.command(name="start", description="Starts a giveaway")
-    async def start_wizard(self, interaction: discord.Interaction, clan_bonus: int = 0, booster_bonus: int = 0):
+    @app_commands.describe(
+        clan_bonus="Bonus entries for clan members",
+        booster_bonus="Bonus entries for boosters",
+        winners="Number of winners (default 1)",
+        required_role="Specific role required to enter (optional)"
+    )
+    async def start_wizard(self, interaction: discord.Interaction, clan_bonus: int = 0, booster_bonus: int = 0, winners: int = 1, required_role: discord.Role = None):
         EVENT_MANAGER_ROLE_ID = 1508333073668898996
         if not (interaction.user.guild_permissions.administrator or any(role.id == EVENT_MANAGER_ROLE_ID for role in interaction.user.roles)):
             return await interaction.response.send_message(f"{E_ERROR} You do not have permission.", ephemeral=True)
-        await interaction.response.send_message(embed=discord.Embed(title="Giveaway Setup", description="Select the type:", color=0x6b1614), view=GiveawayTypeSelect(self, interaction.user, clan_bonus, booster_bonus), ephemeral=True)
+            
+        req_role_id = required_role.id if required_role else None
+        
+        await interaction.response.send_message(
+            embed=discord.Embed(title="Giveaway Setup", description="Select the type:", color=0x6b1614), 
+            view=GiveawayTypeSelect(self, interaction.user, clan_bonus, booster_bonus, winners, req_role_id), 
+            ephemeral=True
+        )
 
     @giveaway_group.command(name="cancel", description="Cancels an active giveaway")
     async def cancel_giveaway(self, interaction: discord.Interaction, message_id: str):
@@ -364,7 +415,11 @@ class GiveawayCog(commands.Cog):
         await self.determine_winner(int(message_id), gaw["channel_id"], gaw["prize"])
 
     @giveaway_group.command(name="reroll", description="Rerolls a completed giveaway")
-    async def reroll_giveaway(self, interaction: discord.Interaction, message_id: str):
+    @app_commands.describe(
+        message_id="The message ID of the ended giveaway",
+        amount="Number of people to reroll (default 1)"
+    )
+    async def reroll_giveaway(self, interaction: discord.Interaction, message_id: str, amount: int = 1):
         EVENT_MANAGER_ROLE_ID = 1508333073668898996
         if not (interaction.user.guild_permissions.administrator or any(role.id == EVENT_MANAGER_ROLE_ID for role in interaction.user.roles)):
             return await interaction.response.send_message(f"{E_ERROR} You do not have permission.", ephemeral=True)
@@ -379,9 +434,30 @@ class GiveawayCog(commands.Cog):
         if not tickets:
             return await interaction.response.send_message(f"{E_ERROR} No entries.", ephemeral=True)
 
-        winner = await self.bot.fetch_user(random.choice(tickets))
+        winner_ids = []
+        pool = tickets.copy()
+        
+        for _ in range(amount):
+            if not pool: 
+                break
+            chosen = random.choice(pool)
+            winner_ids.append(chosen)
+            pool = [t for t in pool if t != chosen]
+
+        if not winner_ids:
+            return await interaction.response.send_message(f"{E_ERROR} Not enough valid entries to reroll.", ephemeral=True)
+
+        winner_mentions = []
+        for wid in winner_ids:
+            try:
+                user = await self.bot.fetch_user(wid)
+                winner_mentions.append(user.mention)
+            except:
+                winner_mentions.append(f"<@{wid}>")
+
+        winners_str = ", ".join(winner_mentions)
         await interaction.response.send_message(f"{E_SUCCESS} Rerolling...", ephemeral=True)
-        await interaction.channel.send(f"🎊 **REROLL!** The heavens chose {winner.mention} for **{prize}**! Claim in <#1509258805777666180>")
+        await interaction.channel.send(f"🎊 **REROLL!** The heavens chose {winners_str} for **{prize}**! Claim in <#1509258805777666180>")
 
 async def setup(bot):
     await bot.add_cog(GiveawayCog(bot))
