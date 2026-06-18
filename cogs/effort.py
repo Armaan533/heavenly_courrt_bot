@@ -55,20 +55,17 @@ class QualityPromptView(discord.ui.View):
         mint_base = self.base_val * multiplier
         mint_effort = int(self.no_gd_effort * multiplier)
 
-        # Using exact community multipliers to match Keqing bot projections
         dye_delta = int(mint_base * 0.25 + 0.5)
         frame_delta = int(mint_base * 0.93 + 0.5)
         dye_frame_delta = int(mint_base * 1.18 + 0.5)
         mystic_delta = int(mint_base * 1.86 + 0.5)
 
-        target_tough = int(mint_base * 0.48 + 0.5) # Matches Keqing's S Toughness scaling
-        target_vanity = int(mint_base * 0.5 + 0.5) # Max vanity caps at roughly half base
-
+        target_tough = int(mint_base * 0.48 + 0.5) 
+        target_vanity = int(mint_base * 0.5 + 0.5) 
         desc = f"🔍 **Identified:**\n"
         desc += f"**Name:** {self.char_name}\n"
         desc += f"**Current Effort:** {self.true_effort}\n"
         
-        # Only show the "No G/D" line if the card actually has grabber/dropper stats applied
         if self.true_effort != self.no_gd_effort:
             desc += f"**No G/D Effort:** {self.no_gd_effort} *(Used for calculations)*\n"
         

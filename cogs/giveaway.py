@@ -1,177 +1,463 @@
 import discord
 from discord.ext import commands
-import re
+from discord import app_commands
+import asyncio
+import time
+import random
+from utils.database import get_all_giveaways, save_giveaways_data
 
-class EffortResultView(discord.ui.View):
-    def __init__(self, current_effort, no_gd_effort, mint_effort, dye_delta, frame_delta, dye_frame_delta, mystic_delta, target_tough, target_vanity):
-        super().__init__(timeout=300)
-        self.current_effort = current_effort
-        self.no_gd_effort = no_gd_effort
-        self.mint_effort = mint_effort
-        self.dye_delta = dye_delta
-        self.frame_delta = frame_delta
-        self.dye_frame_delta = dye_frame_delta
-        self.mystic_delta = mystic_delta
-        self.target_tough = target_tough
-        self.target_vanity = target_vanity
+E_SPARKLE = "<:eight_side_sparkle:1516681364806570105>"    
+E_ITEM    = "<:red_lotus:1516679367743377448>"   
+E_CHAR    = "<:red_lotus:1516679367743377448>"   
+E_SERIES  = "<:book_ig:1516683126066253844>"    
+E_CARD    = "<:two_flowers:1516684386546880614>"    
+E_TIME    = "<:celestial_hourglass:1516684938509029396>"   
+E_SUCCESS = "✅"    
+E_ERROR   = "❌" 
 
-    @discord.ui.button(label="Advanced Stats", style=discord.ButtonStyle.secondary, emoji="📊")
-    async def advanced_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        cosmetic_base = self.mint_effort + self.mystic_delta
+def parse_time(time_str: str) -> int:
+    time_str = time_str.lower().strip()
+    if time_str.endswith('d'): return int(time_str[:-1]) * 86400
+    if time_str.endswith('h'): return int(time_str[:-1]) * 3600
+    if time_str.endswith('m'): return int(time_str[:-1]) * 60
+    if time_str.endswith('s'): return int(time_str[:-1])
+    if time_str.isdigit(): return int(time_str) * 60 
+    raise ValueError("Invalid format")
+
+class GiveawayEntryView(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=None)
+
+    @discord.ui.button(label="Enter Giveaway", style=discord.ButtonStyle.green, custom_id="claim_gaw_entry")
+    async def enter_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        msg_id = str(interaction.message.id)
+        data = await get_all_giveaways() 
         
-        desc = f"**Projected Mint Effort (No G/D):** `{self.mint_effort}`\n\n"
-        desc += "**Cosmetics Optimization:**\n"
-        desc += "```ini\n"
-        desc += f"Dye              -> {self.mint_effort + self.dye_delta} [+ {self.dye_delta}]\n"
-        desc += f"Frame            -> {self.mint_effort + self.frame_delta} [+ {self.frame_delta}]\n"
-        desc += f"Dye & Frame      -> {self.mint_effort + self.dye_frame_delta} [+ {self.dye_frame_delta}]\n"
-        desc += f"Mystic & Frame   -> {self.mint_effort + self.mystic_delta} [+ {self.mystic_delta}]\n"
-        desc += "```\n"
-        desc += "**S Style + Vanity & Toughness (Max Potential):**\n"
-        desc += "```ini\n"
-        desc += f"D Toughness  :: [0]  -> {cosmetic_base}\n"
-        desc += f"S Toughness  :: [{self.target_tough}] -> {cosmetic_base + self.target_tough}\n\n"
-        desc += f"D Vanity     :: [0]  -> {cosmetic_base}\n"
-        desc += f"Max A Vanity :: [{self.target_vanity}] -> {cosmetic_base + self.target_vanity}\n\n"
-        desc += f"Max Theoretical -> {cosmetic_base + self.target_tough + self.target_vanity}\n"
-        desc += "```"
+        if msg_id not in data["active"]:
+            return await interaction.response.send_message(f"{E_ERROR} This giveaway is no longer active or the artifact has dispersed.", ephemeral=True)
+            
+        gaw = data["active"][msg_id]
+        user_id = interaction.user.id
+        user_role_ids = [role.id for role in interaction.user.roles]
 
-        embed = interaction.message.embeds[0]
-        embed.description = desc
-        button.disabled = True
-        await interaction.response.edit_message(embed=embed, view=self)
+        req_role_id = gaw.get("required_role_id")
+        if req_role_id and req_role_id not in user_role_ids:
+            return await interaction.response.send_message(f"{E_ERROR} You lack the required qualifications! You need the <@&{req_role_id}> role to enter.", ephemeral=True)
+        
+        if user_id in gaw["participants"]:
+            return await interaction.response.send_message(f"{E_ERROR} You have already entered this giveaway.", ephemeral=True)
+            
+        entries = 1 
+        
+        if 1504127544801366128 in user_role_ids:
+            entries += gaw.get("clan_bonus", 0)
+        if 1474356762063667210 in user_role_ids:
+            entries += gaw.get("booster_bonus", 0)
+                
+        gaw["participants"].append(user_id)
+        for _ in range(entries):
+            gaw["tickets"].append(user_id)
+            
+        await save_giveaways_data(data)
+        
+        button.label = f"Enter Giveaway ({len(gaw['participants'])})"
+        await interaction.response.edit_message(view=self)
+        await interaction.followup.send(f"{E_SUCCESS} Successfully entered the giveaway!", ephemeral=True)
 
-class QualityPromptView(discord.ui.View):
-    def __init__(self, char_name, base_val, true_effort, no_gd_effort):
+class ItemSetupModal(discord.ui.Modal, title="Setup Item Giveaway"):
+    item_name = discord.ui.TextInput(label="Item Name")
+    description = discord.ui.TextInput(label="Description", style=discord.TextStyle.paragraph)
+    duration = discord.ui.TextInput(label="Duration (e.g., 10m, 2h, 1d)", placeholder="10m, 2h, 1d")
+
+    def __init__(self, cog, clan_bonus: int, booster_bonus: int, winners: int, req_role_id: int):
+        super().__init__()
+        self.cog = cog
+        self.clan_bonus = clan_bonus
+        self.booster_bonus = booster_bonus
+        self.winners = winners
+        self.req_role_id = req_role_id
+
+    async def on_submit(self, interaction: discord.Interaction):
+        try:
+            seconds = parse_time(self.duration.value)
+        except ValueError:
+            return await interaction.response.send_message(f"{E_ERROR} Invalid duration.", ephemeral=True)
+
+        end_time = int(time.time()) + seconds
+        
+        desc = f"{E_SPARKLE} *An artifact has been offered to the sect.*\n"
+        desc += "━━━━━━━━━━━━━━━━━━━━━━\n"
+        desc += f"{E_ITEM} **Item:** {self.item_name.value}\n"
+        desc += f"📜 **Description:** {self.description.value}\n\n"
+        
+        if self.clan_bonus > 0 or self.booster_bonus > 0 or self.winners > 1 or self.req_role_id:
+            desc += f"{E_SPARKLE} **Giveaway Details:**\n"
+            if self.winners > 1: desc += f"✦ Winners: `{self.winners}`\n"
+            if self.req_role_id: desc += f"✦ Requirement: <@&{self.req_role_id}>\n"
+            if self.clan_bonus > 0: desc += f"✦ Clan Bonus: `+{self.clan_bonus}` entries\n"
+            if self.booster_bonus > 0: desc += f"✦ Booster Bonus: `+{self.booster_bonus}` entries\n"
+            desc += "\n"
+            
+        desc += "━━━━━━━━━━━━━━━━━━━━━━\n"
+        desc += f"{E_TIME} **Ends:** <t:{end_time}:R>"
+        
+        embed = discord.Embed(title="✦ . HEAVENLY COURT GIVEAWAY . ✦", description=desc, color=0x6b1614)
+        embed.set_footer(text=f"Hosted by {interaction.user.display_name}")
+
+        view = GiveawayEntryView()
+        await interaction.response.send_message(f"{E_SUCCESS} Giveaway started!", ephemeral=True)
+        msg = await interaction.channel.send(embed=embed, view=view)
+
+        data = await get_all_giveaways()
+        data["active"][str(msg.id)] = {
+            "channel_id": interaction.channel.id,
+            "prize": self.item_name.value,
+            "end_time": end_time,
+            "tickets": [],
+            "participants": [],
+            "clan_bonus": self.clan_bonus,
+            "booster_bonus": self.booster_bonus,
+            "winners_count": self.winners,
+            "required_role_id": self.req_role_id
+        }
+        await save_giveaways_data(data)
+
+        task = asyncio.create_task(self.cog.manage_giveaway_timer(seconds, msg.id, interaction.channel.id, self.item_name.value))
+        self.cog.active_tasks[msg.id] = task
+
+class CardConfigModal(discord.ui.Modal, title="Configure Card Giveaway"):
+    duration = discord.ui.TextInput(label="Duration (e.g., 10m, 2h, 1d)", placeholder="10m, 2h, 1d")
+
+    def __init__(self, cog, clan_bonus: int, booster_bonus: int, winners: int, req_role_id: int):
+        super().__init__()
+        self.cog = cog
+        self.clan_bonus = clan_bonus
+        self.booster_bonus = booster_bonus
+        self.winners = winners
+        self.req_role_id = req_role_id
+
+    async def on_submit(self, interaction: discord.Interaction):
+        try:
+            seconds = parse_time(self.duration.value)
+        except ValueError:
+            return await interaction.response.send_message(f"{E_ERROR} Invalid duration.", ephemeral=True)
+
+        await interaction.response.send_message(f"{E_SUCCESS} Configuration saved! **{interaction.user.mention}, please run `kci <card_code>` in this channel now.**", ephemeral=False)
+        await self.cog.wait_for_kci(interaction, seconds, self.clan_bonus, self.booster_bonus, self.winners, self.req_role_id)
+
+class GiveawayTypeSelect(discord.ui.View):
+    def __init__(self, cog, author, clan_bonus, booster_bonus, winners, req_role_id):
         super().__init__(timeout=60)
-        self.char_name = char_name
-        self.base_val = base_val
-        self.true_effort = true_effort
-        self.no_gd_effort = no_gd_effort
+        self.cog = cog
+        self.author = author
+        self.clan_bonus = clan_bonus
+        self.booster_bonus = booster_bonus
+        self.winners = winners
+        self.req_role_id = req_role_id
 
-    async def generate_result(self, interaction: discord.Interaction, missing_stars: int):
-        multiplier = 1.89 ** missing_stars
-        mint_base = self.base_val * multiplier
-        mint_effort = int((self.no_gd_effort * multiplier) + 0.5)
+    @discord.ui.button(label="Karuta Card", style=discord.ButtonStyle.primary)
+    async def card_choice(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if interaction.user.id != self.author.id:
+            return await interaction.response.send_message(f"{E_ERROR} This belongs to someone else.", ephemeral=True)
+        await interaction.response.send_modal(CardConfigModal(self.cog, self.clan_bonus, self.booster_bonus, self.winners, self.req_role_id))
+        self.stop()
 
-        # Multipliers math
-        dye_delta = int((mint_base * 0.25) + 0.5)
-        frame_delta = int((mint_base * 0.93) + 0.5)
-        dye_frame_delta = int((mint_base * 1.18) + 0.5)
-        mystic_delta = int((mint_base * 1.86) + 0.5)
+    @discord.ui.button(label="Item", style=discord.ButtonStyle.secondary)
+    async def item_choice(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if interaction.user.id != self.author.id:
+            return await interaction.response.send_message(f"{E_ERROR} This belongs to someone else.", ephemeral=True)
+        await interaction.response.send_modal(ItemSetupModal(self.cog, self.clan_bonus, self.booster_bonus, self.winners, self.req_role_id))
+        self.stop()
 
-        target_tough = int((mint_base * 0.48) + 0.5)
-        target_vanity = int((mint_base * 0.50) + 0.5)
-
-        desc = "🔍 **Identified:**\n"
-        desc += f"**Name:** {self.char_name}\n"
-        desc += f"**Current Effort:** {self.true_effort}\n"
-        
-        if self.true_effort != self.no_gd_effort:
-            desc += f"**No G/D Effort:** {self.no_gd_effort} *(Used for calculations)*\n"
-        
-        desc += "\n🖼️ **Dyes and Frame (At Mint):**\n"
-        desc += "```ini\n"
-        desc += f"Dye              -> {mint_effort + dye_delta} [+ {dye_delta}]\n"
-        desc += f"Frame            -> {mint_effort + frame_delta} [+ {frame_delta}]\n"
-        desc += f"Dye & Frame      -> {mint_effort + dye_frame_delta} [+ {dye_frame_delta}]\n"
-        desc += f"Mystic & Frame   -> {mint_effort + mystic_delta} [+ {mystic_delta}]\n"
-        desc += "```"
-
-        embed = discord.Embed(title="Effort Calculator", description=desc, color=0x2b2d31)
-        
-        view = EffortResultView(self.true_effort, self.no_gd_effort, mint_effort, dye_delta, frame_delta, dye_frame_delta, mystic_delta, target_tough, target_vanity)
-        await interaction.response.edit_message(embed=embed, view=view)
-
-    @discord.ui.button(label="Damaged", style=discord.ButtonStyle.danger)
-    async def btn_damaged(self, i: discord.Interaction, b: discord.ui.Button): await self.generate_result(i, 4) 
-    @discord.ui.button(label="Poor", style=discord.ButtonStyle.secondary)
-    async def btn_poor(self, i: discord.Interaction, b: discord.ui.Button): await self.generate_result(i, 3) 
-    @discord.ui.button(label="Good", style=discord.ButtonStyle.success)
-    async def btn_good(self, i: discord.Interaction, b: discord.ui.Button): await self.generate_result(i, 2) 
-    @discord.ui.button(label="Excellent", style=discord.ButtonStyle.primary)
-    async def btn_excellent(self, i: discord.Interaction, b: discord.ui.Button): await self.generate_result(i, 1) 
-    @discord.ui.button(label="Mint", style=discord.ButtonStyle.primary, emoji="✨")
-    async def btn_mint(self, i: discord.Interaction, b: discord.ui.Button): await self.generate_result(i, 0)
-
-class EffortListener(commands.Cog):
+class GiveawayCog(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
-        self.processed_cache = []
+        self.bot.add_view(GiveawayEntryView()) 
+        self.active_tasks = {}
+        self.bot.loop.create_task(self.resume_giveaways())
+        
+    giveaway_group = app_commands.Group(name="giveaway", description="Manage giveaways")
 
-    @commands.Cog.listener()
-    async def on_message(self, message: discord.Message):
-        await self.process_effort_data(message)
-
-    @commands.Cog.listener()
-    async def on_message_edit(self, before: discord.Message, after: discord.Message):
-        await self.process_effort_data(after)
-
-    async def process_effort_data(self, message: discord.Message):
-        if not message.author.bot or "karuta" not in message.author.name.lower(): return
-        if not message.embeds: return
-        if message.id in self.processed_cache: return
-
-        embed = message.embeds[0]
-        content_parts = []
-        if embed.author and embed.author.name: content_parts.append(embed.author.name)
-        if embed.title: content_parts.append(embed.title)
-        if embed.description: content_parts.append(embed.description)
-        for field in embed.fields:
-            content_parts.append(field.name)
-            content_parts.append(field.value)
+    async def resume_giveaways(self):
+        data = await get_all_giveaways()
+        current_time = int(time.time())
+        
+        for msg_id_str, gaw in list(data["active"].items()):
+            msg_id = int(msg_id_str)
+            seconds_left = gaw["end_time"] - current_time
             
-        raw_text = " ".join(content_parts)
-        clean_text = re.sub(r'[*`~_]', ' ', raw_text)
-        clean_text = re.sub(r'\s+', ' ', clean_text)
+            if seconds_left <= 0:
+                task = asyncio.create_task(self.determine_winner(msg_id, gaw["channel_id"], gaw["prize"]))
+            else:
+                task = asyncio.create_task(self.manage_giveaway_timer(seconds_left, msg_id, gaw["channel_id"], gaw["prize"]))
+            self.active_tasks[msg_id] = task
 
-        if "base value" not in clean_text.lower(): return
+    async def manage_giveaway_timer(self, seconds, message_id, channel_id, prize_name):
+        await asyncio.sleep(seconds)
+        await self.determine_winner(message_id, channel_id, prize_name)
+
+    async def determine_winner(self, message_id, channel_id, prize_name):
+        data = await get_all_giveaways()
+        msg_id_str = str(message_id)
+        
+        if msg_id_str not in data["active"]:
+            return
+            
+        gaw_data = data["active"].pop(msg_id_str)
+        tickets = gaw_data["tickets"]
+        winners_count = gaw_data.get("winners_count", 1)
+        
+        data["ended"][msg_id_str] = {"tickets": tickets, "prize": prize_name}
+        await save_giveaways_data(data)
+        
+        self.active_tasks.pop(message_id, None)
+
+        channel = self.bot.get_channel(channel_id)
+        if not channel: return
 
         try:
-            base_match = re.search(r'(\d+)\s+base\s+value', clean_text, re.IGNORECASE)
-            if not base_match: return
-            base_val = int(base_match.group(1))
+            target_msg = await channel.fetch_message(message_id)
+            embed = target_msg.embeds[0]
+        except: return
+
+        if not tickets:
+            embed.description = f"{E_SPARKLE} *The giveaway has concluded.* {E_SPARKLE}\n━━━━━━━━━━━━━━━━━━━━━━\n{E_CHAR} **Winner:** None"
+            await target_msg.edit(embed=embed, view=None)
+            await channel.send(f"The pavilion closes. The giveaway for **{prize_name}** ended with no entries.")
+            return
+
+        winner_ids = []
+        pool = tickets.copy()
+        
+        for _ in range(winners_count):
+            if not pool: 
+                break
+            chosen = random.choice(pool)
+            winner_ids.append(chosen)
+            pool = [t for t in pool if t != chosen]
+
+        winner_mentions = []
+        for wid in winner_ids:
+            try:
+                user = await self.bot.fetch_user(wid)
+                winner_mentions.append(user.mention)
+            except:
+                winner_mentions.append(f"<@{wid}>")
+                
+        winners_str = ", ".join(winner_mentions)
+        
+        embed.description = f"{E_SPARKLE} *The giveaway has concluded.* {E_SPARKLE}\n━━━━━━━━━━━━━━━━━━━━━━\n{E_CHAR} **Winner(s):** {winners_str}"
+        await target_msg.edit(embed=embed, view=None)
+        
+        await channel.send(f"🎊 The heavens have chosen! {winners_str} won **{prize_name}**! Open a ticket to claim in <#1509258805777666180>")
+
+    async def wait_for_kci(self, interaction, seconds, clan_bonus, booster_bonus, winners, req_role_id):
+        channel = interaction.channel
+        author = interaction.user
+
+        def karuta_check(m):
+            return (m.author.id == 646937666251915264 and m.channel.id == channel.id and len(m.embeds) > 0 and "Card Details" in (m.embeds[0].title or ""))
+
+        try:
+            karuta_msg = await self.bot.wait_for('message', timeout=120.0, check=karuta_check)
+        except asyncio.TimeoutError:
+            return await channel.send(f"{E_ERROR} Setup timed out.")
+
+        embed_data = karuta_msg.embeds[0]
+        lines = [l.strip() for l in (embed_data.description or "").split("\n") if l.strip()]
+        if not lines: return await channel.send(f"{E_ERROR} Could not read card metadata.")
+
+        stats_line = lines[0]
+        for line in lines:
+            if "·" in line and "#" in line: 
+                stats_line = line
+                break
+
+        parts = [p.strip().replace("*", "").replace("`", "") for p in stats_line.split("·") if "★" not in p and "☆" not in p]
+        
+        code = parts[0] if len(parts) > 0 else "Unknown"
+        print_num = parts[1] if len(parts) > 1 else "Unknown"
+        edition = parts[2] if len(parts) > 2 else "Unknown"
+        series = parts[3] if len(parts) > 3 else "Unknown"
+        character_name = parts[-1] if len(parts) > 0 else "Unknown"
+        
+        card_image_url = embed_data.thumbnail.url if embed_data.thumbnail else None
+
+        end_time = int(time.time()) + seconds
+
+        desc = f"{E_SPARKLE} *A new treasure has entered the pavilion.*\n"
+        desc += "━━━━━━━━━━━━━━━━━━━━━━\n"
+        desc += f"{E_CHAR} **Character:** {character_name}\n"
+        if series != "Unknown" and series != character_name:
+            desc += f"{E_SERIES} **Series:** {series}\n\n"
+        else:
+            desc += "\n"
+        
+        desc += f"{E_CARD} **Card Details:**\n"
+        desc += f"> **Code:** `{code}`  |  **Print:** `{print_num}`  |  **Edition:** `{edition}`\n\n"
+        
+        if clan_bonus > 0 or booster_bonus > 0 or winners > 1 or req_role_id:
+            desc += f"{E_SPARKLE} **Giveaway Details:**\n"
+            if winners > 1: desc += f"✦ Winners: `{winners}`\n"
+            if req_role_id: desc += f"✦ Requirement: <@&{req_role_id}>\n"
+            if clan_bonus > 0: desc += f"✦ Clan Bonus: `+{clan_bonus}` entries\n"
+            if booster_bonus > 0: desc += f"✦ Booster Bonus: `+{booster_bonus}` entries\n"
+            desc += "\n"
             
-            self.processed_cache.append(message.id)
-            if len(self.processed_cache) > 100: self.processed_cache.pop(0)
+        desc += "━━━━━━━━━━━━━━━━━━━━━━\n"
+        desc += f"{E_TIME} **Ends:** <t:{end_time}:R>"
 
-            char_name = "Unknown Character"
-            name_match = re.search(r'Character\s+[\xb7\·]\s+(.*?)\s+\(', raw_text)
-            if name_match:
-                char_name = name_match.group(1).strip()
+        giveaway_embed = discord.Embed(title="✦ . HEAVENLY COURT GIVEAWAY . ✦", description=desc, color=0x6b1614)
+        giveaway_embed.set_footer(text=f"Hosted by {author.display_name}")
+        if card_image_url: giveaway_embed.set_thumbnail(url=card_image_url)
 
-            def parse_stat(stat_name):
-                match = re.search(r'(\d+)\s+\(([SABCDEF])\)\s+' + stat_name, clean_text, re.IGNORECASE)
-                if match: return int(match.group(1)), match.group(2).upper()
-                return 0, "F"
+        try:
+            setup_msg = await interaction.original_response()
+            await setup_msg.delete()
+        except: pass
 
-            wellness_val, _ = parse_stat("Wellness")
-            grabber_val, _ = parse_stat("Grabber")
-            dropper_val, _ = parse_stat("Dropper")
+        try:
+            async for hist_msg in channel.history(limit=10):
+                if hist_msg.author.id == author.id and hist_msg.content.lower().startswith("kci"):
+                    await hist_msg.delete()
+                    break
+        except: pass
+
+        msg = await channel.send(embed=giveaway_embed, view=GiveawayEntryView())
+
+        data = await get_all_giveaways()
+        data["active"][str(msg.id)] = {
+            "channel_id": channel.id,
+            "prize": character_name,
+            "end_time": end_time,
+            "tickets": [],
+            "participants": [],
+            "clan_bonus": clan_bonus,
+            "booster_bonus": booster_bonus,
+            "winners_count": winners,
+            "required_role_id": req_role_id
+        }
+        await save_giveaways_data(data)
+
+        task = asyncio.create_task(self.manage_giveaway_timer(seconds, msg.id, channel.id, character_name))
+        self.active_tasks[msg.id] = task
+
+        async def delayed_karuta_delete():
+            await asyncio.sleep(10)
+            try:
+                await karuta_msg.delete()
+            except: pass
+
+        self.bot.loop.create_task(delayed_karuta_delete())
+
+    @giveaway_group.command(name="start", description="Starts a giveaway")
+    @app_commands.describe(
+        clan_bonus="Bonus entries for clan members",
+        booster_bonus="Bonus entries for boosters",
+        winners="Number of winners (default 1)",
+        required_role="Specific role required to enter (optional)"
+    )
+    async def start_wizard(self, interaction: discord.Interaction, clan_bonus: int = 0, booster_bonus: int = 0, winners: int = 1, required_role: discord.Role = None):
+        EVENT_MANAGER_ROLE_ID = 1508333073668898996
+        if not (interaction.user.guild_permissions.administrator or any(role.id == EVENT_MANAGER_ROLE_ID for role in interaction.user.roles)):
+            return await interaction.response.send_message(f"{E_ERROR} You do not have permission.", ephemeral=True)
             
-            effort_match = re.search(r'Effort\s+(\d+)', clean_text, re.IGNORECASE)
-            visible_effort = int(effort_match.group(1)) if effort_match else base_val
+        req_role_id = required_role.id if required_role else None
+        
+        await interaction.response.send_message(
+            embed=discord.Embed(title="Giveaway Setup", description="Select the type:", color=0x6b1614), 
+            view=GiveawayTypeSelect(self, interaction.user, clan_bonus, booster_bonus, winners, req_role_id), 
+            ephemeral=True
+        )
 
-            is_injured = "injured" in clean_text.lower() and "healthy" not in clean_text.lower()
-            if is_injured:
-                true_effort = (visible_effort * 2) + wellness_val
-            else:
-                true_effort = visible_effort
+    @giveaway_group.command(name="cancel", description="Cancels an active giveaway")
+    async def cancel_giveaway(self, interaction: discord.Interaction, message_id: str):
+        EVENT_MANAGER_ROLE_ID = 1508333073668898996
+        if not (interaction.user.guild_permissions.administrator or any(role.id == EVENT_MANAGER_ROLE_ID for role in interaction.user.roles)):
+            return await interaction.response.send_message(f"{E_ERROR} You do not have permission.", ephemeral=True)
 
-            no_gd_effort = true_effort - grabber_val - dropper_val
+        data = await get_all_giveaways()
+        if message_id not in data["active"]:
+            return await interaction.response.send_message(f"{E_ERROR} Giveaway not found.", ephemeral=True)
 
-            prompt_desc = "Select the card's current quality to calculate effort projections:"
-            prompt_embed = discord.Embed(
-                title="Effort Calibration",
-                description=prompt_desc,
-                color=0x2b2d31
-            )
+        gaw = data["active"].pop(message_id)
+        await save_giveaways_data(data)
+        
+        if int(message_id) in self.active_tasks:
+            self.active_tasks[int(message_id)].cancel()
 
-            view = QualityPromptView(char_name, base_val, true_effort, no_gd_effort)
-            await message.reply(embed=prompt_embed, view=view, mention_author=False)
+        channel = self.bot.get_channel(gaw["channel_id"])
+        if channel:
+            try:
+                msg = await channel.fetch_message(int(message_id))
+                embed = msg.embeds[0]
+                embed.description = f"{E_SPARKLE} *The giveaway was cancelled.* {E_SPARKLE}"
+                await msg.edit(embed=embed, view=None)
+            except: pass
 
-        except Exception:
-            pass
+        await interaction.response.send_message(f"{E_SUCCESS} Cancelled.", ephemeral=True)
+
+    @giveaway_group.command(name="end", description="Ends an active giveaway immediately")
+    async def end_giveaway_early(self, interaction: discord.Interaction, message_id: str):
+        EVENT_MANAGER_ROLE_ID = 1508333073668898996
+        if not (interaction.user.guild_permissions.administrator or any(role.id == EVENT_MANAGER_ROLE_ID for role in interaction.user.roles)):
+            return await interaction.response.send_message(f"{E_ERROR} You do not have permission.", ephemeral=True)
+
+        data = await get_all_giveaways()
+        if message_id not in data["active"]:
+            return await interaction.response.send_message(f"{E_ERROR} Giveaway not found.", ephemeral=True)
+
+        gaw = data["active"][message_id]
+        if int(message_id) in self.active_tasks:
+            self.active_tasks[int(message_id)].cancel()
+
+        await interaction.response.send_message("Ending early...", ephemeral=True)
+        await self.determine_winner(int(message_id), gaw["channel_id"], gaw["prize"])
+
+    @giveaway_group.command(name="reroll", description="Rerolls a completed giveaway")
+    @app_commands.describe(
+        message_id="The message ID of the ended giveaway",
+        amount="Number of people to reroll (default 1)"
+    )
+    async def reroll_giveaway(self, interaction: discord.Interaction, message_id: str, amount: int = 1):
+        EVENT_MANAGER_ROLE_ID = 1508333073668898996
+        if not (interaction.user.guild_permissions.administrator or any(role.id == EVENT_MANAGER_ROLE_ID for role in interaction.user.roles)):
+            return await interaction.response.send_message(f"{E_ERROR} You do not have permission.", ephemeral=True)
+
+        data = await get_all_giveaways()
+        if message_id not in data["ended"]:
+            return await interaction.response.send_message(f"{E_ERROR} History not found.", ephemeral=True)
+
+        tickets = data["ended"][message_id]["tickets"]
+        prize = data["ended"][message_id]["prize"]
+
+        if not tickets:
+            return await interaction.response.send_message(f"{E_ERROR} No entries.", ephemeral=True)
+
+        winner_ids = []
+        pool = tickets.copy()
+        
+        for _ in range(amount):
+            if not pool: 
+                break
+            chosen = random.choice(pool)
+            winner_ids.append(chosen)
+            pool = [t for t in pool if t != chosen]
+
+        if not winner_ids:
+            return await interaction.response.send_message(f"{E_ERROR} Not enough valid entries to reroll.", ephemeral=True)
+
+        winner_mentions = []
+        for wid in winner_ids:
+            try:
+                user = await self.bot.fetch_user(wid)
+                winner_mentions.append(user.mention)
+            except:
+                winner_mentions.append(f"<@{wid}>")
+
+        winners_str = ", ".join(winner_mentions)
+        await interaction.response.send_message(f"{E_SUCCESS} Rerolling...", ephemeral=True)
+        await interaction.channel.send(f"🎊 **REROLL!** The heavens chose {winners_str} for **{prize}**! Claim in <#1509258805777666180>")
 
 async def setup(bot):
-    await bot.add_cog(EffortListener(bot))
+    await bot.add_cog(GiveawayCog(bot))
