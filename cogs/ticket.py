@@ -11,6 +11,53 @@ E_TIME    = "<:celestial_hourglass:1516684938509029396>"
 
 ROLES_TO_PING = [1515096544364331128, 1515097042131615775, 1503987120572858511, 1508333073668898996]
 
+
+CUSTOM_LORE = {
+    846366974325424158: {
+        "seal": "The First Supreme Elder, **{name}**, descends upon the will of Heaven itself.\n> Activating the Rank 9 Immortal Gu House **Heaven Overseeing Tower**, they invoke the supreme killer move **Fate Vanquishing Decree**. Under the judgment of fate, this Heavenly Dao connection is forcefully suppressed and sealed.",
+
+        "delete": "{E_TIME} **The First Supreme Elder, {name}, gazes down from atop Heaven Overseeing Tower.**\n> *'That which is not recorded within fate has no right to exist.'*\n> With a single decree, countless fate dao chains descend and erase this isolated realm from the river of history itself. *(Dissipating in 5 seconds...)*"
+    },
+
+    815099553032044576: {
+        "seal": "The Second Supreme Elder, **{name}**, calmly opens their eyes.\n> Countless thoughts collide like stars as the Wisdom Path killer move **Star Thought Deduction** unfolds. Having seen all possible outcomes, they conclude this matter and sever the Heavenly Dao connection.",
+
+        "delete": "{E_TIME} **The Second Supreme Elder, {name}, raises the legendary Immortal Gu, Wisdom Sword.**\n> A sword light flashes across heaven and earth. Before anyone can react, the causal threads sustaining this isolated realm are cleanly severed. *(Dissipating in 5 seconds...)*"
+    },
+
+    1300911596033282048: {
+        "seal": "The Ceremony Elder, **{name}**, smiles gently.\n> *'Meeting is fate. Parting is also fate.'*\n> Summoning the renowned killer move **Farewell Friend Wind**, they send this Heavenly Dao connection drifting peacefully beyond the horizon.",
+
+        "delete": "{E_TIME} **The Ceremony Elder, {name}, watches as a gentle wind rises.**\n> *'This old friend has lingered long enough. Allow me to send you on your final journey.'*\n> The majestic **Farewell Friend Wind** sweeps across the isolated realm, carrying every trace away into the boundless heavens. *(Dissipating in 5 seconds...)*"
+    },
+
+    1239587136978550804: {
+        "seal": "Sect Elder **{name}** sits beneath the stars, unmoving as a mountain.\n> Employing the Wisdom Path killer move **Sitting and Forgetting Dao**, all disturbances are pacified. The petitioner's thoughts settle, and this matter is quietly sealed.",
+
+        "delete": "{E_TIME} **Sect Elder {name} waves a sleeve toward the night sky.**\n> Activating the Star Path killer move **Myriad Star Fireflies**, countless starlights descend like a celestial river and consume this isolated realm. *(Dissipating in 5 seconds...)*"
+    },
+
+    978584340890013748: {
+        "seal": "Sect Elder **{name}** traces a line through the River of Time.\n> Using the Time Path killer move **Time Cutting Edge**, they sever the future possibilities of this matter, bringing the deduction to its destined conclusion.",
+
+        "delete": "{E_TIME} **Sect Elder {name} stands before the turbulent void.**\n> *'The destination has already been decided.'*\n> Activating **Fixed Immortal Travel**, the entire isolated realm vanishes from existence and is transported beyond mortal perception. *(Dissipating in 5 seconds...)*"
+    }
+}
+
+def get_seal_message(user: discord.Member):
+    if user.id in CUSTOM_LORE:
+        lore_text = CUSTOM_LORE[user.id]["seal"].format(name=user.display_name)
+    else:
+        lore_text = f"The cultivator's connection to the Heavenly Dao has been severed by **{user.display_name}**."
+        
+    return f"{E_LOTUS} {lore_text}\n\nElders may review the remnants of this deduction, or use `/ticket delete` to shatter this realm completely."
+
+def get_delete_message(user: discord.Member):
+    if user.id in CUSTOM_LORE:
+        return CUSTOM_LORE[user.id]["delete"].format(name=user.display_name, E_TIME=E_TIME)
+    return f"{E_TIME} **{user.display_name} is severing connection to the Heavenly Dao...**\n> This inspiration will dissipate in 5 seconds."
+
+
 class TicketControls(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
@@ -21,7 +68,8 @@ class TicketControls(discord.ui.View):
             child.disabled = True
         await interaction.response.edit_message(view=self)
         
-        await interaction.channel.send(f"{E_TIME} **Severing connection to the Heavenly Dao...** This inspiration will dissipate in 5 seconds.")
+        msg = get_delete_message(interaction.user)
+        await interaction.channel.send(msg)
         await asyncio.sleep(5)
         await interaction.channel.delete()
 
@@ -64,7 +112,6 @@ class TicketPanel(discord.ui.View):
 
         ping_str = " ".join([f"<@&{r}>" for r in ROLES_TO_PING])
         
-        # Inside the Ticket UI
         desc = f"{E_SPARKLE} **{user.display_name} has connected to the Heavenly Dao.**\n"
         desc += "━━━━━━━━━━━━━━━━━━━━━━\n"
         desc += f"{E_FLOWERS} Please state the nature of your bottleneck or inquiry.\n"
@@ -87,7 +134,6 @@ class TicketCog(commands.Cog):
 
     @ticket_group.command(name="close", description="Seal the connection (Removes the user, keeps channel for Elders)")
     async def close_ticket_cmd(self, interaction: discord.Interaction):
-        """Removes the ticket creator's permissions so they can no longer see or type in the channel."""
         if "inspiration-" not in interaction.channel.name:
             return await interaction.response.send_message("❌ This command can only be used in an Inspiration channel.", ephemeral=True)
         
@@ -98,9 +144,10 @@ class TicketCog(commands.Cog):
                 user_removed = True
                 
         if user_removed:
+            desc = get_seal_message(interaction.user)
             embed = discord.Embed(
                 title="✦ . CONNECTION SEALED . ✦",
-                description=f"{E_LOTUS} The cultivator's connection to the Heavenly Dao has been severed.\n\nElders may review the remnants of this deduction, or use `/ticket delete` to shatter this realm completely.",
+                description=desc,
                 color=0x6b1614
             )
             await interaction.response.send_message(embed=embed)
@@ -109,15 +156,14 @@ class TicketCog(commands.Cog):
 
     @ticket_group.command(name="delete", description="Shatter this isolated realm (Deletes the channel entirely)")
     async def delete_ticket_cmd(self, interaction: discord.Interaction):
-        """Triggers the dramatic 5-second countdown and deletes the channel."""
         if "inspiration-" not in interaction.channel.name:
             return await interaction.response.send_message("❌ This command can only be used in an Inspiration channel.", ephemeral=True)
             
-        await interaction.response.send_message(f"{E_TIME} **Shattering this isolated realm...** This space will collapse in 5 seconds.")
+        msg = get_delete_message(interaction.user)
+        await interaction.response.send_message(msg)
         await asyncio.sleep(5)
         await interaction.channel.delete()
 
-    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
     @commands.command(name="setup_tickets", aliases=["ticketpanel"])
     @commands.has_permissions(administrator=True)
