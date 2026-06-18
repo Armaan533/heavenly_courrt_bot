@@ -11,11 +11,13 @@ E_TIME    = "<:celestial_hourglass:1516684938509029396>"
 
 ROLES_TO_PING = [1515096544364331128, 1515097042131615775, 1503987120572858511, 1508333073668898996]
 
+
 CUSTOM_LORE = {
     # (me) - heavens path 
     846366974325424158: {
-        "seal": "The First Supreme Elder, {name}, descends upon the will of Heaven itself.\n> Activating the Rank 9 Immortal Gu House Heaven Overseeing Tower, they invoke the supreme killer move Fate Vanquishing Decree. Under the judgment of fate, this Heavenly Dao connection is forcefully suppressed and sealed.",
-        "delete": "{E_TIME} The First Supreme Elder, {name}, gazes down from atop Heaven Overseeing Tower.\n> 'That which is not recorded within fate has no right to exist.'\n> With a single decree, countless fate dao chains descend and erase this isolated realm from the river of history itself. (Dissipating in 5 seconds...)"
+        "seal": "The First Supreme Elder, **{name}**, slowly brings their palms together before their chest.\n> Endless sword light gathers between their fingers, causing the surrounding space to fracture and distort.\n> The gathered experts feel their hearts sink as they recognize the legendary sword path killer move **Five Finger Fist Heart Sword**.\n>\n> The first finger rises.\n>\n> Sword intent pierces heaven and earth.\n>\n> Before the second finger can even appear, countless possibilities have already been cut apart.\n>\n> Under the overwhelming might of **Five Finger Fist Heart Sword**, the fate of this Heavenly Dao connection is decided.\n> Resistance is meaningless. This matter is hereby sealed.",
+        "seal": "The First Supreme Elder, **{name}**, clasps their palms before their chest.\n> Endless sword light converges into a single hand.\n> Heaven and earth fall silent.\n>\n> The first finger rises.\n>\n> The gathered experts tremble.\n>\n> The second finger rises.\n>\n> Space itself begins to crack.\n>\n> Before the third finger can even emerge, all outcomes have already been severed.\n>\n> Recognizing the legendary killer move **Five Finger Fist Heart Sword**, none dare oppose it.\n>\n> This Heavenly Dao connection has already been cut from fate.\n> The matter is hereby sealed.",
+        "image": "https://i.pinimg.com/736x/36/a1/25/36a12522ec7b926b3a5ea681e3775324.jpg" 
     },
 
     # armaan - Qi Path
@@ -43,13 +45,16 @@ CUSTOM_LORE = {
     }
 }
 
-def get_seal_message(user: discord.Member):
+def get_seal_data(user: discord.Member):
+    image_url = None
     if user.id in CUSTOM_LORE:
         lore_text = CUSTOM_LORE[user.id]["seal"].format(name=user.display_name)
+        image_url = CUSTOM_LORE[user.id].get("image")
     else:
         lore_text = f"The cultivator's connection to the Heavenly Dao has been severed by **{user.display_name}**."
         
-    return f"{E_LOTUS} {lore_text}\n\nElders may review the remnants of this deduction, or use `/ticket delete` to shatter this realm completely."
+    desc = f"{E_LOTUS} {lore_text}\n\nElders may review the remnants of this deduction, or use `/ticket delete` to shatter this realm completely."
+    return desc, image_url
 
 def get_delete_message(user: discord.Member):
     if user.id in CUSTOM_LORE:
@@ -74,12 +79,16 @@ class TicketControls(discord.ui.View):
                 child.disabled = True
             await interaction.response.edit_message(view=self)
             
-            desc = get_seal_message(interaction.user)
+            desc, image_url = get_seal_data(interaction.user)
             embed = discord.Embed(
                 title="✦ . CONNECTION SEALED . ✦",
                 description=desc,
                 color=0x6b1614
             )
+            
+            if image_url:
+                embed.set_image(url=image_url)
+                
             await interaction.channel.send(embed=embed)
         else:
             await interaction.response.send_message("⚠️ The connection is already sealed. The mortal has already been removed.", ephemeral=True)
@@ -155,12 +164,16 @@ class TicketCog(commands.Cog):
                 user_removed = True
                 
         if user_removed:
-            desc = get_seal_message(interaction.user)
+            desc, image_url = get_seal_data(interaction.user)
             embed = discord.Embed(
                 title="✦ . CONNECTION SEALED . ✦",
                 description=desc,
                 color=0x6b1614
             )
+        
+            if image_url:
+                embed.set_image(url=image_url)
+                
             await interaction.response.send_message(embed=embed)
         else:
             await interaction.response.send_message("⚠️ The connection is already sealed. The mortal has already been removed.", ephemeral=True)
@@ -179,7 +192,6 @@ class TicketCog(commands.Cog):
         await asyncio.sleep(5)
         await interaction.channel.delete()
 
-    # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
     @commands.command(name="setup_tickets", aliases=["ticketpanel"])
     @commands.has_permissions(administrator=True)
