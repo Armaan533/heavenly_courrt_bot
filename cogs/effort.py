@@ -3,24 +3,21 @@ from discord.ext import commands
 import re
 
 class EffortResultView(discord.ui.View):
-    def __init__(self, current_effort, no_gd_effort, mint_effort, dye_delta, frame_delta, dye_frame_delta, mystic_delta, tough_val, vanity_val, mint_base):
+    def __init__(self, current_effort, no_gd_effort, mint_effort, cosmetics_text, mystic_total_effort, tough_val, vanity_val, mint_base):
         super().__init__(timeout=300)
         self.current_effort = current_effort
         self.no_gd_effort = no_gd_effort
         self.mint_effort = mint_effort
-        self.dye_delta = dye_delta
-        self.frame_delta = frame_delta
-        self.dye_frame_delta = dye_frame_delta
-        self.mystic_delta = mystic_delta
+        self.cosmetics_text = cosmetics_text
+        self.mystic_total_effort = mystic_total_effort
         self.tough_val = tough_val
         self.vanity_val = vanity_val
         self.mint_base = mint_base
 
     @discord.ui.button(label="Advanced Stats", style=discord.ButtonStyle.secondary, emoji="📊")
     async def advanced_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        mystic_total_effort = self.mint_effort + self.mystic_delta
-        base_sum = int(mystic_total_effort * 0.8)
-        if base_sum + (base_sum // 4) < mystic_total_effort:
+        base_sum = int(self.mystic_total_effort * 0.8)
+        if base_sum + (base_sum // 4) < self.mystic_total_effort:
             base_sum += 1
             
         clean_sum = base_sum - self.tough_val - self.vanity_val
@@ -50,10 +47,7 @@ class EffortResultView(discord.ui.View):
         desc += "━━━━━━━━━━━━━━━━━━━━━━\n"
         desc += "🎨 **Cosmetics Optimization:**\n"
         desc += f"{ticks}ini\n"
-        desc += f"[ Dye ]            -> {self.mint_effort + self.dye_delta} [+ {self.dye_delta}]\n"
-        desc += f"[ Frame ]          -> {self.mint_effort + self.frame_delta} [+ {self.frame_delta}]\n"
-        desc += f"[ Dye & Frame ]    -> {self.mint_effort + self.dye_frame_delta} [+ {self.dye_frame_delta}]\n"
-        desc += f"[ Mystic & Frame ] -> {self.mint_effort + self.mystic_delta} [+ {self.mystic_delta}]\n"
+        desc += self.cosmetics_text + "\n"
         desc += f"{ticks}\n"
         
         desc += "⚙️ **S-Style + Vanity & Toughness:**\n"
@@ -74,7 +68,7 @@ class EffortResultView(discord.ui.View):
         if self.current_effort != self.no_gd_effort:
             desc += f"*( ⚖️ True Base Core without G/D transfers as {self.no_gd_effort} )*\n\n"
             
-        desc += "( 💡 *Engine Updated: 100% Karuta Accuracy* )"
+        desc += "( 💡 *please report any issues* )"
 
         embed = interaction.message.embeds[0]
         embed.description = desc
@@ -83,39 +77,66 @@ class EffortResultView(discord.ui.View):
 
 
 class QualityPromptView(discord.ui.View):
-    def __init__(self, char_name, base_val, true_effort, no_gd_effort, style_applied, tough_val, vanity_val):
+    def __init__(self, char_name, base_val, true_effort, no_gd_effort, style_val, tough_val, vanity_val):
         super().__init__(timeout=60)
         self.char_name = char_name
         self.base_val = base_val
         self.true_effort = true_effort
         self.no_gd_effort = no_gd_effort
-        self.style_applied = style_applied
+        self.style_val = style_val
         self.tough_val = tough_val
         self.vanity_val = vanity_val
 
     async def generate_result(self, interaction: discord.Interaction, missing_stars: int):
         multiplier = 1.89 ** missing_stars
         mint_base = self.base_val * multiplier
-        mint_effort = int((self.true_effort * multiplier) + 0.5)
+        
+        mint_effort = int((self.no_gd_effort * multiplier) + 0.5)
 
+        mint_style_eff = int((self.style_val * multiplier * 1.25) + 0.5)
+        zero_cosmetic_mint = mint_effort - mint_style_eff
+        
         dye_delta = int((mint_base * 0.25) + 0.5)
         frame_delta = int((mint_base * 0.93) + 0.5)
         dye_frame_delta = int((mint_base * 1.18) + 0.5)
         mystic_delta = int((mint_base * 1.86) + 0.5)
+        
+        mystic_total_effort = zero_cosmetic_mint + mystic_delta
+        
+        cosmetics = []
+        if (zero_cosmetic_mint + dye_delta) > mint_effort:
+            gain = (zero_cosmetic_mint + dye_delta) - mint_effort
+            cosmetics.append(f"[ Dye ]            -> {mint_effort + gain} [+ {gain}]")
+            
+        if (zero_cosmetic_mint + frame_delta) > mint_effort:
+            gain = (zero_cosmetic_mint + frame_delta) - mint_effort
+            cosmetics.append(f"[ Frame ]          -> {mint_effort + gain} [+ {gain}]")
+            
+        if (zero_cosmetic_mint + dye_frame_delta) > mint_effort:
+            gain = (zero_cosmetic_mint + dye_frame_delta) - mint_effort
+            cosmetics.append(f"[ Dye & Frame ]    -> {mint_effort + gain} [+ {gain}]")
+            
+        if (zero_cosmetic_mint + mystic_delta) > mint_effort:
+            gain = (zero_cosmetic_mint + mystic_delta) - mint_effort
+            cosmetics.append(f"[ Mystic & Frame ] -> {mint_effort + gain} [+ {gain}]")
+
+        if not cosmetics:
+            cosmetics_text = "[ Max Cosmetics Already Applied ]"
+        else:
+            cosmetics_text = "\n".join(cosmetics)
 
         ticks = "```"
         desc = f"⟡ **Projected Mint Core:** `{mint_effort} ✧`\n"
         desc += "━━━━━━━━━━━━━━━━━━━━━━\n"
         desc += "🎨 **Cosmetics Optimization:**\n"
         desc += f"{ticks}ini\n"
-        desc += f"[ Dye ]            -> {mint_effort + dye_delta} [+ {dye_delta}]\n"
-        desc += f"[ Frame ]          -> {mint_effort + frame_delta} [+ {frame_delta}]\n"
-        desc += f"[ Dye & Frame ]    -> {mint_effort + dye_frame_delta} [+ {dye_frame_delta}]\n"
-        desc += f"[ Mystic & Frame ] -> {mint_effort + mystic_delta} [+ {mystic_delta}]\n"
+        desc += cosmetics_text + "\n"
         desc += f"{ticks}\n"
         
         if self.true_effort != self.no_gd_effort:
             desc += f"*( ⚖️ True Base Core without G/D transfers as {self.no_gd_effort} )*\n\n"
+            
+        desc += "( 💡 *please report any issues* )"
 
         embed = discord.Embed(
             title="[ EFFORT TELEMETRY LOG ]",
@@ -124,7 +145,7 @@ class QualityPromptView(discord.ui.View):
         )
         embed.set_footer(text=f"Node: Fang Yuan // Heavenly Court ✦")
 
-        view = EffortResultView(self.true_effort, self.no_gd_effort, mint_effort, dye_delta, frame_delta, dye_frame_delta, mystic_delta, self.tough_val, self.vanity_val, mint_base)
+        view = EffortResultView(self.true_effort, self.no_gd_effort, mint_effort, cosmetics_text, mystic_total_effort, self.tough_val, self.vanity_val, mint_base)
         await interaction.response.edit_message(embed=embed, view=view)
 
     @discord.ui.button(label="Damaged", style=discord.ButtonStyle.danger)
@@ -191,16 +212,12 @@ class EffortListener(commands.Cog):
                 if match: return int(match.group(1)), match.group(2).upper()
                 return 0, "F"
 
-            style_val, style_grade = parse_stat("Style")
+            style_val, _ = parse_stat("Style")
             wellness_val, _ = parse_stat("Wellness")
             tough_val, _ = parse_stat("Toughness")
             vanity_val, _ = parse_stat("Vanity")
             grabber_val, _ = parse_stat("Grabber")
             dropper_val, _ = parse_stat("Dropper")
-            
-            style_applied = "None"
-            if style_grade != "F":
-                style_applied = f"Grade {style_grade}"
             
             effort_match = re.search(r'Effort\s+(\d+)', clean_text, re.IGNORECASE)
             visible_effort = int(effort_match.group(1)) if effort_match else base_val
@@ -222,7 +239,7 @@ class EffortListener(commands.Cog):
                 color=0x6b1614
             )
 
-            view = QualityPromptView(char_name, base_val, true_effort, no_gd_effort, style_applied, tough_val, vanity_val)
+            view = QualityPromptView(char_name, base_val, true_effort, no_gd_effort, style_val, tough_val, vanity_val)
             await message.reply(embed=prompt_embed, view=view, mention_author=False)
 
         except Exception:
