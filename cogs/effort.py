@@ -27,7 +27,6 @@ class EffortResultView(discord.ui.View):
         desc += f"Dye & Frame      -> {self.mint_effort + self.dye_frame_delta} [+ {self.dye_frame_delta}]\n"
         desc += f"Mystic & Frame   -> {self.mint_effort + self.mystic_delta} [+ {self.mystic_delta}]\n"
         desc += "```\n"
-        
         desc += "**S Style + Vanity & Toughness (Max Potential):**\n"
         desc += "```ini\n"
         desc += f"D Toughness  :: [0]  -> {cosmetic_base}\n"
@@ -43,39 +42,46 @@ class EffortResultView(discord.ui.View):
         await interaction.response.edit_message(embed=embed, view=self)
 
 class QualityPromptView(discord.ui.View):
-    def __init__(self, char_name, base_val, true_effort, no_gd_effort):
+    def __init__(self, char_name, base_val, true_effort, no_gd_effort, style_applied):
         super().__init__(timeout=60)
         self.char_name = char_name
         self.base_val = base_val
         self.true_effort = true_effort
         self.no_gd_effort = no_gd_effort
+        self.style_applied = style_applied
 
     async def generate_result(self, interaction: discord.Interaction, missing_stars: int):
         multiplier = 1.89 ** missing_stars
         mint_base = self.base_val * multiplier
-        mint_effort = int(self.no_gd_effort * multiplier)
-
-        dye_delta = int(mint_base * 0.25 + 0.5)
-        frame_delta = int(mint_base * 0.93 + 0.5)
-        dye_frame_delta = int(mint_base * 1.18 + 0.5)
-        mystic_delta = int(mint_base * 1.86 + 0.5)
-
-        target_tough = int(mint_base * 0.48 + 0.5) 
-        target_vanity = int(mint_base * 0.5 + 0.5) 
-        desc = f"🔍 **Identified:**\n"
-        desc += f"**Name:** {self.char_name}\n"
-        desc += f"**Current Effort:** {self.true_effort}\n"
         
-        if self.true_effort != self.no_gd_effort:
-            desc += f"**No G/D Effort:** {self.no_gd_effort} *(Used for calculations)*\n"
+        mint_effort = int((self.true_effort * multiplier) + 0.5)
+
+        dye_delta = int((mint_base * 0.25) + 0.5)
+        frame_delta = int((mint_base * 0.93) + 0.5)
+        dye_frame_delta = int((mint_base * 1.18) + 0.5)
+        mystic_delta = int((mint_base * 1.86) + 0.5)
+
+        target_tough = int((mint_base * 0.25) + 0.5)
+        target_vanity = int((mint_base * 0.50) + 0.5)
+
+        star_str = "★" * (4 - missing_stars) + "☆" * missing_stars
+
+        desc = "🔍 **Identified:**\n"
+        desc += f"Name : **{self.char_name}**\n"
+        desc += f"Effort : **{self.true_effort}**\n"
+        desc += f"Style Applied : {self.style_applied}\n"
+        desc += f"Quality : {star_str}\n\n"
         
-        desc += f"\n🖼️ **Dyes and Frame (At Mint):**\n"
+        desc += "🖼️ **Dyes and Frame:**\n"
         desc += "```ini\n"
         desc += f"Dye              -> {mint_effort + dye_delta} [+ {dye_delta}]\n"
         desc += f"Frame            -> {mint_effort + frame_delta} [+ {frame_delta}]\n"
         desc += f"Dye & Frame      -> {mint_effort + dye_frame_delta} [+ {dye_frame_delta}]\n"
         desc += f"Mystic & Frame   -> {mint_effort + mystic_delta} [+ {mystic_delta}]\n"
         desc += "```"
+        
+        if self.true_effort != self.no_gd_effort:
+            desc += f"*(Note: Without Grabber/Dropper, base effort transfers as {self.no_gd_effort})*\n"
 
         embed = discord.Embed(title="Effort Calculator", description=desc, color=0x2b2d31)
         
@@ -92,7 +98,6 @@ class QualityPromptView(discord.ui.View):
     async def btn_excellent(self, i: discord.Interaction, b: discord.ui.Button): await self.generate_result(i, 1) 
     @discord.ui.button(label="Mint", style=discord.ButtonStyle.primary, emoji="✨")
     async def btn_mint(self, i: discord.Interaction, b: discord.ui.Button): await self.generate_result(i, 0)
-
 
 class EffortListener(commands.Cog):
     def __init__(self, bot):
@@ -122,7 +127,9 @@ class EffortListener(commands.Cog):
             content_parts.append(field.value)
             
         raw_text = " ".join(content_parts)
-        clean_text = re.sub(r'[*`~_]', ' ', raw_text)
+        
+        clean_text = raw_text.replace('·', ' ').replace('\xb7', ' ')
+        clean_text = re.sub(r'[*`~_]', ' ', clean_text)
         clean_text = re.sub(r'\s+', ' ', clean_text)
 
         if "base value" not in clean_text.lower(): return
@@ -136,9 +143,7 @@ class EffortListener(commands.Cog):
             if len(self.processed_cache) > 100: self.processed_cache.pop(0)
 
             char_name = "Unknown Character"
-            name_match = re.search(r'Character\s+\xb7\s+(.*?)\s+\(', raw_text)
-            if not name_match:
-                name_match = re.search(r'Character\s+·\s+(.*?)\s+\(', raw_text)
+            name_match = re.search(r'Character\s+[\xb7\·]\s+(.*?)\s+\(', raw_text)
             if name_match:
                 char_name = name_match.group(1).strip()
 
@@ -147,9 +152,14 @@ class EffortListener(commands.Cog):
                 if match: return int(match.group(1)), match.group(2).upper()
                 return 0, "F"
 
+            style_val, style_grade = parse_stat("Style")
             wellness_val, _ = parse_stat("Wellness")
             grabber_val, _ = parse_stat("Grabber")
             dropper_val, _ = parse_stat("Dropper")
+            
+            style_applied = "None"
+            if style_grade != "F":
+                style_applied = f"Grade {style_grade}"
             
             effort_match = re.search(r'Effort\s+(\d+)', clean_text, re.IGNORECASE)
             visible_effort = int(effort_match.group(1)) if effort_match else base_val
@@ -169,7 +179,7 @@ class EffortListener(commands.Cog):
                 color=0x2b2d31
             )
 
-            view = QualityPromptView(char_name, base_val, true_effort, no_gd_effort)
+            view = QualityPromptView(char_name, base_val, true_effort, no_gd_effort, style_applied)
             await message.reply(embed=prompt_embed, view=view, mention_author=False)
 
         except Exception:
