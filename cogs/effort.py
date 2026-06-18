@@ -24,7 +24,7 @@ class EffortResultView(discord.ui.View):
             base_sum += 1
             
         clean_sum = base_sum - self.tough_val - self.vanity_val
-        s
+        
         target_d_tough = int((self.mint_base * 0.05) + 0.5)
         target_s_tough = int((self.mint_base * 0.25) + 0.5)
         target_d_van_max = int((self.mint_base * 0.125) + 0.5)
@@ -66,7 +66,7 @@ class EffortResultView(discord.ui.View):
         desc += f"D Vanity     :: [0-{target_d_van_max}] -> {v_dv_min} - {v_dv_max}\n"
         desc += f"Max A Vanity :: [{target_a_vanity}] -> {v_av}\n\n"
         
-        desc += f"[ Max Possible Effort ]\n"
+        desc += f"[ Max Possible Core ]\n"
         desc += f"D Vanity + S Tough -> {v_max_d_min} - {v_max_d_max}\n"
         desc += f"Max A Vanity + S Tough -> {v_max_a}\n"
         desc += f"{ticks}\n"
