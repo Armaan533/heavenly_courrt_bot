@@ -61,6 +61,7 @@ class Bot(commands.Bot):
         await self.load_extension("cogs.help")
         await self.load_extension("cogs.lentlist")
         await self.load_extension("cogs.ticket")
+        await self.load_extension("cogs.services")
         
         from cogs.colors import ColorView
         self.add_view(ColorView())
