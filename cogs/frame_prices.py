@@ -6,7 +6,7 @@
 
 FRAME_DB = {
     # ✦ Darkness ✦
-    "shadowborn frame": {"market": 70, "liquid cost": 50},
+    "shadowborn frame": {"market": 68, "liquid cost": 45},
     "crimsonbleed frame": {"market": 55, "liquid cost": 40},
     "phantomblade frame": {"market": 45, "liquid cost": 30},
     "voidspawn frame": {"market": 60, "liquid cost": 45},
@@ -15,13 +15,13 @@ FRAME_DB = {
     # ✦ Special ✦
     "maneki neko frame": {"market": 20, "liquid cost": 10},
     "art nouveau frame": {"market": 8, "liquid cost": 5},
-    "circus tent frame": {"market": 5, "liquid cost": 0},
+    "circus tent frame": {"market": 5, "liquid cost": 2},
     "mirrored energy frame": {"market": 275, "liquid cost": 250},
     "hacker frame": {"market": 160, "liquid cost": 160},
     "easel frame": {"market": 110, "liquid cost": 90},
     "spider lily frame": {"market": 75, "liquid cost": 60},
     "chaosborn frame": {"market": 85, "liquid cost": 70},
-    "chrome frame": {"market": 4, "liquid cost": 0},
+    "chrome frame": {"market": 4, "liquid cost": 1},
     "candy land frame": {"market": 3, "liquid cost": 3},
     "illusion frame": {"market": 70, "liquid cost": 60},
     "crystal wings frame": {"market": 165, "liquid cost": 160},
@@ -120,9 +120,9 @@ FRAME_DB = {
     "archon frame": {"market": 70, "liquid cost": 50},
     "blaze frame": {"market": 150, "liquid cost": 50},
     "celestial frame": {"market": 85, "liquid cost": 75},
-    "ethereal grasp frame": {"market": 0, "liquid cost": 0},
+    "ethereal grasp frame": {"market": 45, "liquid cost": 40},
     "demon flame frame": {"market": 48, "liquid cost": 40},
-    "night lotus frame": {"market": 0, "liquid cost": 0},
+    "night lotus frame": {"market": 26, "liquid cost": 20},
     "scarlet astral frame": {"market": 70, "liquid cost": 55},
     "shoji frame": {"market": 185, "liquid cost": 160},
     "stellar frame": {"market": 80, "liquid cost": 40},
