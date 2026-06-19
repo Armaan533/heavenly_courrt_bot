@@ -1,6 +1,7 @@
 import discord
 from discord.ext import commands
 import asyncio
+import traceback
 
 SERVICE_DB = {
     "dyers": {},
@@ -76,7 +77,7 @@ class FeaturedDyeListener(discord.ui.View):
 
 class DyerRegistrationModal(discord.ui.Modal, title="Dye Service Registration"):
     ad_desc = discord.ui.TextInput(
-        label="Service Advertisement (No Nitro elements)",
+        label="Service Advertisement",
         style=discord.TextStyle.paragraph,
         placeholder="E.g. Fast & reliable dyeing! Bulk discounts available...",
         required=True,
@@ -156,6 +157,7 @@ class ServiceSelectionView(discord.ui.View):
         await interaction.response.send_message("Sketcher registration is currently under construction! 🚧", ephemeral=True)
 
 
+
 class ProviderDropdown(discord.ui.Select):
     def __init__(self, category_name, providers, bot):
         self.bot = bot
@@ -164,40 +166,57 @@ class ProviderDropdown(discord.ui.Select):
         for user_id, data in providers.items():
             user = bot.get_user(user_id)
             name = user.display_name if user else f"User {user_id}"
-            options.append(discord.SelectOption(label=name, value=str(user_id), emoji="👤"))
+            options.append(discord.SelectOption(label=name[:99], value=str(user_id), emoji="👤"))
         
         super().__init__(placeholder="Select a service provider...", min_values=1, max_values=1, options=options)
 
     async def callback(self, interaction: discord.Interaction):
-        user_id = int(self.values[0])
-        data = SERVICE_DB[self.category_name][user_id]
-        
-        user = self.bot.get_user(user_id) or await self.bot.fetch_user(user_id)
-        
-        shared_url = "https://discord.com" 
-        
-        main_embed = discord.Embed(
-            title=f"Service Provider: {user.display_name}",
-            url=shared_url, 
-            description=data.get("ad", "No advertisement provided."),
-            color=0x6b1614
-        )
-        main_embed.set_thumbnail(url=user.display_avatar.url)
-        
-        if self.category_name == "dyers":
-            main_embed.add_field(name="🕒 Availability", value=f"`{data.get('timezone', 'N/A')}`", inline=False)
-            main_embed.add_field(name="🧪 Normal Dyes", value=f"`{data.get('normal', '0')}`", inline=True)
-            main_embed.add_field(name="✨ Mystic Dyes", value=f"`{data.get('mystic', '0')}`", inline=True)
-        
-        embeds_to_send = [main_embed]
-        
-        featured_dyes = data.get("featured_dyes", [])
-        for url in featured_dyes:
-            dye_embed = discord.Embed(url=shared_url, color=0x6b1614)
-            dye_embed.set_image(url=url)
-            embeds_to_send.append(dye_embed)
+        try:
+            await interaction.response.defer()
             
-        await interaction.response.edit_message(embeds=embeds_to_send, view=self.view)
+            user_id = int(self.values[0])
+            data = SERVICE_DB[self.category_name].get(user_id, {})
+            
+            user = self.bot.get_user(user_id)
+            if not user:
+                try:
+                    user = await self.bot.fetch_user(user_id)
+                except:
+                    user = None
+                    
+            display_name = user.display_name if user else f"User {user_id}"
+            
+            shared_url = "https://discord.com" 
+            
+            main_embed = discord.Embed(
+                title=f"Service Provider: {display_name}",
+                url=shared_url,
+                description=data.get("ad", "No advertisement provided."),
+                color=0x6b1614
+            )
+            
+            if user and user.display_avatar:
+                main_embed.set_thumbnail(url=user.display_avatar.url)
+            
+            if self.category_name == "dyers":
+                main_embed.add_field(name="🕒 Availability", value=f"`{data.get('timezone', 'N/A')}`", inline=False)
+                main_embed.add_field(name="🧪 Normal Dyes", value=f"`{data.get('normal', '0')}`", inline=True)
+                main_embed.add_field(name="✨ Mystic Dyes", value=f"`{data.get('mystic', '0')}`", inline=True)
+            
+            embeds_to_send = [main_embed]
+            
+            featured_dyes = data.get("featured_dyes", [])
+            for url in featured_dyes:
+                dye_embed = discord.Embed(url=shared_url, color=0x6b1614)
+                dye_embed.set_image(url=url)
+                embeds_to_send.append(dye_embed)
+                
+            await interaction.followup.edit_message(message_id=interaction.message.id, embeds=embeds_to_send, view=self.view)
+            
+        except Exception as e:
+            print(f"Error in ProviderDropdown: {e}")
+            traceback.print_exc()
+            await interaction.followup.send(f"⚠️ An error occurred while loading this profile.", ephemeral=True)
 
 
 class CategorySelect(discord.ui.Select):
@@ -211,30 +230,35 @@ class CategorySelect(discord.ui.Select):
         super().__init__(placeholder="Select a service category...", min_values=1, max_values=1, options=options)
 
     async def callback(self, interaction: discord.Interaction):
-        category = self.values[0]
-        providers = SERVICE_DB.get(category, {})
-        
-        if not providers:
-            embed = discord.Embed(
-                title="[ NO PROVIDERS FOUND ]",
-                description=f"There are currently no active providers in this category.\nWant to be the first? Use `,service add`!",
-                color=0x2b2d31
-            )
-            self.view.clear_items()
-            self.view.add_item(self)
-            return await interaction.response.edit_message(embed=embed, view=self.view)
+        try:
+            category = self.values[0]
+            providers = SERVICE_DB.get(category, {})
             
-        embed = discord.Embed(
-            title="[ SERVICE DIRECTORY ]",
-            description="Select a provider from the dropdown below to view their advertisement, stock, and featured work!",
-            color=0x6b1614
-        )
-        
-        self.view.clear_items()
-        self.view.add_item(self) 
-        self.view.add_item(ProviderDropdown(category, providers, self.bot)) 
-        
-        await interaction.response.edit_message(embed=embed, view=self.view)
+            new_view = discord.ui.View(timeout=120)
+            new_view.add_item(CategorySelect(self.bot))
+            
+            if not providers:
+                embed = discord.Embed(
+                    title="[ NO PROVIDERS FOUND ]",
+                    description=f"There are currently no active providers in this category.\nWant to be the first? Use `,service add`!",
+                    color=0x2b2d31
+                )
+                return await interaction.response.edit_message(embed=embed, view=new_view)
+                
+            embed = discord.Embed(
+                title="[ SERVICE DIRECTORY ]",
+                description="Select a provider from the dropdown below to view their advertisement, stock, and featured work!",
+                color=0x6b1614
+            )
+            
+            new_view.add_item(ProviderDropdown(category, providers, self.bot))
+            await interaction.response.edit_message(embed=embed, view=new_view)
+            
+        except Exception as e:
+            print(f"Error in CategorySelect: {e}")
+            traceback.print_exc()
+            if not interaction.response.is_done():
+                await interaction.response.send_message(f"⚠️ Failed to load category: {e}", ephemeral=True)
 
 
 class ServiceListView(discord.ui.View):
