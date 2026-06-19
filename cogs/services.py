@@ -2,12 +2,33 @@ import discord
 from discord.ext import commands
 import asyncio
 import traceback
+import json
+import os
 
-SERVICE_DB = {
-    "dyers": {},
-    "frame_testers": {},
-    "sketchers": {}
-}
+DATA_FILE = "services.json"
+
+def load_data():
+    if os.path.exists(DATA_FILE):
+        try:
+            with open(DATA_FILE, "r") as f:
+                raw_data = json.load(f)
+                return {
+                    "dyers": {int(k): v for k, v in raw_data.get("dyers", {}).items()},
+                    "frame_testers": {int(k): v for k, v in raw_data.get("frame_testers", {}).items()},
+                    "sketchers": {int(k): v for k, v in raw_data.get("sketchers", {}).items()}
+                }
+        except Exception as e:
+            print(f"Error loading {DATA_FILE}: {e}")
+    return {"dyers": {}, "frame_testers": {}, "sketchers": {}}
+
+def save_data():
+    try:
+        with open(DATA_FILE, "w") as f:
+            json.dump(SERVICE_DB, f, indent=4)
+    except Exception as e:
+        print(f"Error saving data to disk: {e}")
+
+SERVICE_DB = load_data()
 
 class FeaturedDyeListener(discord.ui.View):
     def __init__(self, user, bot, ctx):
@@ -54,6 +75,9 @@ class FeaturedDyeListener(discord.ui.View):
                     
                 SERVICE_DB["dyers"][self.user.id]["featured_dyes"].append(dye_url)
                 self.dyes_collected += 1
+                
+                # Permanently commit dye URL to disk
+                save_data()
                 
                 status_msg = f"✨ Successfully extracted and saved Featured Dye **{self.dyes_collected}/{self.max_dyes}**!"
                 if self.dyes_collected >= self.max_dyes:
@@ -121,6 +145,9 @@ class DyerRegistrationModal(discord.ui.Modal, title="Dye Service Registration"):
             "mystic": self.mystic_dyes.value,
             "featured_dyes": []
         }
+        
+        # Permanently commit primary profile text info to disk
+        save_data()
 
         desc = "Your primary information has been recorded!\n\n"
         desc += "**Would you like to add Featured Dyes?**\n"
@@ -157,7 +184,6 @@ class ServiceSelectionView(discord.ui.View):
         await interaction.response.send_message("Sketcher registration is currently under construction! 🚧", ephemeral=True)
 
 
-
 class ProviderDropdown(discord.ui.Select):
     def __init__(self, category_name, providers, bot):
         self.bot = bot
@@ -185,7 +211,6 @@ class ProviderDropdown(discord.ui.Select):
                     user = None
                     
             display_name = user.display_name if user else f"User {user_id}"
-            
             shared_url = "https://discord.com" 
             
             main_embed = discord.Embed(
