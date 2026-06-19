@@ -453,7 +453,7 @@ class ProviderProfileView(discord.ui.View):
         
         if len(chunk) > 0 and len(chunk) < 4:
             while len(chunk) < 4:
-                chunk.append(PLACEHOLDER_IMG)
+                chunk.append("https://i.pinimg.com/736x/17/e1/37/17e1373e9b32ebbb79b8eb7e17a55f53.jpg")
         
         for url in chunk:
             img_embed = discord.Embed(url=shared_url, color=0x6b1614)
