@@ -1,4 +1,5 @@
 import discord
+from discord import app_commands
 from discord.ext import commands
 import asyncio
 import traceback
@@ -32,11 +33,11 @@ def save_data():
 SERVICE_DB = load_data()
 
 class FeaturedDyeListener(discord.ui.View):
-    def __init__(self, user, bot, ctx):
+    def __init__(self, user, bot, channel):
         super().__init__(timeout=300)
         self.user = user
         self.bot = bot
-        self.ctx = ctx
+        self.channel = channel
         self.dyes_collected = 0
         self.max_dyes = 4
         self.listening = True
@@ -57,7 +58,7 @@ class FeaturedDyeListener(discord.ui.View):
 
         def check(m):
             return (
-                m.channel == self.ctx.channel and 
+                m.channel == self.channel and 
                 m.author.bot and "karuta" in m.author.name.lower() and 
                 m.embeds and "Dye Details" in str(m.embeds[0].title) and 
                 str(self.user.id) in str(m.embeds[0].description)
@@ -85,13 +86,13 @@ class FeaturedDyeListener(discord.ui.View):
                 else:
                     status_msg += "\nRun another `kv <dye code>` to add more, or click Finish."
                 
-                await self.ctx.send(status_msg)
+                await self.channel.send(status_msg)
                 if self.listening: 
                     await self.listen_for_dyes(message)
                     
         except asyncio.TimeoutError:
             self.listening = False
-            await self.ctx.send("⏱️ Dye listening timed out. Registration closed.")
+            await self.channel.send("⏱️ Dye listening timed out. Registration closed.")
 
 class DyerRegistrationModal(discord.ui.Modal, title="Dye Service Registration"):
     ad_desc = discord.ui.TextInput(label="Service Advertisement", style=discord.TextStyle.paragraph, max_length=1000)
@@ -100,9 +101,8 @@ class DyerRegistrationModal(discord.ui.Modal, title="Dye Service Registration"):
     mystic_dyes = discord.ui.TextInput(label="Mystic Dyes in Stock", style=discord.TextStyle.short, max_length=10)
     pricing = discord.ui.TextInput(label="Pricing Options", style=discord.TextStyle.paragraph, placeholder="E.g. Normal: 1 tix, Mystic: 10 tix", max_length=300)
 
-    def __init__(self, ctx, bot):
+    def __init__(self, bot):
         super().__init__()
-        self.ctx = ctx
         self.bot = bot
 
     async def on_submit(self, interaction: discord.Interaction):
@@ -117,16 +117,16 @@ class DyerRegistrationModal(discord.ui.Modal, title="Dye Service Registration"):
         save_data()
         desc = "Your primary information has been recorded!\n\n**Want to add Featured Dyes?**\nType `kv <dye code>` here to automatically add the image to your profile! *(Max 4)*\n*(Click Finish if you are done)*"
         embed = discord.Embed(title="[ DYER PROFILE INITIALIZED ]", description=desc, color=0x6b1614)
-        view = FeaturedDyeListener(interaction.user, self.bot, self.ctx)
+        view = FeaturedDyeListener(interaction.user, self.bot, interaction.channel)
         await interaction.response.send_message(embed=embed, view=view)
         self.bot.loop.create_task(view.listen_for_dyes(await interaction.original_response()))
 
 class PortfolioListener(discord.ui.View):
-    def __init__(self, user, bot, ctx):
+    def __init__(self, user, bot, channel):
         super().__init__(timeout=300)
         self.user = user
         self.bot = bot
-        self.ctx = ctx
+        self.channel = channel
         self.images_collected = 0
         self.max_images = 4
         self.listening = True
@@ -146,7 +146,7 @@ class PortfolioListener(discord.ui.View):
             return
 
         def check(m):
-            return m.author == self.user and m.channel == self.ctx.channel
+            return m.author == self.user and m.channel == self.channel
 
         try:
             user_msg = await self.bot.wait_for('message', check=check, timeout=120.0)
@@ -170,23 +170,22 @@ class PortfolioListener(discord.ui.View):
                 else:
                     status_msg += "\nPaste another link, or click Finish."
                 
-                await self.ctx.send(status_msg)
+                await self.channel.send(status_msg)
             
             if self.listening: 
                 await self.listen_for_links(message)
                     
         except asyncio.TimeoutError:
             self.listening = False
-            await self.ctx.send("⏱️ Listening timed out. Registration closed.")
+            await self.channel.send("⏱️ Listening timed out. Registration closed.")
 
 class SketcherRegistrationModal(discord.ui.Modal, title="Sketcher Registration"):
     ad_desc = discord.ui.TextInput(label="Service Advertisement", style=discord.TextStyle.paragraph, max_length=1000)
     timezone = discord.ui.TextInput(label="Available Time & Timezone", style=discord.TextStyle.short, max_length=100)
     pricing = discord.ui.TextInput(label="Pricing Options", style=discord.TextStyle.paragraph, placeholder="E.g. Full body: 50 tix, Headshot: 20 tix", max_length=300)
 
-    def __init__(self, ctx, bot):
+    def __init__(self, bot):
         super().__init__()
-        self.ctx = ctx
         self.bot = bot
 
     async def on_submit(self, interaction: discord.Interaction):
@@ -199,7 +198,7 @@ class SketcherRegistrationModal(discord.ui.Modal, title="Sketcher Registration")
         save_data()
         desc = "Your primary information has been recorded!\n\n**Let's build your Portfolio!**\nPlease paste image links (Imgur, Pinterest, etc.) in this channel one by one. *(Max 4)*\n*(Click Finish if you are done)*"
         embed = discord.Embed(title="[ SKETCHER PROFILE INITIALIZED ]", description=desc, color=0x6b1614)
-        view = PortfolioListener(interaction.user, self.bot, self.ctx)
+        view = PortfolioListener(interaction.user, self.bot, interaction.channel)
         await interaction.response.send_message(embed=embed, view=view)
         self.bot.loop.create_task(view.listen_for_links(await interaction.original_response()))
 
@@ -208,9 +207,8 @@ class FrameRegistrationModal(discord.ui.Modal, title="Frame Tester Registration"
     timezone = discord.ui.TextInput(label="Available Time & Timezone", style=discord.TextStyle.short, max_length=100)
     pricing = discord.ui.TextInput(label="Pricing Options", style=discord.TextStyle.paragraph, placeholder="E.g. 1 ticket per 3 frame tests", max_length=300)
 
-    def __init__(self, ctx, bot):
+    def __init__(self, bot):
         super().__init__()
-        self.ctx = ctx
         self.bot = bot
 
     async def on_submit(self, interaction: discord.Interaction):
@@ -223,30 +221,30 @@ class FrameRegistrationModal(discord.ui.Modal, title="Frame Tester Registration"
         await interaction.response.send_message("✅ **Frame Tester profile successfully registered!**", ephemeral=True)
 
 class ServiceSelectionView(discord.ui.View):
-    def __init__(self, ctx, bot):
+    def __init__(self, user, bot):
         super().__init__(timeout=60)
-        self.ctx = ctx
+        self.user = user
         self.bot = bot
 
     @discord.ui.button(label="Dye Job", style=discord.ButtonStyle.primary, emoji="🧪")
     async def btn_dyer(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if interaction.user != self.ctx.author: 
+        if interaction.user != self.user: 
             return await interaction.response.send_message("Not your menu!", ephemeral=True)
-        await interaction.response.send_modal(DyerRegistrationModal(self.ctx, self.bot))
+        await interaction.response.send_modal(DyerRegistrationModal(self.bot))
         self.stop()
 
     @discord.ui.button(label="Frame Tester", style=discord.ButtonStyle.secondary, emoji="🖼️")
     async def btn_framer(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if interaction.user != self.ctx.author: 
+        if interaction.user != self.user: 
             return await interaction.response.send_message("Not your menu!", ephemeral=True)
-        await interaction.response.send_modal(FrameRegistrationModal(self.ctx, self.bot))
+        await interaction.response.send_modal(FrameRegistrationModal(self.bot))
         self.stop()
 
     @discord.ui.button(label="Sketcher", style=discord.ButtonStyle.secondary, emoji="🖌️")
     async def btn_sketcher(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if interaction.user != self.ctx.author: 
+        if interaction.user != self.user: 
             return await interaction.response.send_message("Not your menu!", ephemeral=True)
-        await interaction.response.send_modal(SketcherRegistrationModal(self.ctx, self.bot))
+        await interaction.response.send_modal(SketcherRegistrationModal(self.bot))
         self.stop()
 
 class ProviderView(discord.ui.View):
@@ -338,7 +336,7 @@ class CategoryView(discord.ui.View):
             if not providers:
                 embed = discord.Embed(
                     title="[ NO PROVIDERS FOUND ]",
-                    description=f"There are currently no active providers in this category.\nWant to be the first? Use `,service add`!",
+                    description=f"There are currently no active providers in this category.\nWant to be the first? Use `/services add`!",
                     color=0x2b2d31
                 )
                 return await interaction.response.edit_message(embed=embed, view=self)
@@ -366,27 +364,39 @@ class ServicesCog(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
-    @commands.group(invoke_without_command=True, aliases=["service"])
-    async def services(self, ctx):
-        await ctx.send("Use `,service add` to register as a provider, or `,service list` to view them!")
+    services = app_commands.Group(name="services", description="Service directory management")
 
-    @services.command(name="add")
-    async def service_add(self, ctx):
+    @services.command(name="add", description="Register as a service provider")
+    async def service_add(self, interaction: discord.Interaction):
         embed = discord.Embed(
             title="[ SERVICE REGISTRATION ]",
             description="What kind of service are you providing to the Heavenly Court?\n*(Select an option below to open your registration form)*",
             color=0x6b1614
         )
-        await ctx.send(embed=embed, view=ServiceSelectionView(ctx, self.bot))
+        await interaction.response.send_message(embed=embed, view=ServiceSelectionView(interaction.user, self.bot))
 
-    @services.command(name="list")
-    async def service_list(self, ctx):
+    @services.command(name="list", description="Browse active service providers")
+    async def service_list(self, interaction: discord.Interaction):
         embed = discord.Embed(
             title="[ HEAVENLY COURT SERVICES ]",
             description="Welcome to the Service Directory! Please select a category below to browse our providers.",
             color=0x6b1614
         )
-        await ctx.send(embed=embed, view=CategoryView(self.bot))
+        await interaction.response.send_message(embed=embed, view=CategoryView(self.bot))
+
+    @services.command(name="delete", description="Delete your registered service profile")
+    async def service_delete(self, interaction: discord.Interaction):
+        user_id = interaction.user.id
+        removed = False
+        for cat in ["dyers", "frame_testers", "sketchers"]:
+            if user_id in SERVICE_DB[cat]:
+                del SERVICE_DB[cat][user_id]
+                removed = True
+        if removed:
+            save_data()
+            await interaction.response.send_message("✅ Your service profile has been deleted.", ephemeral=True)
+        else:
+            await interaction.response.send_message("❌ You do not have a registered profile.", ephemeral=True)
 
 async def setup(bot):
     await bot.add_cog(ServicesCog(bot))
