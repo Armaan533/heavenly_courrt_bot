@@ -50,7 +50,7 @@ class FeaturedDyeListener(discord.ui.View):
         self.listening = False
         for child in self.children: 
             child.disabled = True
-        await interaction.response.edit_message(content=f"✅ Registration complete! You saved {self.dyes_collected} featured dyes.", view=self)
+        await interaction.response.edit_message(content=f"<:eight_side_sparkle:1516681364806570105> Registration complete! You saved {self.dyes_collected} featured dyes.", view=self)
         self.stop()
 
     async def listen_for_dyes(self, message: discord.Message):
@@ -78,7 +78,7 @@ class FeaturedDyeListener(discord.ui.View):
                 self.dyes_collected += 1
                 save_data()
                 
-                status_msg = f"✨ Successfully extracted and saved Featured Dye **{self.dyes_collected}/{self.max_dyes}**!"
+                status_msg = f"<:eight_side_sparkle:1516681364806570105> Successfully extracted and saved Featured Dye **{self.dyes_collected}/{self.max_dyes}**!"
                 if self.dyes_collected >= self.max_dyes:
                     self.listening = False
                     status_msg += "\n\nMaximum dyes reached. Registration complete! ✅"
@@ -117,7 +117,7 @@ class DyerRegistrationModal(discord.ui.Modal, title="Dye Service Registration"):
         }
         save_data()
         desc = "Your primary information has been recorded!\n\n**Want to add Featured Dyes?**\nType `kv <dye code>` here to automatically add the image to your profile! *(Max 12)*\n*(Click Finish if you are done)*"
-        embed = discord.Embed(title="[ DYER PROFILE INITIALIZED ]", description=desc, color=0x6b1614)
+        embed = discord.Embed(title="<:eight_side_sparkle:1516681364806570105> [ DYER PROFILE INITIALIZED ] <:eight_side_sparkle:1516681364806570105>", description=desc, color=0x6b1614)
         view = FeaturedDyeListener(interaction.user, self.bot, interaction.channel)
         await interaction.response.send_message(embed=embed, view=view)
         self.bot.loop.create_task(view.listen_for_dyes(await interaction.original_response()))
@@ -139,7 +139,7 @@ class PortfolioListener(discord.ui.View):
         self.listening = False
         for child in self.children: 
             child.disabled = True
-        await interaction.response.edit_message(content=f"✅ Registration complete! You saved {self.images_collected} portfolio images.", view=self)
+        await interaction.response.edit_message(content=f"<:book_ig:1516683126066253844> Registration complete! You saved {self.images_collected} portfolio images.", view=self)
         self.stop()
 
     async def listen_for_links(self, message: discord.Message):
@@ -162,7 +162,7 @@ class PortfolioListener(discord.ui.View):
                 self.images_collected += 1
                 save_data()
                 
-                status_msg = f"🖌️ Successfully added image link **{self.images_collected}/{self.max_images}**!"
+                status_msg = f"<:book_ig:1516683126066253844> Successfully added image link **{self.images_collected}/{self.max_images}**!"
                 if self.images_collected >= self.max_images:
                     self.listening = False
                     status_msg += "\n\nMaximum portfolio slots reached! ✅"
@@ -198,7 +198,7 @@ class SketcherRegistrationModal(discord.ui.Modal, title="Sketcher Registration")
         }
         save_data()
         desc = "Your primary information has been recorded!\n\n**Let's build your Portfolio!**\nPlease paste image links (Imgur, Pinterest, etc.) in this channel one by one. *(Max 12)*\n*(Click Finish if you are done)*"
-        embed = discord.Embed(title="[ SKETCHER PROFILE INITIALIZED ]", description=desc, color=0x6b1614)
+        embed = discord.Embed(title="<:book_ig:1516683126066253844> [ SKETCHER PROFILE INITIALIZED ] <:book_ig:1516683126066253844>", description=desc, color=0x6b1614)
         view = PortfolioListener(interaction.user, self.bot, interaction.channel)
         await interaction.response.send_message(embed=embed, view=view)
         self.bot.loop.create_task(view.listen_for_links(await interaction.original_response()))
@@ -219,7 +219,7 @@ class FrameRegistrationModal(discord.ui.Modal, title="Frame Tester Registration"
             "pricing": self.pricing.value,
         }
         save_data()
-        await interaction.response.send_message("✅ **Frame Tester profile successfully registered!**", ephemeral=True)
+        await interaction.response.send_message("<:emoji_for_oddny:1517225564023554219> **Frame Tester profile successfully registered!**", ephemeral=True)
 
 class ServiceSelectionView(discord.ui.View):
     def __init__(self, user, bot):
@@ -281,7 +281,7 @@ class ProviderProfileView(discord.ui.View):
         shared_url = "https://discord.com" 
         
         main_embed = discord.Embed(
-            title=f"Service Provider: {display_name}",
+            title=f"<:red_lotus:1516679367743377448> Service Provider: {display_name}",
             url=shared_url,
             description=data.get("ad", "No advertisement provided."),
             color=0x6b1614
@@ -289,13 +289,13 @@ class ProviderProfileView(discord.ui.View):
         if user and user.display_avatar:
             main_embed.set_thumbnail(url=user.display_avatar.url)
         
-        main_embed.add_field(name="🕒 Availability", value=f"`{data.get('timezone', 'N/A')}`", inline=False)
+        main_embed.add_field(name="<:for_john:1517226175901208696> Availability", value=f"`{data.get('timezone', 'N/A')}`", inline=False)
         
         if self.category_name == "dyers":
-            main_embed.add_field(name="🧪 Normal Dyes", value=f"`{data.get('normal', '0')}`", inline=True)
-            main_embed.add_field(name="✨ Mystic Dyes", value=f"`{data.get('mystic', '0')}`", inline=True)
+            main_embed.add_field(name="<:for_booster:1517226639438778503> Normal Dyes", value=f"`{data.get('normal', '0')}`", inline=True)
+            main_embed.add_field(name="<:eight_side_sparkle:1516681364806570105> Mystic Dyes", value=f"`{data.get('mystic', '0')}`", inline=True)
             
-        main_embed.add_field(name="💰 Pricing", value=f"```\n{data.get('pricing', 'N/A')}\n```", inline=False)
+        main_embed.add_field(name="<:two_flowers:1516684386546880614> Pricing", value=f"```\n{data.get('pricing', 'N/A')}\n```", inline=False)
         
         if self.max_pages > 1:
             main_embed.set_footer(text=f"Gallery Page {self.page + 1} of {self.max_pages}")
@@ -325,14 +325,14 @@ class ProviderProfileView(discord.ui.View):
         await interaction.response.edit_message(embeds=embeds, view=new_view)
 
     async def go_back(self, interaction: discord.Interaction):
-        desc = "Select a provider from the dropdown below to view their profile and pricing!\n\n**Available Providers:**\n"
+        desc = "Select a provider from the dropdown below to view their profile and pricing!\n\n**<:eight_side_sparkle:1516681364806570105> Available Providers:**\n"
         for uid in self.providers:
             u = self.bot.get_user(uid)
             n = u.display_name if u else f"User {uid}"
             desc += f"• **{n}**\n"
             
         embed = discord.Embed(
-            title=f"[ {self.category_name.replace('_', ' ').upper()} DIRECTORY ]",
+            title=f"<:two_flowers:1516684386546880614> [ {self.category_name.replace('_', ' ').upper()} DIRECTORY ] <:two_flowers:1516684386546880614>",
             description=desc,
             color=0x6b1614
         )
@@ -375,7 +375,7 @@ class ProviderSelectionView(discord.ui.View):
 
     async def back_btn(self, interaction: discord.Interaction):
         embed = discord.Embed(
-            title="[ HEAVENLY COURT SERVICES ]",
+            title="<:red_lotus:1516679367743377448> [ HEAVENLY COURT SERVICES ] <:red_lotus:1516679367743377448>",
             description="Welcome to the Service Directory! Please select a category below to browse our providers.",
             color=0x6b1614
         )
@@ -402,7 +402,7 @@ class CategoryView(discord.ui.View):
             
             if not providers:
                 embed = discord.Embed(
-                    title="[ NO PROVIDERS FOUND ]",
+                    title="<:eight_side_sparkle:1516681364806570105> [ NO PROVIDERS FOUND ] <:eight_side_sparkle:1516681364806570105>",
                     description=f"There are currently no active providers in this category.\nWant to be the first? Use `/services add`!",
                     color=0x2b2d31
                 )
@@ -410,14 +410,14 @@ class CategoryView(discord.ui.View):
                 new_view.add_item(CategoryView(self.bot).select)
                 return await interaction.response.edit_message(embed=embed, view=new_view)
                 
-            desc = "Select a provider from the dropdown below to view their profile and pricing!\n\n**Available Providers:**\n"
+            desc = "Select a provider from the dropdown below to view their profile and pricing!\n\n**<:eight_side_sparkle:1516681364806570105> Available Providers:**\n"
             for user_id in providers:
                 user = self.bot.get_user(user_id)
                 name = user.display_name if user else f"User {user_id}"
                 desc += f"• **{name}**\n"
                 
             embed = discord.Embed(
-                title=f"[ {category.replace('_', ' ').upper()} DIRECTORY ]",
+                title=f"<:two_flowers:1516684386546880614> [ {category.replace('_', ' ').upper()} DIRECTORY ] <:two_flowers:1516684386546880614>",
                 description=desc,
                 color=0x6b1614
             )
@@ -438,7 +438,7 @@ class ServicesCog(commands.Cog):
     @services.command(name="add", description="Register as a service provider")
     async def service_add(self, interaction: discord.Interaction):
         embed = discord.Embed(
-            title="[ SERVICE REGISTRATION ]",
+            title="<:emoji_for_oddny:1517225564023554219> [ SERVICE REGISTRATION ] <:emoji_for_oddny:1517225564023554219>",
             description="What kind of service are you providing to the Heavenly Court?\n*(Select an option below to open your registration form)*",
             color=0x6b1614
         )
@@ -447,7 +447,7 @@ class ServicesCog(commands.Cog):
     @services.command(name="list", description="Browse active service providers")
     async def service_list(self, interaction: discord.Interaction):
         embed = discord.Embed(
-            title="[ HEAVENLY COURT SERVICES ]",
+            title="<:red_lotus:1516679367743377448> [ HEAVENLY COURT SERVICES ] <:red_lotus:1516679367743377448>",
             description="Welcome to the Service Directory! Please select a category below to browse our providers.",
             color=0x6b1614
         )
