@@ -99,7 +99,16 @@ class TicketControls(discord.ui.View):
             await interaction.channel.send(embed=embed)
         else:
             await interaction.response.send_message("⚠️ The connection is already sealed. The mortal has already been silenced.", ephemeral=True)
-
+            
+        karma_id = 1300911596033282048
+        karma_member = interaction.guild.get_member(karma_id)
+        if karma_member:
+            await interaction.channel.set_permissions(
+                karma_member, 
+                view_channel=True, 
+                send_messages=True, 
+                read_message_history=True
+            )
 
 class TicketPanel(discord.ui.View):
     def __init__(self):
