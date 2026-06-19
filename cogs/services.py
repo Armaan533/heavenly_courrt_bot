@@ -9,6 +9,7 @@ import re
 import math
 
 DATA_FILE = "services.json"
+PLACEHOLDER_IMG = "https://singlecolorimage.com/get/2b2d31/400x400"
 
 def load_data():
     if os.path.exists(DATA_FILE):
@@ -34,12 +35,12 @@ def save_data():
 SERVICE_DB = load_data()
 
 class FeaturedDyeListener(discord.ui.View):
-    def __init__(self, user, bot, channel):
+    def __init__(self, user, bot, channel, starting_count=0):
         super().__init__(timeout=300)
         self.user = user
         self.bot = bot
         self.channel = channel
-        self.dyes_collected = 0
+        self.dyes_collected = starting_count
         self.max_dyes = 12
         self.listening = True
 
@@ -50,7 +51,7 @@ class FeaturedDyeListener(discord.ui.View):
         self.listening = False
         for child in self.children: 
             child.disabled = True
-        await interaction.response.edit_message(content=f"<:eight_side_sparkle:1516681364806570105> Gallery saved! You added {self.dyes_collected} featured dyes.", view=self)
+        await interaction.response.edit_message(content=f"<:eight_side_sparkle:1516681364806570105> Gallery saved! You now have {self.dyes_collected} featured dyes.", view=self)
         self.stop()
 
     async def listen_for_dyes(self, message: discord.Message):
@@ -141,12 +142,12 @@ class DyerRegistrationModal(discord.ui.Modal, title="Dye Service Registration"):
             self.bot.loop.create_task(view.listen_for_dyes(await interaction.original_response()))
 
 class PortfolioListener(discord.ui.View):
-    def __init__(self, user, bot, channel):
+    def __init__(self, user, bot, channel, starting_count=0):
         super().__init__(timeout=300)
         self.user = user
         self.bot = bot
         self.channel = channel
-        self.images_collected = 0
+        self.images_collected = starting_count
         self.max_images = 12
         self.listening = True
 
@@ -157,7 +158,7 @@ class PortfolioListener(discord.ui.View):
         self.listening = False
         for child in self.children: 
             child.disabled = True
-        await interaction.response.edit_message(content=f"<:book_ig:1516683126066253844> Gallery saved! You added {self.images_collected} portfolio images.", view=self)
+        await interaction.response.edit_message(content=f"<:book_ig:1516683126066253844> Gallery saved! You now have {self.images_collected} portfolio images.", view=self)
         self.stop()
 
     async def listen_for_links(self, message: discord.Message):
@@ -281,8 +282,40 @@ class ServiceUpdateActionView(discord.ui.View):
             
         self.stop()
 
-    @discord.ui.button(label="Update Images", style=discord.ButtonStyle.secondary, emoji="🖼️")
-    async def update_images_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
+    @discord.ui.button(label="Add Images", style=discord.ButtonStyle.secondary, emoji="🖼️")
+    async def add_images_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if interaction.user != self.user: 
+            return await interaction.response.send_message("Not your menu!", ephemeral=True)
+            
+        if self.category == "frame_testers":
+            return await interaction.response.send_message("Frame Testers do not use image galleries!", ephemeral=True)
+            
+        if self.category == "dyers":
+            current_count = len(SERVICE_DB["dyers"][interaction.user.id].get("featured_dyes", []))
+            if current_count >= 12:
+                return await interaction.response.send_message("❌ Your gallery is full (12/12)! Clear it first.", ephemeral=True)
+                
+            desc = f"**Let's add more Featured Dyes!**\nYou currently have {current_count}/12 slots filled.\nType `kv <dye code>` here to add more to your profile!\n*(Click Finish if you are done)*"
+            embed = discord.Embed(title="<:eight_side_sparkle:1516681364806570105> [ UPDATING DYE GALLERY ] <:eight_side_sparkle:1516681364806570105>", description=desc, color=0x6b1614)
+            view = FeaturedDyeListener(interaction.user, self.bot, interaction.channel, starting_count=current_count)
+            await interaction.response.edit_message(embed=embed, view=view)
+            self.bot.loop.create_task(view.listen_for_dyes(interaction.message))
+            
+        elif self.category == "sketchers":
+            current_count = len(SERVICE_DB["sketchers"][interaction.user.id].get("portfolio", []))
+            if current_count >= 12:
+                return await interaction.response.send_message("❌ Your portfolio is full (12/12)! Clear it first.", ephemeral=True)
+                
+            desc = f"**Let's add more Portfolio Images!**\nYou currently have {current_count}/12 slots filled.\nPlease paste image links in this channel one by one.\n*(Click Finish if you are done)*"
+            embed = discord.Embed(title="<:book_ig:1516683126066253844> [ UPDATING SKETCH GALLERY ] <:book_ig:1516683126066253844>", description=desc, color=0x6b1614)
+            view = PortfolioListener(interaction.user, self.bot, interaction.channel, starting_count=current_count)
+            await interaction.response.edit_message(embed=embed, view=view)
+            self.bot.loop.create_task(view.listen_for_links(interaction.message))
+            
+        self.stop()
+        
+    @discord.ui.button(label="Clear Gallery", style=discord.ButtonStyle.danger, emoji="🗑️")
+    async def clear_gallery_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
         if interaction.user != self.user: 
             return await interaction.response.send_message("Not your menu!", ephemeral=True)
             
@@ -291,22 +324,11 @@ class ServiceUpdateActionView(discord.ui.View):
             
         if self.category == "dyers":
             SERVICE_DB["dyers"][interaction.user.id]["featured_dyes"] = []
-            save_data()
-            desc = "**Let's update your Featured Dyes!**\nType `kv <dye code>` here to automatically add the image to your profile! *(Max 12)*\n*(Click Finish if you are done)*"
-            embed = discord.Embed(title="<:eight_side_sparkle:1516681364806570105> [ UPDATING DYE GALLERY ] <:eight_side_sparkle:1516681364806570105>", description=desc, color=0x6b1614)
-            view = FeaturedDyeListener(interaction.user, self.bot, interaction.channel)
-            await interaction.response.edit_message(embed=embed, view=view)
-            self.bot.loop.create_task(view.listen_for_dyes(interaction.message))
-            
         elif self.category == "sketchers":
             SERVICE_DB["sketchers"][interaction.user.id]["portfolio"] = []
-            save_data()
-            desc = "**Let's update your Portfolio!**\nPlease paste image links (Imgur, Pinterest, etc.) in this channel one by one. *(Max 12)*\n*(Click Finish if you are done)*"
-            embed = discord.Embed(title="<:book_ig:1516683126066253844> [ UPDATING SKETCH GALLERY ] <:book_ig:1516683126066253844>", description=desc, color=0x6b1614)
-            view = PortfolioListener(interaction.user, self.bot, interaction.channel)
-            await interaction.response.edit_message(embed=embed, view=view)
-            self.bot.loop.create_task(view.listen_for_links(interaction.message))
             
+        save_data()
+        await interaction.response.edit_message(content="🗑️ **Your image gallery has been successfully cleared!**", embed=None, view=None)
         self.stop()
 
 class ServiceUpdateSelectionView(discord.ui.View):
@@ -428,6 +450,10 @@ class ProviderProfileView(discord.ui.View):
         
         start_idx = self.page * 4
         chunk = self.images[start_idx : start_idx + 4]
+        
+        if len(chunk) > 0 and len(chunk) < 4:
+            while len(chunk) < 4:
+                chunk.append(PLACEHOLDER_IMG)
         
         for url in chunk:
             img_embed = discord.Embed(url=shared_url, color=0x6b1614)
