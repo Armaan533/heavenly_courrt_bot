@@ -18,16 +18,16 @@ def load_data():
                     "frame_testers": {int(k): v for k, v in raw_data.get("frame_testers", {}).items()},
                     "sketchers": {int(k): v for k, v in raw_data.get("sketchers", {}).items()}
                 }
-        except Exception as e:
-            print(f"Error loading {DATA_FILE}: {e}")
+        except Exception:
+            pass
     return {"dyers": {}, "frame_testers": {}, "sketchers": {}}
 
 def save_data():
     try:
         with open(DATA_FILE, "w") as f:
             json.dump(SERVICE_DB, f, indent=4)
-    except Exception as e:
-        print(f"Error saving data to disk: {e}")
+    except Exception:
+        pass
 
 SERVICE_DB = load_data()
 
@@ -38,19 +38,22 @@ class FeaturedDyeListener(discord.ui.View):
         self.bot = bot
         self.ctx = ctx
         self.dyes_collected = 0
-        self.max_dyes = 9 
+        self.max_dyes = 4
         self.listening = True
 
     @discord.ui.button(label="Finish Registration", style=discord.ButtonStyle.success, emoji="✅")
     async def finish_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if interaction.user != self.user: return await interaction.response.send_message("Not your setup!", ephemeral=True)
+        if interaction.user != self.user: 
+            return await interaction.response.send_message("Not your setup!", ephemeral=True)
         self.listening = False
-        for child in self.children: child.disabled = True
+        for child in self.children: 
+            child.disabled = True
         await interaction.response.edit_message(content=f"✅ Registration complete! You saved {self.dyes_collected} featured dyes.", view=self)
         self.stop()
 
     async def listen_for_dyes(self, message: discord.Message):
-        if not self.listening or self.dyes_collected >= self.max_dyes: return
+        if not self.listening or self.dyes_collected >= self.max_dyes: 
+            return
 
         def check(m):
             return (
@@ -83,12 +86,12 @@ class FeaturedDyeListener(discord.ui.View):
                     status_msg += "\nRun another `kv <dye code>` to add more, or click Finish."
                 
                 await self.ctx.send(status_msg)
-                if self.listening: await self.listen_for_dyes(message)
+                if self.listening: 
+                    await self.listen_for_dyes(message)
                     
         except asyncio.TimeoutError:
             self.listening = False
             await self.ctx.send("⏱️ Dye listening timed out. Registration closed.")
-
 
 class DyerRegistrationModal(discord.ui.Modal, title="Dye Service Registration"):
     ad_desc = discord.ui.TextInput(label="Service Advertisement", style=discord.TextStyle.paragraph, max_length=1000)
@@ -112,12 +115,11 @@ class DyerRegistrationModal(discord.ui.Modal, title="Dye Service Registration"):
             "featured_dyes": []
         }
         save_data()
-        desc = "Your primary information has been recorded!\n\n**Want to add Featured Dyes?**\nType `kv <dye code>` here to automatically add the image to your profile! *(Max 9)*\n*(Click Finish if you are done)*"
+        desc = "Your primary information has been recorded!\n\n**Want to add Featured Dyes?**\nType `kv <dye code>` here to automatically add the image to your profile! *(Max 4)*\n*(Click Finish if you are done)*"
         embed = discord.Embed(title="[ DYER PROFILE INITIALIZED ]", description=desc, color=0x6b1614)
         view = FeaturedDyeListener(interaction.user, self.bot, self.ctx)
         await interaction.response.send_message(embed=embed, view=view)
         self.bot.loop.create_task(view.listen_for_dyes(await interaction.original_response()))
-
 
 class PortfolioListener(discord.ui.View):
     def __init__(self, user, bot, ctx):
@@ -126,26 +128,28 @@ class PortfolioListener(discord.ui.View):
         self.bot = bot
         self.ctx = ctx
         self.images_collected = 0
-        self.max_images = 9
+        self.max_images = 4
         self.listening = True
 
     @discord.ui.button(label="Finish Registration", style=discord.ButtonStyle.success, emoji="✅")
     async def finish_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if interaction.user != self.user: return await interaction.response.send_message("Not your setup!", ephemeral=True)
+        if interaction.user != self.user: 
+            return await interaction.response.send_message("Not your setup!", ephemeral=True)
         self.listening = False
-        for child in self.children: child.disabled = True
+        for child in self.children: 
+            child.disabled = True
         await interaction.response.edit_message(content=f"✅ Registration complete! You saved {self.images_collected} portfolio images.", view=self)
         self.stop()
 
     async def listen_for_links(self, message: discord.Message):
-        if not self.listening or self.images_collected >= self.max_images: return
+        if not self.listening or self.images_collected >= self.max_images: 
+            return
 
         def check(m):
             return m.author == self.user and m.channel == self.ctx.channel
 
         try:
             user_msg = await self.bot.wait_for('message', check=check, timeout=120.0)
-            
             urls = re.findall(r'(https?://[^\s]+)', user_msg.content)
             
             if urls:
@@ -168,12 +172,12 @@ class PortfolioListener(discord.ui.View):
                 
                 await self.ctx.send(status_msg)
             
-            if self.listening: await self.listen_for_links(message)
+            if self.listening: 
+                await self.listen_for_links(message)
                     
         except asyncio.TimeoutError:
             self.listening = False
             await self.ctx.send("⏱️ Listening timed out. Registration closed.")
-
 
 class SketcherRegistrationModal(discord.ui.Modal, title="Sketcher Registration"):
     ad_desc = discord.ui.TextInput(label="Service Advertisement", style=discord.TextStyle.paragraph, max_length=1000)
@@ -193,12 +197,11 @@ class SketcherRegistrationModal(discord.ui.Modal, title="Sketcher Registration")
             "portfolio": []
         }
         save_data()
-        desc = "Your primary information has been recorded!\n\n**Let's build your Portfolio!**\nPlease paste image links (Imgur, Pinterest, etc.) in this channel one by one. *(Max 9)*\n*(Click Finish if you are done)*"
+        desc = "Your primary information has been recorded!\n\n**Let's build your Portfolio!**\nPlease paste image links (Imgur, Pinterest, etc.) in this channel one by one. *(Max 4)*\n*(Click Finish if you are done)*"
         embed = discord.Embed(title="[ SKETCHER PROFILE INITIALIZED ]", description=desc, color=0x6b1614)
         view = PortfolioListener(interaction.user, self.bot, self.ctx)
         await interaction.response.send_message(embed=embed, view=view)
         self.bot.loop.create_task(view.listen_for_links(await interaction.original_response()))
-
 
 class FrameRegistrationModal(discord.ui.Modal, title="Frame Tester Registration"):
     ad_desc = discord.ui.TextInput(label="Service Advertisement", style=discord.TextStyle.paragraph, placeholder="List the notable frames you own here!", max_length=1000)
@@ -219,7 +222,6 @@ class FrameRegistrationModal(discord.ui.Modal, title="Frame Tester Registration"
         save_data()
         await interaction.response.send_message("✅ **Frame Tester profile successfully registered!**", ephemeral=True)
 
-
 class ServiceSelectionView(discord.ui.View):
     def __init__(self, ctx, bot):
         super().__init__(timeout=60)
@@ -228,23 +230,24 @@ class ServiceSelectionView(discord.ui.View):
 
     @discord.ui.button(label="Dye Job", style=discord.ButtonStyle.primary, emoji="🧪")
     async def btn_dyer(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if interaction.user != self.ctx.author: return await interaction.response.send_message("Not your menu!", ephemeral=True)
+        if interaction.user != self.ctx.author: 
+            return await interaction.response.send_message("Not your menu!", ephemeral=True)
         await interaction.response.send_modal(DyerRegistrationModal(self.ctx, self.bot))
         self.stop()
 
     @discord.ui.button(label="Frame Tester", style=discord.ButtonStyle.secondary, emoji="🖼️")
     async def btn_framer(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if interaction.user != self.ctx.author: return await interaction.response.send_message("Not your menu!", ephemeral=True)
+        if interaction.user != self.ctx.author: 
+            return await interaction.response.send_message("Not your menu!", ephemeral=True)
         await interaction.response.send_modal(FrameRegistrationModal(self.ctx, self.bot))
         self.stop()
 
     @discord.ui.button(label="Sketcher", style=discord.ButtonStyle.secondary, emoji="🖌️")
     async def btn_sketcher(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if interaction.user != self.ctx.author: return await interaction.response.send_message("Not your menu!", ephemeral=True)
+        if interaction.user != self.ctx.author: 
+            return await interaction.response.send_message("Not your menu!", ephemeral=True)
         await interaction.response.send_modal(SketcherRegistrationModal(self.ctx, self.bot))
         self.stop()
-
-
 
 class ProviderView(discord.ui.View):
     def __init__(self, bot, category_name, providers):
@@ -293,14 +296,14 @@ class ProviderView(discord.ui.View):
             embeds_to_send = [main_embed]
             
             images = data.get("featured_dyes", []) if self.category_name == "dyers" else data.get("portfolio", [])
-            for url in images[:9]:
+            for url in images[:4]:
                 img_embed = discord.Embed(url=shared_url, color=0x6b1614)
                 img_embed.set_image(url=url)
                 embeds_to_send.append(img_embed)
                 
             await interaction.followup.edit_message(message_id=interaction.message.id, embeds=embeds_to_send, view=self)
             
-        except Exception as e:
+        except Exception:
             traceback.print_exc()
             await interaction.followup.send(f"⚠️ Error loading profile.", ephemeral=True)
 
@@ -312,7 +315,6 @@ class ProviderView(discord.ui.View):
             color=0x6b1614
         )
         await interaction.response.edit_message(embed=embed, view=CategoryView(self.bot))
-
 
 class CategoryView(discord.ui.View):
     def __init__(self, bot):
@@ -341,9 +343,15 @@ class CategoryView(discord.ui.View):
                 )
                 return await interaction.response.edit_message(embed=embed, view=self)
                 
+            desc = "Select a provider from the dropdown below to view their profile and pricing!\n\n**Available Providers:**\n"
+            for user_id in providers:
+                user = self.bot.get_user(user_id)
+                name = user.display_name if user else f"User {user_id}"
+                desc += f"• **{name}**\n"
+                
             embed = discord.Embed(
                 title=f"[ {category.replace('_', ' ').upper()} DIRECTORY ]",
-                description="Select a provider from the dropdown below to view their profile and pricing!",
+                description=desc,
                 color=0x6b1614
             )
             
@@ -353,7 +361,6 @@ class CategoryView(discord.ui.View):
             traceback.print_exc()
             if not interaction.response.is_done():
                 await interaction.response.send_message(f"⚠️ Failed to load category: {e}", ephemeral=True)
-
 
 class ServicesCog(commands.Cog):
     def __init__(self, bot):
@@ -380,7 +387,6 @@ class ServicesCog(commands.Cog):
             color=0x6b1614
         )
         await ctx.send(embed=embed, view=CategoryView(self.bot))
-
 
 async def setup(bot):
     await bot.add_cog(ServicesCog(bot))
