@@ -6,6 +6,7 @@ import traceback
 import json
 import os
 import re
+import math
 
 DATA_FILE = "services.json"
 
@@ -39,7 +40,7 @@ class FeaturedDyeListener(discord.ui.View):
         self.bot = bot
         self.channel = channel
         self.dyes_collected = 0
-        self.max_dyes = 4
+        self.max_dyes = 12
         self.listening = True
 
     @discord.ui.button(label="Finish Registration", style=discord.ButtonStyle.success, emoji="✅")
@@ -115,7 +116,7 @@ class DyerRegistrationModal(discord.ui.Modal, title="Dye Service Registration"):
             "featured_dyes": []
         }
         save_data()
-        desc = "Your primary information has been recorded!\n\n**Want to add Featured Dyes?**\nType `kv <dye code>` here to automatically add the image to your profile! *(Max 4)*\n*(Click Finish if you are done)*"
+        desc = "Your primary information has been recorded!\n\n**Want to add Featured Dyes?**\nType `kv <dye code>` here to automatically add the image to your profile! *(Max 12)*\n*(Click Finish if you are done)*"
         embed = discord.Embed(title="[ DYER PROFILE INITIALIZED ]", description=desc, color=0x6b1614)
         view = FeaturedDyeListener(interaction.user, self.bot, interaction.channel)
         await interaction.response.send_message(embed=embed, view=view)
@@ -128,7 +129,7 @@ class PortfolioListener(discord.ui.View):
         self.bot = bot
         self.channel = channel
         self.images_collected = 0
-        self.max_images = 4
+        self.max_images = 12
         self.listening = True
 
     @discord.ui.button(label="Finish Registration", style=discord.ButtonStyle.success, emoji="✅")
@@ -196,7 +197,7 @@ class SketcherRegistrationModal(discord.ui.Modal, title="Sketcher Registration")
             "portfolio": []
         }
         save_data()
-        desc = "Your primary information has been recorded!\n\n**Let's build your Portfolio!**\nPlease paste image links (Imgur, Pinterest, etc.) in this channel one by one. *(Max 4)*\n*(Click Finish if you are done)*"
+        desc = "Your primary information has been recorded!\n\n**Let's build your Portfolio!**\nPlease paste image links (Imgur, Pinterest, etc.) in this channel one by one. *(Max 12)*\n*(Click Finish if you are done)*"
         embed = discord.Embed(title="[ SKETCHER PROFILE INITIALIZED ]", description=desc, color=0x6b1614)
         view = PortfolioListener(interaction.user, self.bot, interaction.channel)
         await interaction.response.send_message(embed=embed, view=view)
@@ -247,7 +248,97 @@ class ServiceSelectionView(discord.ui.View):
         await interaction.response.send_modal(SketcherRegistrationModal(self.bot))
         self.stop()
 
-class ProviderView(discord.ui.View):
+class ProviderProfileView(discord.ui.View):
+    def __init__(self, bot, category_name, providers, user_id, page=0):
+        super().__init__(timeout=120)
+        self.bot = bot
+        self.category_name = category_name
+        self.providers = providers
+        self.user_id = user_id
+        self.page = page
+        
+        data = SERVICE_DB[category_name].get(user_id, {})
+        self.images = data.get("featured_dyes", []) if category_name == "dyers" else data.get("portfolio", [])
+        self.max_pages = max(1, math.ceil(len(self.images) / 4))
+        
+        if self.max_pages > 1:
+            prev_btn = discord.ui.Button(label="Prev", style=discord.ButtonStyle.secondary, disabled=(self.page == 0), emoji="⬅️")
+            prev_btn.callback = self.prev_page
+            self.add_item(prev_btn)
+            
+            next_btn = discord.ui.Button(label="Next", style=discord.ButtonStyle.secondary, disabled=(self.page >= self.max_pages - 1), emoji="➡️")
+            next_btn.callback = self.next_page
+            self.add_item(next_btn)
+            
+        back_btn = discord.ui.Button(label="Back to Providers", style=discord.ButtonStyle.danger, emoji="🔙", row=1)
+        back_btn.callback = self.go_back
+        self.add_item(back_btn)
+
+    async def get_embeds(self):
+        data = SERVICE_DB[self.category_name].get(self.user_id, {})
+        user = self.bot.get_user(self.user_id) or await self.bot.fetch_user(self.user_id)
+        display_name = user.display_name if user else f"User {self.user_id}"
+        shared_url = "https://discord.com" 
+        
+        main_embed = discord.Embed(
+            title=f"Service Provider: {display_name}",
+            url=shared_url,
+            description=data.get("ad", "No advertisement provided."),
+            color=0x6b1614
+        )
+        if user and user.display_avatar:
+            main_embed.set_thumbnail(url=user.display_avatar.url)
+        
+        main_embed.add_field(name="🕒 Availability", value=f"`{data.get('timezone', 'N/A')}`", inline=False)
+        
+        if self.category_name == "dyers":
+            main_embed.add_field(name="🧪 Normal Dyes", value=f"`{data.get('normal', '0')}`", inline=True)
+            main_embed.add_field(name="✨ Mystic Dyes", value=f"`{data.get('mystic', '0')}`", inline=True)
+            
+        main_embed.add_field(name="💰 Pricing", value=f"```\n{data.get('pricing', 'N/A')}\n```", inline=False)
+        
+        if self.max_pages > 1:
+            main_embed.set_footer(text=f"Gallery Page {self.page + 1} of {self.max_pages}")
+            
+        embeds_to_send = [main_embed]
+        
+        start_idx = self.page * 4
+        chunk = self.images[start_idx : start_idx + 4]
+        
+        for url in chunk:
+            img_embed = discord.Embed(url=shared_url, color=0x6b1614)
+            img_embed.set_image(url=url)
+            embeds_to_send.append(img_embed)
+            
+        return embeds_to_send
+
+    async def prev_page(self, interaction: discord.Interaction):
+        self.page -= 1
+        new_view = ProviderProfileView(self.bot, self.category_name, self.providers, self.user_id, self.page)
+        embeds = await new_view.get_embeds()
+        await interaction.response.edit_message(embeds=embeds, view=new_view)
+
+    async def next_page(self, interaction: discord.Interaction):
+        self.page += 1
+        new_view = ProviderProfileView(self.bot, self.category_name, self.providers, self.user_id, self.page)
+        embeds = await new_view.get_embeds()
+        await interaction.response.edit_message(embeds=embeds, view=new_view)
+
+    async def go_back(self, interaction: discord.Interaction):
+        desc = "Select a provider from the dropdown below to view their profile and pricing!\n\n**Available Providers:**\n"
+        for uid in self.providers:
+            u = self.bot.get_user(uid)
+            n = u.display_name if u else f"User {uid}"
+            desc += f"• **{n}**\n"
+            
+        embed = discord.Embed(
+            title=f"[ {self.category_name.replace('_', ' ').upper()} DIRECTORY ]",
+            description=desc,
+            color=0x6b1614
+        )
+        await interaction.response.edit_message(embed=embed, view=ProviderSelectionView(self.bot, self.category_name, self.providers))
+
+class ProviderSelectionView(discord.ui.View):
     def __init__(self, bot, category_name, providers):
         super().__init__(timeout=120)
         self.bot = bot
@@ -263,50 +354,26 @@ class ProviderView(discord.ui.View):
         self.dropdown = discord.ui.Select(placeholder="Select a service provider...", min_values=1, max_values=1, options=options)
         self.dropdown.callback = self.dropdown_callback
         self.add_item(self.dropdown)
+        
+        back_btn = discord.ui.Button(label="Back to Categories", style=discord.ButtonStyle.danger, emoji="🔙", row=2)
+        back_btn.callback = self.back_btn
+        self.add_item(back_btn)
 
     async def dropdown_callback(self, interaction: discord.Interaction):
         try:
             await interaction.response.defer()
             user_id = int(self.dropdown.values[0])
-            data = SERVICE_DB[self.category_name].get(user_id, {})
             
-            user = self.bot.get_user(user_id) or await self.bot.fetch_user(user_id)
-            display_name = user.display_name if user else f"User {user_id}"
-            shared_url = "https://discord.com" 
+            profile_view = ProviderProfileView(self.bot, self.category_name, self.providers, user_id)
+            embeds = await profile_view.get_embeds()
             
-            main_embed = discord.Embed(
-                title=f"Service Provider: {display_name}",
-                url=shared_url,
-                description=data.get("ad", "No advertisement provided."),
-                color=0x6b1614
-            )
-            if user and user.display_avatar:
-                main_embed.set_thumbnail(url=user.display_avatar.url)
-            
-            main_embed.add_field(name="🕒 Availability", value=f"`{data.get('timezone', 'N/A')}`", inline=False)
-            
-            if self.category_name == "dyers":
-                main_embed.add_field(name="🧪 Normal Dyes", value=f"`{data.get('normal', '0')}`", inline=True)
-                main_embed.add_field(name="✨ Mystic Dyes", value=f"`{data.get('mystic', '0')}`", inline=True)
-                
-            main_embed.add_field(name="💰 Pricing", value=f"```\n{data.get('pricing', 'N/A')}\n```", inline=False)
-            
-            embeds_to_send = [main_embed]
-            
-            images = data.get("featured_dyes", []) if self.category_name == "dyers" else data.get("portfolio", [])
-            for url in images[:4]:
-                img_embed = discord.Embed(url=shared_url, color=0x6b1614)
-                img_embed.set_image(url=url)
-                embeds_to_send.append(img_embed)
-                
-            await interaction.followup.edit_message(message_id=interaction.message.id, embeds=embeds_to_send, view=self)
+            await interaction.followup.edit_message(message_id=interaction.message.id, embeds=embeds, view=profile_view)
             
         except Exception:
             traceback.print_exc()
             await interaction.followup.send(f"⚠️ Error loading profile.", ephemeral=True)
 
-    @discord.ui.button(label="Back to Categories", style=discord.ButtonStyle.danger, emoji="🔙", row=2)
-    async def back_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
+    async def back_btn(self, interaction: discord.Interaction):
         embed = discord.Embed(
             title="[ HEAVENLY COURT SERVICES ]",
             description="Welcome to the Service Directory! Please select a category below to browse our providers.",
@@ -339,7 +406,9 @@ class CategoryView(discord.ui.View):
                     description=f"There are currently no active providers in this category.\nWant to be the first? Use `/services add`!",
                     color=0x2b2d31
                 )
-                return await interaction.response.edit_message(embed=embed, view=self)
+                new_view = discord.ui.View(timeout=120)
+                new_view.add_item(CategoryView(self.bot).select)
+                return await interaction.response.edit_message(embed=embed, view=new_view)
                 
             desc = "Select a provider from the dropdown below to view their profile and pricing!\n\n**Available Providers:**\n"
             for user_id in providers:
@@ -353,7 +422,7 @@ class CategoryView(discord.ui.View):
                 color=0x6b1614
             )
             
-            await interaction.response.edit_message(embed=embed, view=ProviderView(self.bot, category, providers))
+            await interaction.response.edit_message(embed=embed, view=ProviderSelectionView(self.bot, category, providers))
             
         except Exception as e:
             traceback.print_exc()
