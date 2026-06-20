@@ -3,8 +3,7 @@ from discord import app_commands
 from discord.ext import commands
 import aiohttp
 from io import BytesIO
-from PIL import Image
-import math
+from PIL import Image, ImageDraw
 import os
 
 from frame_prices import FRAME_DB
@@ -15,35 +14,27 @@ class FrameCategorySelect(discord.ui.Select):
     def __init__(self, bot):
         self.bot = bot
         categories = sorted(list(set(data.get("type", "Unknown") for data in FRAME_DB.values())))
-        
-        options = [
-            discord.SelectOption(label=cat, value=cat, emoji="🗂️") 
-            for cat in categories
-        ]
-        
+        options = [discord.SelectOption(label=cat, value=cat, emoji="🗂️") for cat in categories]
         super().__init__(placeholder="Select a frame category...", min_values=1, max_values=1, options=options)
 
     async def callback(self, interaction: discord.Interaction):
         category = self.values[0]
-        
         frames = sorted([name for name, data in FRAME_DB.items() if data.get("type") == category])
         
         if len(frames) > 24:
             view = discord.ui.View(timeout=180)
             chunk_size = 24
             chunks = [frames[i:i + chunk_size] for i in range(0, len(frames), chunk_size)]
-            
             for idx, chunk in enumerate(chunks):
                 start_letter = chunk[0][0].upper()
                 end_letter = chunk[-1][0].upper()
                 label = f"{category} ({start_letter}-{end_letter})"
                 view.add_item(FrameItemSelect(self.bot, label, chunk, category))
-                
             view.add_item(BackButton(self.bot, target="categories"))
             
             embed = discord.Embed(
                 title=f"<:two_flowers:1516684386546880614> [ {category.upper()} SUB-PANEL ]",
-                description="This category is quite large! Please select a subset dropdown below to find your frame.",
+                description="This category is quite large! Please select a subset dropdown below.",
                 color=0x6b1614
             )
             await interaction.response.edit_message(embed=embed, view=view)
@@ -63,10 +54,7 @@ class FrameItemSelect(discord.ui.Select):
     def __init__(self, bot, placeholder, frame_list, category):
         self.bot = bot
         self.category = category
-        options = []
-        for name in frame_list:
-            options.append(discord.SelectOption(label=name.title(), value=name, emoji="🖼️"))
-            
+        options = [discord.SelectOption(label=n.title(), value=n, emoji="🖼️") for n in frame_list]
         super().__init__(placeholder=placeholder, min_values=1, max_values=1, options=options)
 
     async def callback(self, interaction: discord.Interaction):
@@ -79,27 +67,20 @@ class FrameItemSelect(discord.ui.Select):
         frame_type = data.get("type", "Unknown")
         image_url = data.get("image", None)
         
-        embed = discord.Embed(
-            title=f"<:two_flowers:1516684386546880614> Preview: {frame_name.title()}",
-            color=0x6b1614
-        )
+        embed = discord.Embed(color=0x6b1614)
+        embed.set_author(name=f"Preview: {frame_name.title()}", icon_url="https://cdn.discordapp.com/emojis/1516684386546880614.png")
+        
         embed.add_field(name="<:book_ig:1516683126066253844> Category", value=f"`{frame_type}`", inline=False)
         
         if market_price == 0 and liquid_price == 0:
-            embed.add_field(
-                name="💰 Pricing Estimate", 
-                value="*⚠️ Pricing fluctuates heavily. Insufficient market data available for standard calculation.*", 
-                inline=False
-            )
+            embed.add_field(name="💰 Pricing Estimate", value="*⚠️ Pricing fluctuates heavily. Insufficient market data available.*", inline=False)
         else:
             embed.add_field(name="<:eight_side_sparkle:1516681364806570105> Market Value", value=f"**{market_price}** 🎟️", inline=True)
-            
             if liquid_price >= 25 and frame_type.lower() != "bits":
                 embed.add_field(name="<:for_john:1517226175901208696> Liquid Cost", value=f"**{liquid_price}** 🎟️", inline=True)
                 
         embed.set_footer(text="Estimates based on ledger logs. Verify before finalizing trades.")
         
-
         file = None
         if image_url and os.path.exists(BASE_CARD_PATH):
             try:
@@ -111,31 +92,23 @@ class FrameItemSelect(discord.ui.Select):
                             with Image.open(BASE_CARD_PATH) as base_img, Image.open(BytesIO(frame_bytes)) as frame_img:
                                 frame_rgba = frame_img.convert("RGBA")
                                 datas = frame_rgba.getdata()
-                                
                                 target_width, target_height = frame_rgba.size
                                 
                                 newData = []
-                                bg_r, bg_g, bg_b = 47, 49, 54 
-                                
                                 for idx, item in enumerate(datas):
                                     x = idx % target_width
                                     y = idx // target_width
                                     r, g, b, a = item[0], item[1], item[2], item[3]
                                     
-
                                     is_top_plate = (0.08 <= x / target_width <= 0.48) and (0.015 <= y / target_height <= 0.075)
                                     is_bottom_plate = (0.55 <= x / target_width <= 0.95) and (0.91 <= y / target_height <= 0.985)
                                     
-                                    if (is_top_plate or is_bottom_plate) and (r < 35 and g < 35 and b < 35):
-                                        newData.append((0, 0, 0, 0)) 
+                                    if (is_top_plate or is_bottom_plate) and (r < 40 and g < 40 and b < 40):
+                                        newData.append((0, 0, 0, 0))
                                         continue
                                         
-                                    diff = max(abs(r - bg_r), abs(g - bg_g), abs(b - bg_b))
-                                    if diff < 12:
+                                    if abs(r - g) < 12 and abs(g - b) < 12 and 35 <= r <= 65:
                                         newData.append((0, 0, 0, 0))
-                                    elif diff < 45:
-                                        alpha = int(((diff - 12) / 33) * 255)
-                                        newData.append((r, g, b, min(a, alpha)))
                                     else:
                                         newData.append(item)
                                         
@@ -152,20 +125,18 @@ class FrameItemSelect(discord.ui.Select):
                                     resample_filter = Image.ANTIALIAS
                                     
                                 resized_base = base_img.resize((new_w, new_h), resample_filter)
-                                
                                 left = (new_w - target_width) / 2
                                 top = (new_h - target_height) / 2
                                 cropped_base = resized_base.crop((left, top, left + target_width, top + target_height)).convert("RGBA")
                                 
-                                from PIL import ImageDraw
                                 mask = Image.new("L", (target_width, target_height), 0)
                                 draw = ImageDraw.Draw(mask)
                                 draw.rounded_rectangle((0, 0, target_width, target_height), radius=22, fill=255)
                                 cropped_base.putalpha(mask)
                                 
                                 final_composite = Image.new("RGBA", frame_rgba.size, (0, 0, 0, 0))
-                                final_composite.paste(cropped_base, (0, 0), cropped_base) 
-                                final_composite.paste(frame_rgba, (0, 0), frame_rgba)    
+                                final_composite.paste(cropped_base, (0, 0), cropped_base)
+                                final_composite.paste(frame_rgba, (0, 0), frame_rgba)
                                 
                                 output_buffer = BytesIO()
                                 final_composite.save(output_buffer, format="PNG")
@@ -173,8 +144,7 @@ class FrameItemSelect(discord.ui.Select):
                                 
                                 file = discord.File(fp=output_buffer, filename="preview.png")
                                 embed.set_image(url="attachment://preview.png")
-            except Exception as e:
-                print(f"Image Error: {e}")
+            except Exception:
                 pass
 
         view = discord.ui.View(timeout=180)
@@ -196,7 +166,6 @@ class BackButton(discord.ui.Button):
         if self.target == "categories":
             view = discord.ui.View(timeout=180)
             view.add_item(FrameCategorySelect(self.bot))
-            
             embed = discord.Embed(
                 title="<:red_lotus:1516679367743377448> [ HEAVENLY COURT VAULT ]",
                 description="Welcome to the Frame Showroom. Select a system index class below to access the database collections.",
@@ -207,8 +176,8 @@ class BackButton(discord.ui.Button):
         elif self.target == "category_list":
             category = self.current_category
             frames = sorted([name for name, data in FRAME_DB.items() if data.get("type") == category])
-            
             view = discord.ui.View(timeout=180)
+            
             if len(frames) > 24:
                 chunk_size = 24
                 chunks = [frames[i:i + chunk_size] for i in range(0, len(frames), chunk_size)]
@@ -221,7 +190,6 @@ class BackButton(discord.ui.Button):
                 view.add_item(FrameItemSelect(self.bot, f"Select a {category} Frame", frames, category))
                 
             view.add_item(BackButton(self.bot, target="categories"))
-            
             embed = discord.Embed(
                 title=f"<:two_flowers:1516684386546880614> [ {category.upper()} CATALOG ]",
                 description=f"Browse our complete collection of **{category}** frames below.",
@@ -239,7 +207,6 @@ class FramesCog(commands.Cog):
     async def frame_menu(self, interaction: discord.Interaction):
         view = discord.ui.View(timeout=180)
         view.add_item(FrameCategorySelect(self.bot))
-        
         embed = discord.Embed(
             title="<:red_lotus:1516679367743377448> [ HEAVENLY COURT VAULT ]",
             description="Welcome to the Frame Showroom. Select a system index class below to access the database collections.",
