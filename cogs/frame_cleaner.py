@@ -3,7 +3,7 @@ from discord import app_commands
 from discord.ext import commands
 import aiohttp
 from io import BytesIO
-from PIL import Image, ImageOps, ImageDraw
+from PIL import Image, ImageOps
 import sys
 import os
 from frame_prices import FRAME_DB
@@ -113,7 +113,7 @@ class FrameRenderEngine(commands.Cog):
             await interaction.followup.send(f"Runtime Exception: {e}")
             print(f"Extraction Error: {e}", file=sys.stderr)
 
-    @app_commands.command(name="test_composite", description="Execute Dual-Zone Spatially Bounded Fusion")
+    @app_commands.command(name="test_composite", description="Execute Raw Z-Index Overlay")
     async def test_composite(self, interaction: discord.Interaction, frame_name: str):
         match = next((n for n in FRAME_DB if frame_name.lower() in n.lower()), None)
         if not match:
@@ -144,7 +144,6 @@ class FrameRenderEngine(commands.Cog):
                         
                         LEFT, TOP = 40, 32
                         RIGHT, BOTTOM = fw - 40, fh - 32
-                        inner_w, inner_h = RIGHT - LEFT, BOTTOM - TOP
                         
                         IN_T_MIN, IN_T_MAX = 10.0, 45.0
                         OUT_T_MIN, OUT_T_MAX = 5.0, 15.0
@@ -185,45 +184,27 @@ class FrameRenderEngine(commands.Cog):
                         except AttributeError:
                             resample_method = Image.ANTIALIAS
                             
-                        card_resized = ImageOps.fit(base_img, (inner_w, inner_h), method=resample_method)
+                        card_resized = ImageOps.fit(base_img, (fw, fh), method=resample_method).convert("RGBA")
                         
-                        mask = Image.new("L", (inner_w, inner_h), 0)
-                        draw = ImageDraw.Draw(mask)
-                        draw.rounded_rectangle((0, 0, inner_w, inner_h), radius=20, fill=255)
-                        card_resized.putalpha(mask)
-                        
-                        canvas = Image.new("RGBA", (fw, fh), (0, 0, 0, 0))
-                        canvas.paste(card_resized, (LEFT, TOP), card_resized)
-                        
-                        final_composite = Image.alpha_composite(canvas, frame_img)
+                        final_composite = Image.alpha_composite(card_resized, frame_img)
                         
                         output_buffer = BytesIO()
                         final_composite.save(output_buffer, format="PNG")
                         output_buffer.seek(0)
                         
-                        file_name = f"composite_{match.replace(' ', '_')}.png"
+                        file_name = f"raw_composite_{match.replace(' ', '_')}.png"
                         file = discord.File(fp=output_buffer, filename=file_name)
                         
                         embed = discord.Embed(
-                            title="[ SYSTEM: DUAL-ZONE FUSION MATRIX ]",
+                            title="[ SYSTEM: RAW ORTHOGONAL OVERLAY ]",
                             color=0x2b2d31
                         )
                         
                         embed.add_field(
-                            name="Affine Transformation", 
+                            name="Compositing Protocol", 
                             value=(
-                                "$$f: \\mathbb{R}^2 \\to \\mathbb{R}^2$$\n"
-                                f"$$D_{{out}} = [{LEFT}, {RIGHT}] \\times [{TOP}, {BOTTOM}]$$"
-                            ),
-                            inline=False
-                        )
-                        
-                        embed.add_field(
-                            name="Bifurcated Interpolation Protocol", 
-                            value=(
-                                "$$\\mathcal{H}_{in} = \\text{Smoothstep}(\\tau \\in [10, 45])$$\n"
-                                "$$\\mathcal{H}_{out} = \\text{Smoothstep}(\\tau \\in [5, 15])$$\n"
-                                "Frame matrix unified successfully without object degradation."
+                                "$$\\mathbf{C}_{final} = \\mathbf{C}_{base} \\oplus_{\\alpha} \\mathbf{C}_{frame}$$\n"
+                                "Direct 1:1 scale composite. No clipping domains or bounding masks applied."
                             ),
                             inline=False
                         )
