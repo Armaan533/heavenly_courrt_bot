@@ -99,21 +99,12 @@ class FrameItemSelect(discord.ui.Select):
                 
         embed.set_footer(text="Estimates based on ledger logs. Verify before finalizing trades.")
         
-        
+
         file = None
         if image_url and os.path.exists(BASE_CARD_PATH):
             try:
-                import re
-                
-                clean_url = image_url
-                match = re.search(r'(https?://[^/]+\.cloudfront\.net/[^\?]+)', image_url)
-                if match:
-                    clean_url = match.group(1)
-                
-                clean_url = clean_url.replace('.jpg', '.png').replace('.webp', '.png')
-                
                 async with aiohttp.ClientSession() as session:
-                    async with session.get(clean_url) as resp:
+                    async with session.get(image_url) as resp:
                         if resp.status == 200:
                             frame_bytes = await resp.read()
                             
@@ -127,20 +118,29 @@ class FrameItemSelect(discord.ui.Select):
                                 for idx, item in enumerate(datas):
                                     x = idx % target_width
                                     y = idx // target_width
+                                    r, g, b = item[0], item[1], item[2]
+                                    
+                                    is_gray = (35 <= r <= 65) and (35 <= g <= 65) and (35 <= b <= 65) and (abs(r - g) < 15) and (abs(g - b) < 15)
                                     
                                     is_top_plate = (0.08 <= x / target_width <= 0.48) and (0.015 <= y / target_height <= 0.075)
                                     is_bottom_plate = (0.55 <= x / target_width <= 0.95) and (0.91 <= y / target_height <= 0.985)
+                                    is_black = (r < 30 and g < 30 and b < 30)
                                     
-                                    if (is_top_plate or is_bottom_plate) and (item[0] < 45 and item[1] < 45 and item[2] < 45):
+                                    if is_gray or ((is_top_plate or is_bottom_plate) and is_black):
                                         newData.append((0, 0, 0, 0)) 
                                     else:
                                         newData.append(item)
                                         
                                 frame_rgba.putdata(newData)
                                 
-                                base_w, base_h = base_img.size
+                                inset_x = int(target_width * 0.04) 
+                                inset_y = int(target_height * 0.03) 
                                 
-                                scale = max(target_width / base_w, target_height / base_h)
+                                inner_w = target_width - (2 * inset_x)
+                                inner_h = target_height - (2 * inset_y)
+                                
+                                base_w, base_h = base_img.size
+                                scale = max(inner_w / base_w, inner_h / base_h)
                                 new_w = int(base_w * scale)
                                 new_h = int(base_h * scale)
                                 
@@ -151,12 +151,12 @@ class FrameItemSelect(discord.ui.Select):
                                     
                                 resized_base = base_img.resize((new_w, new_h), resample_filter)
                                 
-                                left = (new_w - target_width) / 2
-                                top = (new_h - target_height) / 2
-                                cropped_base = resized_base.crop((left, top, left + target_width, top + target_height))
+                                left = (new_w - inner_w) / 2
+                                top = (new_h - inner_h) / 2
+                                cropped_base = resized_base.crop((left, top, left + inner_w, top + inner_h))
                                 
-                                final_composite = Image.new("RGBA", frame_rgba.size)
-                                final_composite.paste(cropped_base, (0, 0))
+                                final_composite = Image.new("RGBA", frame_rgba.size, (49, 51, 56, 255)) 
+                                final_composite.paste(cropped_base, (inset_x, inset_y))
                                 final_composite.paste(frame_rgba, (0, 0), frame_rgba)
                                 
                                 output_buffer = BytesIO()
@@ -166,7 +166,7 @@ class FrameItemSelect(discord.ui.Select):
                                 file = discord.File(fp=output_buffer, filename="preview.jpg")
                                 embed.set_image(url="attachment://preview.jpg")
             except Exception as e:
-                print(f"Frame Composite Error: {e}")
+                print(f"Image Error: {e}")
                 pass
 
         view = discord.ui.View(timeout=180)
