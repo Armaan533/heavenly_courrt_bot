@@ -38,8 +38,8 @@ class FrameRenderEngine(commands.Cog):
                         fw, fh = img.size
                         bg_r, bg_g, bg_b = 49, 51, 56
                         
-                        LEFT, TOP = 40, 32
-                        RIGHT, BOTTOM = fw - 40, fh - 32
+                        EXT_LEFT, EXT_TOP = 40, 32
+                        EXT_RIGHT, EXT_BOTTOM = fw - 40, fh - 32
                         
                         IN_T_MIN, IN_T_MAX = 10.0, 45.0
                         OUT_T_MIN, OUT_T_MAX = 5.0, 15.0
@@ -54,7 +54,7 @@ class FrameRenderEngine(commands.Cog):
                             
                             dist = ((r - bg_r)**2 + (g - bg_g)**2 + (b - bg_b)**2) ** 0.5
                             
-                            if LEFT <= x <= RIGHT and TOP <= y <= BOTTOM:
+                            if EXT_LEFT <= x <= EXT_RIGHT and EXT_TOP <= y <= EXT_BOTTOM:
                                 if dist <= IN_T_MIN:
                                     new_data.append((0, 0, 0, 0))
                                 elif dist >= IN_T_MAX:
@@ -113,7 +113,7 @@ class FrameRenderEngine(commands.Cog):
             await interaction.followup.send(f"Runtime Exception: {e}")
             print(f"Extraction Error: {e}", file=sys.stderr)
 
-    @app_commands.command(name="test_composite", description="Execute Globablly Masked Z-Index Overlay")
+    @app_commands.command(name="test_composite", description="Execute 14px Inset Z-Index Overlay")
     async def test_composite(self, interaction: discord.Interaction, frame_name: str):
         match = next((n for n in FRAME_DB if frame_name.lower() in n.lower()), None)
         if not match:
@@ -142,8 +142,8 @@ class FrameRenderEngine(commands.Cog):
                         fw, fh = frame_img.size
                         bg_r, bg_g, bg_b = 49, 51, 56
                         
-                        LEFT, TOP = 40, 32
-                        RIGHT, BOTTOM = fw - 40, fh - 32
+                        EXT_LEFT, EXT_TOP = 40, 32
+                        EXT_RIGHT, EXT_BOTTOM = fw - 40, fh - 32
                         
                         IN_T_MIN, IN_T_MAX = 10.0, 45.0
                         OUT_T_MIN, OUT_T_MAX = 5.0, 15.0
@@ -158,7 +158,7 @@ class FrameRenderEngine(commands.Cog):
                             
                             dist = ((r - bg_r)**2 + (g - bg_g)**2 + (b - bg_b)**2) ** 0.5
                             
-                            if LEFT <= x <= RIGHT and TOP <= y <= BOTTOM:
+                            if EXT_LEFT <= x <= EXT_RIGHT and EXT_TOP <= y <= EXT_BOTTOM:
                                 if dist <= IN_T_MIN:
                                     new_data.append((0, 0, 0, 0))
                                 elif dist >= IN_T_MAX:
@@ -179,38 +179,46 @@ class FrameRenderEngine(commands.Cog):
                                 
                         frame_img.putdata(new_data)
                         
+                        PAD = 14
+                        COMP_LEFT, COMP_TOP = PAD, PAD
+                        COMP_RIGHT, COMP_BOTTOM = fw - PAD, fh - PAD
+                        inner_w, inner_h = COMP_RIGHT - COMP_LEFT, COMP_BOTTOM - COMP_TOP
+                        
                         try:
                             resample_method = Image.Resampling.LANCZOS
                         except AttributeError:
                             resample_method = Image.ANTIALIAS
                             
-                        card_resized = ImageOps.fit(base_img, (fw, fh), method=resample_method).convert("RGBA")
+                        card_resized = ImageOps.fit(base_img, (inner_w, inner_h), method=resample_method).convert("RGBA")
                         
-                        mask = Image.new("L", (fw, fh), 0)
+                        mask = Image.new("L", (inner_w, inner_h), 0)
                         draw = ImageDraw.Draw(mask)
-                        draw.rounded_rectangle((0, 0, fw, fh), radius=25, fill=255)
+                        draw.rounded_rectangle((0, 0, inner_w, inner_h), radius=15, fill=255)
                         card_resized.putalpha(mask)
                         
-                        final_composite = Image.alpha_composite(card_resized, frame_img)
+                        canvas = Image.new("RGBA", (fw, fh), (0, 0, 0, 0))
+                        canvas.paste(card_resized, (COMP_LEFT, COMP_TOP), card_resized)
+                        
+                        final_composite = Image.alpha_composite(canvas, frame_img)
                         
                         output_buffer = BytesIO()
                         final_composite.save(output_buffer, format="PNG")
                         output_buffer.seek(0)
                         
-                        file_name = f"masked_composite_{match.replace(' ', '_')}.png"
+                        file_name = f"padded_composite_{match.replace(' ', '_')}.png"
                         file = discord.File(fp=output_buffer, filename=file_name)
                         
                         embed = discord.Embed(
-                            title="[ SYSTEM: GLOBAL BOUNDARY OVERLAY ]",
+                            title="[ SYSTEM: 14px INSET BOUNDARY OVERLAY ]",
                             color=0x2b2d31
                         )
                         
                         embed.add_field(
-                            name="Compositing Protocol", 
+                            name="Padding Calibration", 
                             value=(
-                                "$$\\Omega_{global} = [0, fw] \\times [0, fh]$$\n"
-                                "$$\\partial \\Omega_{clip} = \\rho_{25} \\quad (C^1 \\text{ boundary curvature})$$\n"
-                                "$$\\mathbf{C}_{final} = (\\mathbf{C}_{base} \\circ M_{clip}) \\oplus_{\\alpha} \\mathbf{C}_{frame}$$"
+                                "$$\\Omega_{safe} = [14, fw-14] \\times [14, fh-14]$$\n"
+                                "$$\\partial \\Omega_{clip} = \\rho_{15} \\quad (C^1 \\text{ boundary curvature})$$\n"
+                                "Base matrix successfully isolated from native PNG drop-shadow padding boundaries."
                             ),
                             inline=False
                         )
