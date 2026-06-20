@@ -89,67 +89,58 @@ class FrameItemSelect(discord.ui.Select):
                     async with session.get(image_url) as resp:
                         if resp.status == 200:
                             frame_bytes = await resp.read()
-                            
-                            with Image.open(BASE_CARD_PATH).convert("RGBA") as base_img, Image.open(BytesIO(frame_bytes)).convert("RGBA") as frame_img:
+
+                            with Image.open(BASE_CARD_PATH).convert("RGBA") as base_img, \
+                                 Image.open(BytesIO(frame_bytes)).convert("RGBA") as frame_img:
+
                                 fw, fh = frame_img.size
-                                
-                                # 1. AUTO-DETECT BACKGROUND COLOR
-                                # Safely sample the gray background color dynamically from the top left
-                                bg_r, bg_g, bg_b = frame_img.getpixel((2, 2))[:3]
-                                
-                                # 2. EUCLIDEAN CHROMA KEY (No rectangles, pure math)
-                                datas = frame_img.getdata()
-                                newData = []
-                                
-                                for item in datas:
-                                    r, g, b, a = item
-                                    
-                                    # Calculate squared Euclidean distance from the background color
-                                    dist_sq = (r - bg_r)**2 + (g - bg_g)**2 + (b - bg_b)**2
-                                    
-                                    if dist_sq < 250:
-                                        # Pure background gray gets completely erased
-                                        newData.append((r, g, b, 0))
-                                    elif dist_sq < 900:
-                                        # Anti-aliasing edge blend for smooth glows
-                                        alpha = int(((dist_sq - 250) / 650) * 255)
-                                        newData.append((r, g, b, alpha))
-                                    else:
-                                        # Math protects the black plates and colored frame naturally!
-                                        newData.append((r, g, b, 255))
-                                        
-                                frame_img.putdata(newData)
-                                
-                                # 3. FIX SIDE LEAKING & CORNERS
-                                inset = 14 # Squeeze inward by 14 flat pixels on all sides
-                                inner_w = fw - (2 * inset)
-                                inner_h = fh - (2 * inset)
-                                
+
+                                LEFT = 40
+                                TOP = 32
+                                RIGHT = fw - 40
+                                BOTTOM = fh - 32
+
+                                inner_w = RIGHT - LEFT
+                                inner_h = BOTTOM - TOP
+
                                 try:
                                     resample_filter = Image.Resampling.LANCZOS
                                 except AttributeError:
                                     resample_filter = Image.ANTIALIAS
-                                    
-                                base_resized = ImageOps.fit(base_img, (inner_w, inner_h), method=resample_filter)
-                                
-                                # Apply heavy rounded corners to the base image to prevent corner poking forever
+
+                                card_resized = ImageOps.fit(
+                                    base_img,
+                                    (inner_w, inner_h),
+                                    method=resample_filter
+                                )
+
                                 mask = Image.new("L", (inner_w, inner_h), 0)
-                                draw_mask = ImageDraw.Draw(mask)
-                                draw_mask.rounded_rectangle((0, 0, inner_w, inner_h), radius=35, fill=255)
-                                base_resized.putalpha(mask)
-                                
-                                # 4. COMPOSITE
-                                base_canvas = Image.new("RGBA", (fw, fh), (0, 0, 0, 0))
-                                base_canvas.paste(base_resized, (inset, inset), base_resized)
-                                
-                                final_composite = Image.alpha_composite(base_canvas, frame_img)
-                                
+                                draw = ImageDraw.Draw(mask)
+                                draw.rounded_rectangle(
+                                    (0, 0, inner_w, inner_h),
+                                    radius=20,
+                                    fill=255
+                                )
+
+                                card_resized.putalpha(mask)
+
+                                canvas = Image.new("RGBA", (fw, fh), (0, 0, 0, 0))
+
+                                canvas.paste(card_resized, (LEFT, TOP), card_resized)
+
+                                final_composite = Image.alpha_composite(canvas, frame_img)
+
                                 output_buffer = BytesIO()
                                 final_composite.save(output_buffer, format="PNG")
                                 output_buffer.seek(0)
-                                
-                                file = discord.File(fp=output_buffer, filename="preview.png")
+
+                                file = discord.File(
+                                    fp=output_buffer,
+                                    filename="preview.png"
+                                )
+
                                 embed.set_image(url="attachment://preview.png")
+
             except Exception as e:
                 print(f"Frame Processing Error: {e}", file=sys.stderr)
 
@@ -201,7 +192,7 @@ class BackButton(discord.ui.Button):
                 description=f"Browse our complete collection of **{category}** frames below.",
                 color=0x6b1614
             )
-            await interaction.response.edit_message(embed=embed, view=view, attachments=[])
+            await interaction.response.edit_message(embed=embed, view=view)
 
 class FramesCog(commands.Cog):
     def __init__(self, bot):
