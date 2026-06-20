@@ -586,12 +586,17 @@ class ServicesCog(commands.Cog):
 
     services = app_commands.Group(name="services", description="Service directory management")
 
-    @services.command(name="add", description="Register as a service provider")
-    async def service_add(self, interaction: discord.Interaction):
-        role = discord.utils.get(interaction.user.roles, id=SERVICE_ROLE_ID)
-        if not role:
-            return await interaction.response.send_message("❌ You need the **service_access** role to register a profile!", ephemeral=True)
+    async def cog_app_command_error(self, interaction: discord.Interaction, error: app_commands.AppCommandError):
+        if isinstance(error, app_commands.MissingRole):
+            await interaction.response.send_message("❌ You do not have the required **service_access** role to use this command!", ephemeral=True)
+        else:
+            traceback.print_exc()
+            if not interaction.response.is_done():
+                await interaction.response.send_message("⚠️ An error occurred while executing the command.", ephemeral=True)
 
+    @services.command(name="add", description="Register as a service provider")
+    @app_commands.checks.has_role(SERVICE_ROLE_ID)
+    async def service_add(self, interaction: discord.Interaction):
         embed = discord.Embed(
             title="<:emoji_for_oddny:1517225564023554219> [ SERVICE REGISTRATION ] <:emoji_for_oddny:1517225564023554219>",
             description="What kind of service are you providing to the Heavenly Court?\n*(Select an option below to open your registration form)*",
@@ -609,11 +614,8 @@ class ServicesCog(commands.Cog):
         await interaction.response.send_message(embed=embed, view=CategoryView(self.bot))
 
     @services.command(name="update", description="Update your registered service profile")
+    @app_commands.checks.has_role(SERVICE_ROLE_ID)
     async def service_update(self, interaction: discord.Interaction):
-        role = discord.utils.get(interaction.user.roles, id=SERVICE_ROLE_ID)
-        if not role:
-            return await interaction.response.send_message("❌ You need the **service_access** role to update a profile!", ephemeral=True)
-
         embed = discord.Embed(
             title="<:emoji_for_oddny:1517225564023554219> [ UPDATE SERVICE PROFILE ] <:emoji_for_oddny:1517225564023554219>",
             description="Which of your registered profiles would you like to update?",
@@ -622,11 +624,8 @@ class ServicesCog(commands.Cog):
         await interaction.response.send_message(embed=embed, view=ServiceUpdateSelectionView(interaction.user, self.bot))
 
     @services.command(name="delete", description="Delete your registered service profile")
+    @app_commands.checks.has_role(SERVICE_ROLE_ID)
     async def service_delete(self, interaction: discord.Interaction):
-        role = discord.utils.get(interaction.user.roles, id=SERVICE_ROLE_ID)
-        if not role:
-            return await interaction.response.send_message("❌ You need the **service_access** role to delete a profile!", ephemeral=True)
-
         user_id = interaction.user.id
         removed = False
         for cat in ["dyers", "frame_testers", "sketchers"]:
