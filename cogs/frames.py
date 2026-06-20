@@ -5,6 +5,7 @@ import aiohttp
 from io import BytesIO
 from PIL import Image, ImageOps, ImageDraw
 import os
+import sys
 
 from frame_prices import FRAME_DB
 
@@ -84,45 +85,53 @@ class FrameItemSelect(discord.ui.Select):
         file = None
         if image_url and os.path.exists(BASE_CARD_PATH):
             try:
-                target_url = image_url.replace(".jpg", ".png").replace(".webp", ".png")
+                urls_to_try = [
+                    image_url.replace(".jpg", ".png").replace(".webp", ".png"),
+                    image_url
+                ]
+                
+                frame_bytes = None
                 headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36'}
                 
                 async with aiohttp.ClientSession(headers=headers) as session:
-                    async with session.get(target_url) as resp:
-                        if resp.status == 200:
-                            frame_bytes = await resp.read()
+                    for url in urls_to_try:
+                        async with session.get(url) as resp:
+                            if resp.status == 200:
+                                frame_bytes = await resp.read()
+                                break
+                                
+                if frame_bytes:
+                    with Image.open(BASE_CARD_PATH).convert("RGBA") as base_img, Image.open(BytesIO(frame_bytes)).convert("RGBA") as frame_img:
+                        fw, fh = frame_img.size
+                        
+                        try:
+                            resample_filter = Image.Resampling.LANCZOS
+                        except AttributeError:
+                            resample_filter = Image.ANTIALIAS
                             
-                            with Image.open(BASE_CARD_PATH).convert("RGBA") as base_img, Image.open(BytesIO(frame_bytes)).convert("RGBA") as frame_img:
-                                fw, fh = frame_img.size
-                                
-                                try:
-                                    resample_filter = Image.Resampling.LANCZOS
-                                except AttributeError:
-                                    resample_filter = Image.ANTIALIAS
-                                    
-                                base_cropped = ImageOps.fit(base_img, (fw, fh), method=resample_filter)
-                                
-                                mask = Image.new("L", (fw, fh), 0)
-                                draw_mask = ImageDraw.Draw(mask)
-                                draw_mask.rounded_rectangle((0, 0, fw, fh), radius=22, fill=255)
-                                base_cropped.putalpha(mask)
-                                
-                                plate_overlay = Image.new("RGBA", (fw, fh), (0, 0, 0, 0))
-                                draw_plates = ImageDraw.Draw(plate_overlay)
-                                draw_plates.rectangle((0, 0, fw, int(fh * 0.13)), fill=(0, 0, 0, 160))
-                                draw_plates.rectangle((0, int(fh * 0.88), fw, fh), fill=(0, 0, 0, 160))
-                                
-                                base_composite = Image.alpha_composite(base_cropped, plate_overlay)
-                                final_composite = Image.alpha_composite(base_composite, frame_img)
-                                
-                                output_buffer = BytesIO()
-                                final_composite.save(output_buffer, format="PNG")
-                                output_buffer.seek(0)
-                                
-                                file = discord.File(fp=output_buffer, filename="preview.png")
-                                embed.set_image(url="attachment://preview.png")
-            except Exception:
-                pass
+                        base_cropped = ImageOps.fit(base_img, (fw, fh), method=resample_filter)
+                        
+                        mask = Image.new("L", (fw, fh), 0)
+                        draw_mask = ImageDraw.Draw(mask)
+                        draw_mask.rounded_rectangle((0, 0, fw, fh), radius=22, fill=255)
+                        base_cropped.putalpha(mask)
+                        
+                        plate_overlay = Image.new("RGBA", (fw, fh), (0, 0, 0, 0))
+                        draw_plates = ImageDraw.Draw(plate_overlay)
+                        draw_plates.rectangle((0, 0, fw, int(fh * 0.13)), fill=(0, 0, 0, 160))
+                        draw_plates.rectangle((0, int(fh * 0.88), fw, fh), fill=(0, 0, 0, 160))
+                        
+                        base_composite = Image.alpha_composite(base_cropped, plate_overlay)
+                        final_composite = Image.alpha_composite(base_composite, frame_img)
+                        
+                        output_buffer = BytesIO()
+                        final_composite.save(output_buffer, format="PNG")
+                        output_buffer.seek(0)
+                        
+                        file = discord.File(fp=output_buffer, filename="preview.png")
+                        embed.set_image(url="attachment://preview.png")
+            except Exception as e:
+                print(f"Frame Processing Error: {e}", file=sys.stderr)
 
         view = discord.ui.View(timeout=180)
         view.add_item(BackButton(self.bot, target="category_list", current_category=self.category))
