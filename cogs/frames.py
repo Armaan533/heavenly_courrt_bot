@@ -3,62 +3,165 @@ from discord import app_commands
 from discord.ext import commands
 from frame_prices import FRAME_DB
 
-class FrameView(discord.ui.View):
-    def __init__(self, bot):
-        super().__init__(timeout=180)
-        self.bot = bot
-        self.add_item(FrameCategorySelect(bot))
-
 class FrameCategorySelect(discord.ui.Select):
     def __init__(self, bot):
-        categories = sorted(list(set(d.get("type", "Misc") for d in FRAME_DB.values())))
-        options = [discord.SelectOption(label=c, value=c) for c in categories]
-        super().__init__(placeholder="Select a Category...", options=options)
+        self.bot = bot
+        # Extract unique types dynamically from the DB
+        categories = sorted(list(set(data.get("type", "Unknown") for data in FRAME_DB.values())))
+        
+        options = [
+            discord.SelectOption(label=cat, value=cat, emoji="🗂️") 
+            for cat in categories
+        ]
+        
+        super().__init__(placeholder="Select a frame category...", min_values=1, max_values=1, options=options)
 
     async def callback(self, interaction: discord.Interaction):
-        await interaction.response.defer()
-        cat = self.values[0]
-        frames = [name for name, d in FRAME_DB.items() if d.get("type") == cat]
-        view = discord.ui.View(timeout=180)
-        view.add_item(FrameItemSelect(cat, frames))
-        view.add_item(BackButton())
-        await interaction.followup.edit_message(message_id=interaction.message.id, 
-            embed=discord.Embed(title=f"📁 Viewing: {cat}", color=0x6b1614), view=view)
+        category = self.values[0]
+        
+        # Get all frames belonging to this specific category
+        frames = sorted([name for name, data in FRAME_DB.items() if data.get("type") == category])
+        
+        # Discord limits select menus to 25 items. Auto-split if category is massive.
+        if len(frames) > 24:
+            view = discord.ui.View(timeout=180)
+            chunk_size = 24
+            chunks = [frames[i:i + chunk_size] for i in range(0, len(frames), chunk_size)]
+            
+            for idx, chunk in enumerate(chunks):
+                start_letter = chunk[0][0].upper()
+                end_letter = chunk[-1][0].upper()
+                label = f"{category} ({start_letter}-{end_letter})"
+                view.add_item(FrameItemSelect(self.bot, label, chunk, category))
+                
+            view.add_item(BackButton(self.bot, target="categories"))
+            
+            embed = discord.Embed(
+                title=f"<:two_flowers:1516684386546880614> [ {category.upper()} SUB-PANEL ]",
+                description="This category is quite large! Please select a subset dropdown below to find your frame.",
+                color=0x6b1614
+            )
+            await interaction.response.edit_message(embed=embed, view=view)
+        else:
+            view = discord.ui.View(timeout=180)
+            view.add_item(FrameItemSelect(self.bot, f"Select a {category} Frame", frames, category))
+            view.add_item(BackButton(self.bot, target="categories"))
+            
+            embed = discord.Embed(
+                title=f"<:two_flowers:1516684386546880614> [ {category.upper()} CATALOG ]",
+                description=f"Browse our complete collection of **{category}** frames below.",
+                color=0x6b1614
+            )
+            await interaction.response.edit_message(embed=embed, view=view)
 
 class FrameItemSelect(discord.ui.Select):
-    def __init__(self, cat, frames):
-        options = [discord.SelectOption(label=f[:25], value=f) for f in frames[:25]]
-        super().__init__(placeholder="Choose a Frame...", options=options)
-        self.cat = cat
+    def __init__(self, bot, placeholder, frame_list, category):
+        self.bot = bot
+        self.category = category
+        options = []
+        for name in frame_list:
+            options.append(discord.SelectOption(label=name.title(), value=name, emoji="🖼️"))
+            
+        super().__init__(placeholder=placeholder, min_values=1, max_values=1, options=options)
+
     async def callback(self, interaction: discord.Interaction):
-        await interaction.response.defer()
-        data = FRAME_DB[self.values[0]]
-        embed = discord.Embed(title=self.values[0].title(), color=0x6b1614)
-        embed.add_field(name="Market Value", value=f"{data.get('market', 0)} 🎟️")
-        embed.set_image(url=data.get('image'))
-        await interaction.followup.edit_message(message_id=interaction.message.id, embed=embed, view=FrameView(self.bot))
+        frame_name = self.values[0]
+        data = FRAME_DB[frame_name]
+        
+        market_price = data.get("market", 0)
+        liquid_price = data.get("liquid cost", 0)
+        frame_type = data.get("type", "Unknown")
+        image_url = data.get("image", None)
+        
+        embed = discord.Embed(
+            title=f"<:two_flowers:1516684386546880614> Preview: {frame_name.title()}",
+            color=0x6b1614
+        )
+        embed.add_field(name="<:book_ig:1516683126066253844> Category", value=f"`{frame_type}`", inline=False)
+        
+        if market_price == 0 and liquid_price == 0:
+            embed.add_field(
+                name="💰 Pricing Estimate", 
+                value="*⚠️ Pricing fluctuates heavily. Insufficient market data available for standard calculation.*", 
+                inline=False
+            )
+        else:
+            embed.add_field(name="<:eight_side_sparkle:1516681364806570105> Market Value", value=f"**{market_price}** 🎟️", inline=True)
+            if liquid_price >= 25 and frame_type.lower() != "bits":
+                embed.add_field(name="<:for_john:1517226175901208696> Liquid Cost", value=f"**{liquid_price}** 🎟️", inline=True)
+                
+        embed.set_footer(text="Estimates based on ledger logs. Verify before finalizing trades.")
+        
+        # Display the raw frame directly from the database URL
+        if image_url:
+            embed.set_image(url=image_url)
+
+        view = discord.ui.View(timeout=180)
+        view.add_item(BackButton(self.bot, target="category_list", current_category=self.category))
+        
+        await interaction.response.edit_message(embed=embed, view=view, attachments=[])
 
 class BackButton(discord.ui.Button):
-    def __init__(self): super().__init__(label="Back", style=discord.ButtonStyle.danger)
+    def __init__(self, bot, target, current_category=None):
+        self.bot = bot
+        self.target = target
+        self.current_category = current_category
+        super().__init__(label="Go Back", style=discord.ButtonStyle.danger, emoji="🔙")
+
     async def callback(self, interaction: discord.Interaction):
-        await interaction.response.defer()
-        await interaction.followup.edit_message(message_id=interaction.message.id, 
-            embed=discord.Embed(title="📁 Frame Vault", description="Select a category to begin.", color=0x6b1614), view=FrameView(self.bot))
+        if self.target == "categories":
+            view = discord.ui.View(timeout=180)
+            view.add_item(FrameCategorySelect(self.bot))
+            
+            embed = discord.Embed(
+                title="<:red_lotus:1516679367743377448> [ HEAVENLY COURT VAULT ]",
+                description="Welcome to the Frame Showroom. Select a system index class below to access the database collections.",
+                color=0x6b1614
+            )
+            await interaction.response.edit_message(embed=embed, view=view, attachments=[])
+            
+        elif self.target == "category_list":
+            category = self.current_category
+            frames = sorted([name for name, data in FRAME_DB.items() if data.get("type") == category])
+            
+            view = discord.ui.View(timeout=180)
+            if len(frames) > 24:
+                chunk_size = 24
+                chunks = [frames[i:i + chunk_size] for i in range(0, len(frames), chunk_size)]
+                for idx, chunk in enumerate(chunks):
+                    start_letter = chunk[0][0].upper()
+                    end_letter = chunk[-1][0].upper()
+                    label = f"{category} ({start_letter}-{end_letter})"
+                    view.add_item(FrameItemSelect(self.bot, label, chunk, category))
+            else:
+                view.add_item(FrameItemSelect(self.bot, f"Select a {category} Frame", frames, category))
+                
+            view.add_item(BackButton(self.bot, target="categories"))
+            
+            embed = discord.Embed(
+                title=f"<:two_flowers:1516684386546880614> [ {category.upper()} CATALOG ]",
+                description=f"Browse our complete collection of **{category}** frames below.",
+                color=0x6b1614
+            )
+            await interaction.response.edit_message(embed=embed, view=view, attachments=[])
 
 class FramesCog(commands.Cog):
-    def __init__(self, bot): self.bot = bot
+    def __init__(self, bot):
+        self.bot = bot
 
-    @app_commands.command(name="frame", description="Open the Frame Vault")
-    async def frame(self, interaction: discord.Interaction):
-        await interaction.response.send_message(embed=discord.Embed(title="📁 Frame Vault", description="Select a category to begin.", color=0x6b1614), view=FrameView(self.bot))
+    frame_group = app_commands.Group(name="frame", description="Heavenly Court Frame Utilities")
 
-    @app_commands.command(name="lookup", description="Search for a specific frame")
-    async def lookup(self, interaction: discord.Interaction, name: str):
-        match = next((n for n in FRAME_DB if name.lower() in n.lower()), None)
-        if not match: return await interaction.response.send_message("Frame not found.", ephemeral=True)
-        data = FRAME_DB[match]
-        embed = discord.Embed(title=match.title(), color=0x6b1614)
-        embed.set_image(url=data.get('image'))
-        await interaction.response.send_message(embed=embed)
+    @frame_group.command(name="menu", description="Open the luxurious, interactive frame preview vault catalog")
+    async def frame_menu(self, interaction: discord.Interaction):
+        view = discord.ui.View(timeout=180)
+        view.add_item(FrameCategorySelect(self.bot))
+        
+        embed = discord.Embed(
+            title="<:red_lotus:1516679367743377448> [ HEAVENLY COURT VAULT ]",
+            description="Welcome to the Frame Showroom. Select a system index class below to access the database collections.",
+            color=0x6b1614
+        )
+        await interaction.response.send_message(embed=embed, view=view)
 
-async def setup(bot): await bot.add_cog(FramesCog(bot))
+async def setup(bot):
+    await bot.add_cog(FramesCog(bot))
