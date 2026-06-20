@@ -93,27 +93,22 @@ class FrameItemSelect(discord.ui.Select):
                             with Image.open(BASE_CARD_PATH).convert("RGBA") as base_img, Image.open(BytesIO(frame_bytes)).convert("RGBA") as frame_img:
                                 fw, fh = frame_img.size
                                 
-                                datas = frame_img.getdata()
-                                newData = []
-                                for idx, item in enumerate(datas):
-                                    x = idx % fw
-                                    y = idx // fw
-                                    r, g, b, a = item
-                                    
-                                    is_top_plate = (0.08 <= x / fw <= 0.48) and (0.015 <= y / fh <= 0.075)
-                                    is_bottom_plate = (0.55 <= x / fw <= 0.95) and (0.91 <= y / fh <= 0.985)
-                                    
-                                    if (is_top_plate or is_bottom_plate) and (r < 40 and g < 40 and b < 40):
-                                        newData.append((0, 0, 0, 0))
-                                        continue
-                                        
-                                    if abs(r - g) < 15 and abs(g - b) < 15 and 30 <= r <= 65:
-                                        newData.append((0, 0, 0, 0))
-                                    else:
-                                        newData.append(item)
-                                        
-                                frame_img.putdata(newData)
+                                # 1. THE FLOOD FILL ENGINE (Like the Photoshop Paint Bucket)
+                                # Target center, top-left, top-right, bottom-left, bottom-right
+                                fill_points = [
+                                    (fw // 2, fh // 2), 
+                                    (5, 5), (fw - 5, 5), (5, fh - 5), (fw - 5, fh - 5)
+                                ]
                                 
+                                for point in fill_points:
+                                    ImageDraw.floodfill(frame_img, point, (0, 0, 0, 0), thresh=30)
+                                
+                                # 2. FORCE WIPE THE NAMEPLATES
+                                draw_frame = ImageDraw.Draw(frame_img)
+                                draw_frame.rectangle((int(fw * 0.08), int(fh * 0.015), int(fw * 0.48), int(fh * 0.075)), fill=(0, 0, 0, 0))
+                                draw_frame.rectangle((int(fw * 0.55), int(fh * 0.91), int(fw * 0.95), int(fh * 0.985)), fill=(0, 0, 0, 0))
+                                
+                                # 3. PREPARE THE BASE CARD
                                 try:
                                     resample_filter = Image.Resampling.LANCZOS
                                 except AttributeError:
@@ -126,6 +121,7 @@ class FrameItemSelect(discord.ui.Select):
                                 draw_mask.rounded_rectangle((0, 0, fw, fh), radius=22, fill=255)
                                 base_cropped.putalpha(mask)
                                 
+                                # 4. DRAW OUR CUSTOM NAMEPLATES & TEXT ON THE BASE CARD
                                 draw_base = ImageDraw.Draw(base_cropped)
                                 draw_base.rectangle((int(fw * 0.08), int(fh * 0.015), int(fw * 0.48), int(fh * 0.075)), fill=(0, 0, 0, 150))
                                 draw_base.rectangle((int(fw * 0.55), int(fh * 0.91), int(fw * 0.95), int(fh * 0.985)), fill=(0, 0, 0, 150))
@@ -146,6 +142,7 @@ class FrameItemSelect(discord.ui.Select):
                                 draw_shadow_text(draw_base, (int(fw * 0.12), int(fh * 0.025)), "Fang Yuan", font_large)
                                 draw_shadow_text(draw_base, (int(fw * 0.58), int(fh * 0.93)), "Heavenly Court", font_small)
                                 
+                                # 5. COMPOSITE
                                 final_composite = Image.alpha_composite(base_cropped, frame_img)
                                 
                                 output_buffer = BytesIO()
