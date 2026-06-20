@@ -5,6 +5,7 @@ import aiohttp
 from io import BytesIO
 from PIL import Image, ImageOps, ImageDraw
 import os
+import sys
 
 from frame_prices import FRAME_DB
 
@@ -92,59 +93,54 @@ class FrameItemSelect(discord.ui.Select):
                             with Image.open(BASE_CARD_PATH).convert("RGBA") as base_img, Image.open(BytesIO(frame_bytes)).convert("RGBA") as frame_img:
                                 fw, fh = frame_img.size
                                 
-                                # 1. SOFT CHROMA KEY: Perfectly removes gray and blends anti-aliased edges
+                                # 1. AUTO-DETECT BACKGROUND COLOR
+                                # Safely sample the gray background color dynamically from the top left
+                                bg_r, bg_g, bg_b = frame_img.getpixel((2, 2))[:3]
+                                
+                                # 2. EUCLIDEAN CHROMA KEY (No rectangles, pure math)
                                 datas = frame_img.getdata()
                                 newData = []
-                                for idx, item in enumerate(datas):
-                                    x = idx % fw
-                                    y = idx // fw
+                                
+                                for item in datas:
                                     r, g, b, a = item
                                     
-                                    # Target the solid black nameplate areas and wipe them entirely
-                                    is_top_plate = (0.08 <= x / fw <= 0.48) and (0.015 <= y / fh <= 0.075)
-                                    is_bottom_plate = (0.55 <= x / fw <= 0.95) and (0.91 <= y / fh <= 0.985)
+                                    # Calculate squared Euclidean distance from the background color
+                                    dist_sq = (r - bg_r)**2 + (g - bg_g)**2 + (b - bg_b)**2
                                     
-                                    if (is_top_plate or is_bottom_plate) and (r < 35 and g < 35 and b < 35):
-                                        newData.append((0, 0, 0, 0))
-                                        continue
-                                        
-                                    # Mathematical distance to Discord's gray color variants
-                                    dr, dg, db = abs(r - 49), abs(g - 51), abs(b - 56)
-                                    dr2, dg2, db2 = abs(r - 47), abs(g - 49), abs(b - 54)
-                                    dist = min(max(dr, dg, db), max(dr2, dg2, db2))
-                                    
-                                    if dist <= 6:
-                                        newData.append((0, 0, 0, 0)) # Pure background
-                                    elif dist <= 24:
-                                        # Smooth 18-step transparency transition for edge blending
-                                        alpha = int(((dist - 6) / 18) * 255)
-                                        newData.append((r, g, b, min(a, alpha)))
+                                    if dist_sq < 250:
+                                        # Pure background gray gets completely erased
+                                        newData.append((r, g, b, 0))
+                                    elif dist_sq < 900:
+                                        # Anti-aliasing edge blend for smooth glows
+                                        alpha = int(((dist_sq - 250) / 650) * 255)
+                                        newData.append((r, g, b, alpha))
                                     else:
-                                        newData.append(item)
+                                        # Math protects the black plates and colored frame naturally!
+                                        newData.append((r, g, b, 255))
                                         
                                 frame_img.putdata(newData)
                                 
-                                # 2. PREPARE BASE CARD: Squeeze slightly so corners don't bleed outside frame
+                                # 3. FIX SIDE LEAKING & CORNERS
+                                inset = 14 # Squeeze inward by 14 flat pixels on all sides
+                                inner_w = fw - (2 * inset)
+                                inner_h = fh - (2 * inset)
+                                
                                 try:
                                     resample_filter = Image.Resampling.LANCZOS
                                 except AttributeError:
                                     resample_filter = Image.ANTIALIAS
                                     
-                                inset_x = int(fw * 0.04) # Squeeze inward 4% on left/right
-                                inset_y = int(fh * 0.01) # Squeeze inward 1% on top/bottom
-                                inner_w = fw - (2 * inset_x)
-                                inner_h = fh - (2 * inset_y)
-                                
                                 base_resized = ImageOps.fit(base_img, (inner_w, inner_h), method=resample_filter)
                                 
+                                # Apply heavy rounded corners to the base image to prevent corner poking forever
                                 mask = Image.new("L", (inner_w, inner_h), 0)
                                 draw_mask = ImageDraw.Draw(mask)
-                                draw_mask.rounded_rectangle((0, 0, inner_w, inner_h), radius=28, fill=255)
+                                draw_mask.rounded_rectangle((0, 0, inner_w, inner_h), radius=35, fill=255)
                                 base_resized.putalpha(mask)
                                 
-                                # 3. COMPOSITE
+                                # 4. COMPOSITE
                                 base_canvas = Image.new("RGBA", (fw, fh), (0, 0, 0, 0))
-                                base_canvas.paste(base_resized, (inset_x, inset_y), base_resized)
+                                base_canvas.paste(base_resized, (inset, inset), base_resized)
                                 
                                 final_composite = Image.alpha_composite(base_canvas, frame_img)
                                 
@@ -155,7 +151,7 @@ class FrameItemSelect(discord.ui.Select):
                                 file = discord.File(fp=output_buffer, filename="preview.png")
                                 embed.set_image(url="attachment://preview.png")
             except Exception as e:
-                print(f"Frame Processing Error: {e}")
+                print(f"Frame Processing Error: {e}", file=sys.stderr)
 
         view = discord.ui.View(timeout=180)
         view.add_item(BackButton(self.bot, target="category_list", current_category=self.category))
