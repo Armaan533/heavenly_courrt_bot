@@ -3,7 +3,7 @@ from discord import app_commands
 from discord.ext import commands
 import aiohttp
 from io import BytesIO
-from PIL import Image, ImageDraw
+from PIL import Image, ImageOps, ImageDraw
 import os
 
 from frame_prices import FRAME_DB
@@ -70,73 +70,50 @@ class FrameItemSelect(discord.ui.Select):
         embed = discord.Embed(color=0x6b1614)
         embed.set_author(name=f"Preview: {frame_name.title()}", icon_url="https://cdn.discordapp.com/emojis/1516684386546880614.png")
         
-        embed.add_field(name="<:book_ig:1516683126066253844> Category", value=f"`{frame_type}`", inline=False)
-        
+        desc = f"**<:book_ig:1516683126066253844> Category:** `{frame_type}`\n"
         if market_price == 0 and liquid_price == 0:
-            embed.add_field(name="💰 Pricing Estimate", value="*⚠️ Pricing fluctuates heavily. Insufficient market data available.*", inline=False)
+            desc += "**💰 Pricing Estimate:** *⚠️ Insufficient market data available.*\n"
         else:
-            embed.add_field(name="<:eight_side_sparkle:1516681364806570105> Market Value", value=f"**{market_price}** 🎟️", inline=True)
+            desc += f"**<:eight_side_sparkle:1516681364806570105> Market Value:** **{market_price}** 🎟️\n"
             if liquid_price >= 25 and frame_type.lower() != "bits":
-                embed.add_field(name="<:for_john:1517226175901208696> Liquid Cost", value=f"**{liquid_price}** 🎟️", inline=True)
-                
+                desc += f"**<:for_john:1517226175901208696> Liquid Cost:** **{liquid_price}** 🎟️\n"
+        
+        embed.description = desc
         embed.set_footer(text="Estimates based on ledger logs. Verify before finalizing trades.")
         
         file = None
         if image_url and os.path.exists(BASE_CARD_PATH):
             try:
-                async with aiohttp.ClientSession() as session:
-                    async with session.get(image_url) as resp:
+                target_url = image_url.replace(".jpg", ".png").replace(".webp", ".png")
+                headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36'}
+                
+                async with aiohttp.ClientSession(headers=headers) as session:
+                    async with session.get(target_url) as resp:
                         if resp.status == 200:
                             frame_bytes = await resp.read()
                             
-                            with Image.open(BASE_CARD_PATH) as base_img, Image.open(BytesIO(frame_bytes)) as frame_img:
-                                frame_rgba = frame_img.convert("RGBA")
-                                datas = frame_rgba.getdata()
-                                target_width, target_height = frame_rgba.size
-                                
-                                newData = []
-                                for idx, item in enumerate(datas):
-                                    x = idx % target_width
-                                    y = idx // target_width
-                                    r, g, b, a = item[0], item[1], item[2], item[3]
-                                    
-                                    is_top_plate = (0.08 <= x / target_width <= 0.48) and (0.015 <= y / target_height <= 0.075)
-                                    is_bottom_plate = (0.55 <= x / target_width <= 0.95) and (0.91 <= y / target_height <= 0.985)
-                                    
-                                    if (is_top_plate or is_bottom_plate) and (r < 40 and g < 40 and b < 40):
-                                        newData.append((0, 0, 0, 0))
-                                        continue
-                                        
-                                    if abs(r - g) < 12 and abs(g - b) < 12 and 35 <= r <= 65:
-                                        newData.append((0, 0, 0, 0))
-                                    else:
-                                        newData.append(item)
-                                        
-                                frame_rgba.putdata(newData)
-                                
-                                base_w, base_h = base_img.size
-                                scale = max(target_width / base_w, target_height / base_h)
-                                new_w = int(base_w * scale)
-                                new_h = int(base_h * scale)
+                            with Image.open(BASE_CARD_PATH).convert("RGBA") as base_img, Image.open(BytesIO(frame_bytes)).convert("RGBA") as frame_img:
+                                fw, fh = frame_img.size
                                 
                                 try:
                                     resample_filter = Image.Resampling.LANCZOS
                                 except AttributeError:
                                     resample_filter = Image.ANTIALIAS
                                     
-                                resized_base = base_img.resize((new_w, new_h), resample_filter)
-                                left = (new_w - target_width) / 2
-                                top = (new_h - target_height) / 2
-                                cropped_base = resized_base.crop((left, top, left + target_width, top + target_height)).convert("RGBA")
+                                base_cropped = ImageOps.fit(base_img, (fw, fh), method=resample_filter)
                                 
-                                mask = Image.new("L", (target_width, target_height), 0)
-                                draw = ImageDraw.Draw(mask)
-                                draw.rounded_rectangle((0, 0, target_width, target_height), radius=22, fill=255)
-                                cropped_base.putalpha(mask)
+                                mask = Image.new("L", (fw, fh), 0)
+                                draw_mask = ImageDraw.Draw(mask)
+                                draw_mask.rounded_rectangle((0, 0, fw, fh), radius=22, fill=255)
+                                base_cropped.putalpha(mask)
                                 
-                                final_composite = Image.new("RGBA", frame_rgba.size, (0, 0, 0, 0))
-                                final_composite.paste(cropped_base, (0, 0), cropped_base)
-                                final_composite.paste(frame_rgba, (0, 0), frame_rgba)
+                                plate_overlay = Image.new("RGBA", (fw, fh), (0, 0, 0, 0))
+                                draw_plates = ImageDraw.Draw(plate_overlay)
+                                draw_plates.rectangle((0, 0, fw, int(fh * 0.13)), fill=(0, 0, 0, 160))
+                                draw_plates.rectangle((0, int(fh * 0.88), fw, fh), fill=(0, 0, 0, 160))
+                                
+                                base_composite = Image.alpha_composite(base_cropped, plate_overlay)
+                                final_composite = Image.alpha_composite(base_composite, frame_img)
                                 
                                 output_buffer = BytesIO()
                                 final_composite.save(output_buffer, format="PNG")
