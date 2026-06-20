@@ -115,32 +115,34 @@ class FrameItemSelect(discord.ui.Select):
                                 target_width, target_height = frame_rgba.size
                                 
                                 newData = []
+                                bg_r, bg_g, bg_b = 47, 49, 54 
+                                
                                 for idx, item in enumerate(datas):
                                     x = idx % target_width
                                     y = idx // target_width
-                                    r, g, b = item[0], item[1], item[2]
+                                    r, g, b, a = item[0], item[1], item[2], item[3]
                                     
-                                    is_gray = (35 <= r <= 65) and (35 <= g <= 65) and (35 <= b <= 65) and (abs(r - g) < 15) and (abs(g - b) < 15)
-                                    
+
                                     is_top_plate = (0.08 <= x / target_width <= 0.48) and (0.015 <= y / target_height <= 0.075)
                                     is_bottom_plate = (0.55 <= x / target_width <= 0.95) and (0.91 <= y / target_height <= 0.985)
-                                    is_black = (r < 30 and g < 30 and b < 30)
                                     
-                                    if is_gray or ((is_top_plate or is_bottom_plate) and is_black):
+                                    if (is_top_plate or is_bottom_plate) and (r < 35 and g < 35 and b < 35):
                                         newData.append((0, 0, 0, 0)) 
+                                        continue
+                                        
+                                    diff = max(abs(r - bg_r), abs(g - bg_g), abs(b - bg_b))
+                                    if diff < 12:
+                                        newData.append((0, 0, 0, 0))
+                                    elif diff < 45:
+                                        alpha = int(((diff - 12) / 33) * 255)
+                                        newData.append((r, g, b, min(a, alpha)))
                                     else:
                                         newData.append(item)
                                         
                                 frame_rgba.putdata(newData)
                                 
-                                inset_x = int(target_width * 0.04) 
-                                inset_y = int(target_height * 0.03) 
-                                
-                                inner_w = target_width - (2 * inset_x)
-                                inner_h = target_height - (2 * inset_y)
-                                
                                 base_w, base_h = base_img.size
-                                scale = max(inner_w / base_w, inner_h / base_h)
+                                scale = max(target_width / base_w, target_height / base_h)
                                 new_w = int(base_w * scale)
                                 new_h = int(base_h * scale)
                                 
@@ -151,20 +153,26 @@ class FrameItemSelect(discord.ui.Select):
                                     
                                 resized_base = base_img.resize((new_w, new_h), resample_filter)
                                 
-                                left = (new_w - inner_w) / 2
-                                top = (new_h - inner_h) / 2
-                                cropped_base = resized_base.crop((left, top, left + inner_w, top + inner_h))
+                                left = (new_w - target_width) / 2
+                                top = (new_h - target_height) / 2
+                                cropped_base = resized_base.crop((left, top, left + target_width, top + target_height)).convert("RGBA")
                                 
-                                final_composite = Image.new("RGBA", frame_rgba.size, (49, 51, 56, 255)) 
-                                final_composite.paste(cropped_base, (inset_x, inset_y))
-                                final_composite.paste(frame_rgba, (0, 0), frame_rgba)
+                                from PIL import ImageDraw
+                                mask = Image.new("L", (target_width, target_height), 0)
+                                draw = ImageDraw.Draw(mask)
+                                draw.rounded_rectangle((0, 0, target_width, target_height), radius=22, fill=255)
+                                cropped_base.putalpha(mask)
+                                
+                                final_composite = Image.new("RGBA", frame_rgba.size, (0, 0, 0, 0))
+                                final_composite.paste(cropped_base, (0, 0), cropped_base) 
+                                final_composite.paste(frame_rgba, (0, 0), frame_rgba)    
                                 
                                 output_buffer = BytesIO()
-                                final_composite.convert("RGB").save(output_buffer, format="JPEG", quality=90)
+                                final_composite.save(output_buffer, format="PNG")
                                 output_buffer.seek(0)
                                 
-                                file = discord.File(fp=output_buffer, filename="preview.jpg")
-                                embed.set_image(url="attachment://preview.jpg")
+                                file = discord.File(fp=output_buffer, filename="preview.png")
+                                embed.set_image(url="attachment://preview.png")
             except Exception as e:
                 print(f"Image Error: {e}")
                 pass
