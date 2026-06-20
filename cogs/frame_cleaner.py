@@ -3,7 +3,7 @@ from discord import app_commands
 from discord.ext import commands
 import aiohttp
 from io import BytesIO
-from PIL import Image, ImageOps
+from PIL import Image, ImageOps, ImageDraw
 import sys
 import os
 from frame_prices import FRAME_DB
@@ -113,7 +113,7 @@ class FrameRenderEngine(commands.Cog):
             await interaction.followup.send(f"Runtime Exception: {e}")
             print(f"Extraction Error: {e}", file=sys.stderr)
 
-    @app_commands.command(name="test_composite", description="Execute Raw Z-Index Overlay")
+    @app_commands.command(name="test_composite", description="Execute Globablly Masked Z-Index Overlay")
     async def test_composite(self, interaction: discord.Interaction, frame_name: str):
         match = next((n for n in FRAME_DB if frame_name.lower() in n.lower()), None)
         if not match:
@@ -186,25 +186,31 @@ class FrameRenderEngine(commands.Cog):
                             
                         card_resized = ImageOps.fit(base_img, (fw, fh), method=resample_method).convert("RGBA")
                         
+                        mask = Image.new("L", (fw, fh), 0)
+                        draw = ImageDraw.Draw(mask)
+                        draw.rounded_rectangle((0, 0, fw, fh), radius=25, fill=255)
+                        card_resized.putalpha(mask)
+                        
                         final_composite = Image.alpha_composite(card_resized, frame_img)
                         
                         output_buffer = BytesIO()
                         final_composite.save(output_buffer, format="PNG")
                         output_buffer.seek(0)
                         
-                        file_name = f"raw_composite_{match.replace(' ', '_')}.png"
+                        file_name = f"masked_composite_{match.replace(' ', '_')}.png"
                         file = discord.File(fp=output_buffer, filename=file_name)
                         
                         embed = discord.Embed(
-                            title="[ SYSTEM: RAW ORTHOGONAL OVERLAY ]",
+                            title="[ SYSTEM: GLOBAL BOUNDARY OVERLAY ]",
                             color=0x2b2d31
                         )
                         
                         embed.add_field(
                             name="Compositing Protocol", 
                             value=(
-                                "$$\\mathbf{C}_{final} = \\mathbf{C}_{base} \\oplus_{\\alpha} \\mathbf{C}_{frame}$$\n"
-                                "Direct 1:1 scale composite. No clipping domains or bounding masks applied."
+                                "$$\\Omega_{global} = [0, fw] \\times [0, fh]$$\n"
+                                "$$\\partial \\Omega_{clip} = \\rho_{25} \\quad (C^1 \\text{ boundary curvature})$$\n"
+                                "$$\\mathbf{C}_{final} = (\\mathbf{C}_{base} \\circ M_{clip}) \\oplus_{\\alpha} \\mathbf{C}_{frame}$$"
                             ),
                             inline=False
                         )
