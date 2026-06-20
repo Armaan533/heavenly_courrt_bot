@@ -10,6 +10,7 @@ import math
 
 DATA_FILE = "services.json"
 PLACEHOLDER_IMG = "https://singlecolorimage.com/get/2b2d31/400x400"
+SERVICE_ROLE_ID = 1517559992163631185
 
 def load_data():
     if os.path.exists(DATA_FILE):
@@ -453,7 +454,7 @@ class ProviderProfileView(discord.ui.View):
         
         if len(chunk) > 0 and len(chunk) < 4:
             while len(chunk) < 4:
-                chunk.append("https://i.pinimg.com/736x/17/e1/37/17e1373e9b32ebbb79b8eb7e17a55f53.jpg")
+                chunk.append(PLACEHOLDER_IMG)
         
         for url in chunk:
             img_embed = discord.Embed(url=shared_url, color=0x6b1614)
@@ -587,6 +588,10 @@ class ServicesCog(commands.Cog):
 
     @services.command(name="add", description="Register as a service provider")
     async def service_add(self, interaction: discord.Interaction):
+        role = discord.utils.get(interaction.user.roles, id=SERVICE_ROLE_ID)
+        if not role:
+            return await interaction.response.send_message("❌ You need the **service_access** role to register a profile!", ephemeral=True)
+
         embed = discord.Embed(
             title="<:emoji_for_oddny:1517225564023554219> [ SERVICE REGISTRATION ] <:emoji_for_oddny:1517225564023554219>",
             description="What kind of service are you providing to the Heavenly Court?\n*(Select an option below to open your registration form)*",
@@ -605,6 +610,10 @@ class ServicesCog(commands.Cog):
 
     @services.command(name="update", description="Update your registered service profile")
     async def service_update(self, interaction: discord.Interaction):
+        role = discord.utils.get(interaction.user.roles, id=SERVICE_ROLE_ID)
+        if not role:
+            return await interaction.response.send_message("❌ You need the **service_access** role to update a profile!", ephemeral=True)
+
         embed = discord.Embed(
             title="<:emoji_for_oddny:1517225564023554219> [ UPDATE SERVICE PROFILE ] <:emoji_for_oddny:1517225564023554219>",
             description="Which of your registered profiles would you like to update?",
@@ -614,6 +623,10 @@ class ServicesCog(commands.Cog):
 
     @services.command(name="delete", description="Delete your registered service profile")
     async def service_delete(self, interaction: discord.Interaction):
+        role = discord.utils.get(interaction.user.roles, id=SERVICE_ROLE_ID)
+        if not role:
+            return await interaction.response.send_message("❌ You need the **service_access** role to delete a profile!", ephemeral=True)
+
         user_id = interaction.user.id
         removed = False
         for cat in ["dyers", "frame_testers", "sketchers"]:
