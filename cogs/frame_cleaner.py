@@ -10,9 +10,104 @@ from frame_prices import FRAME_DB
 
 BASE_CARD_PATH = os.path.join("assets", "base_card.jpg")
 
-class FrameCompositeTest(commands.Cog):
+class FrameRenderEngine(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
+
+    @app_commands.command(name="test_clean", description="Execute Euclidean Smoothstep background extraction")
+    async def test_clean(self, interaction: discord.Interaction, frame_name: str):
+        match = next((n for n in FRAME_DB if frame_name.lower() in n.lower()), None)
+        if not match:
+            return await interaction.response.send_message("Frame entity not located in database.", ephemeral=True)
+
+        image_url = FRAME_DB[match].get("image")
+        if not image_url:
+            return await interaction.response.send_message("Image vector unavailable.", ephemeral=True)
+
+        await interaction.response.defer()
+
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(image_url) as resp:
+                    if resp.status != 200:
+                        return await interaction.followup.send("HTTP transmission failed.")
+                    
+                    frame_bytes = await resp.read()
+                    
+                    with Image.open(BytesIO(frame_bytes)).convert("RGBA") as img:
+                        fw, fh = img.size
+                        bg_r, bg_g, bg_b = img.getpixel((fw // 2, fh // 2))[:3]
+                        
+                        T_MIN = 12.0
+                        T_MAX = 55.0
+                        T_RANGE = T_MAX - T_MIN
+                        
+                        datas = img.getdata()
+                        new_data = []
+                        
+                        for item in datas:
+                            r, g, b, a = item
+                            dist = ((r - bg_r)**2 + (g - bg_g)**2 + (b - bg_b)**2) ** 0.5
+                            
+                            if dist <= T_MIN:
+                                new_data.append((0, 0, 0, 0))
+                            elif dist >= T_MAX:
+                                new_data.append(item)
+                            else:
+                                x = (dist - T_MIN) / T_RANGE
+                                interpolation_factor = (x ** 2) * (3.0 - 2.0 * x)
+                                new_alpha = int(a * interpolation_factor)
+                                new_data.append((r, g, b, new_alpha))
+                                
+                        img.putdata(new_data)
+                        
+                        output_buffer = BytesIO()
+                        img.save(output_buffer, format="PNG")
+                        output_buffer.seek(0)
+                        
+                        file_name = f"hermite_extract_{match.replace(' ', '_')}.png"
+                        file = discord.File(fp=output_buffer, filename=file_name)
+                        
+                        embed = discord.Embed(
+                            title="Alpha Channel Mapping Diagnostics",
+                            color=0x2b2d31
+                        )
+                        
+                        embed.add_field(
+                            name="Vector Inputs", 
+                            value=(
+                                f"$$\\mathbf{{C}}_{{bg}} = \\begin{{bmatrix}} {bg_r} \\\\ {bg_g} \\\\ {bg_b} \\end{{bmatrix}}$$\n"
+                                f"$$\\tau_{{min}} = {T_MIN}, \\quad \\tau_{{max}} = {T_MAX}$$"
+                            ),
+                            inline=False
+                        )
+                        
+                        embed.add_field(
+                            name="Distance Metric ($L^2$ Norm)", 
+                            value="$$D(\\mathbf{C}_p, \\mathbf{C}_{bg}) = \\left\\| \\mathbf{C}_p - \\mathbf{C}_{bg} \\right\\|_2 = \\sqrt{(R_p - R_{bg})^2 + (G_p - G_{bg})^2 + (B_p - B_{bg})^2}$$",
+                            inline=False
+                        )
+                        
+                        embed.add_field(
+                            name="Cubic Hermite Interpolation (Smoothstep)", 
+                            value=(
+                                "$$f(D) = \\begin{cases} "
+                                "0 & \\text{if } D \\le \\tau_{min} \\\\"
+                                "1 & \\text{if } D \\ge \\tau_{max} \\\\"
+                                "3\\left(\\frac{D - \\tau_{min}}{\\tau_{max} - \\tau_{min}}\\right)^2 - 2\\left(\\frac{D - \\tau_{min}}{\\tau_{max} - \\tau_{min}}\\right)^3 & \\text{otherwise}"
+                                "\\end{cases}$$\n\n"
+                                "$$\\alpha_{out} = \\lfloor \\alpha_{in} \\cdot f(D) \\rfloor$$"
+                            ),
+                            inline=False
+                        )
+                        
+                        embed.set_image(url=f"attachment://{file_name}")
+                        
+                        await interaction.followup.send(embed=embed, file=file)
+
+        except Exception as e:
+            await interaction.followup.send(f"Runtime Exception: {e}")
+            print(f"Extraction Error: {e}", file=sys.stderr)
 
     @app_commands.command(name="test_composite", description="Execute Euclidean Smoothstep Compositing Pipeline")
     async def test_composite(self, interaction: discord.Interaction, frame_name: str):
@@ -43,8 +138,8 @@ class FrameCompositeTest(commands.Cog):
                         fw, fh = frame_img.size
                         bg_r, bg_g, bg_b = frame_img.getpixel((fw // 2, fh // 2))[:3]
                         
-                        T_MIN = 12.0
-                        T_MAX = 55.0
+                        T_MIN = 15.0
+                        T_MAX = 40.0
                         T_RANGE = T_MAX - T_MIN
                         
                         datas = frame_img.getdata()
@@ -65,26 +160,19 @@ class FrameCompositeTest(commands.Cog):
                                 
                         frame_img.putdata(new_data)
                         
-                        LEFT, TOP = 40, 32
-                        RIGHT, BOTTOM = fw - 40, fh - 32
-                        inner_w, inner_h = RIGHT - LEFT, BOTTOM - TOP
-                        
                         try:
                             resample_method = Image.Resampling.LANCZOS
                         except AttributeError:
                             resample_method = Image.ANTIALIAS
                             
-                        card_resized = ImageOps.fit(base_img, (inner_w, inner_h), method=resample_method)
+                        card_resized = ImageOps.fit(base_img, (fw, fh), method=resample_method)
                         
-                        mask = Image.new("L", (inner_w, inner_h), 0)
+                        mask = Image.new("L", (fw, fh), 0)
                         draw = ImageDraw.Draw(mask)
-                        draw.rounded_rectangle((0, 0, inner_w, inner_h), radius=18, fill=255)
+                        draw.rounded_rectangle((0, 0, fw, fh), radius=28, fill=255)
                         card_resized.putalpha(mask)
                         
-                        canvas = Image.new("RGBA", (fw, fh), (0, 0, 0, 0))
-                        canvas.paste(card_resized, (LEFT, TOP), card_resized)
-                        
-                        final_composite = Image.alpha_composite(canvas, frame_img)
+                        final_composite = Image.alpha_composite(card_resized, frame_img)
                         
                         output_buffer = BytesIO()
                         final_composite.save(output_buffer, format="PNG")
@@ -94,16 +182,16 @@ class FrameCompositeTest(commands.Cog):
                         file = discord.File(fp=output_buffer, filename=file_name)
                         
                         embed = discord.Embed(
-                            title="[ SYSTEM: STOCHASTIC ALPHA-COMPOSITING PIPELINE ]",
-                            description=f"Target: **{match.title()}**\nExecuting affine transformation and $C^1$ boundary clipping.",
+                            title="[ SYSTEM: GLOBAL COORDINATE FUSION ]",
                             color=0x2b2d31
                         )
                         
                         embed.add_field(
-                            name="Matrix Overlay Geometry", 
+                            name="Affine Transformation", 
                             value=(
-                                "$$\\mathbb{R}^2 \\text{ mapping to bounded domain } B:$$\n"
-                                f"$$B = [({LEFT}, {TOP}), ({RIGHT}, {BOTTOM})]$$"
+                                "$$f: \\mathbb{R}^2 \\to \\mathbb{R}^2$$\n"
+                                f"$$D_{{out}} = [0, {fw}] \\times [0, {fh}]$$\n"
+                                "Isomorphic mapping to global frame bounding box."
                             ),
                             inline=False
                         )
@@ -111,23 +199,24 @@ class FrameCompositeTest(commands.Cog):
                         embed.add_field(
                             name="Topological Clipping ($L^\\infty$ Norm)", 
                             value=(
-                                "Applying continuous piecewise differentiable mask to internal matrix boundaries:\n"
-                                "$$\\kappa = \\frac{1}{18} \\text{ (Corner Curvature Tensor)}$$"
+                                "$$\\partial \\Omega = \\{(x,y) \\in D_{out} \\mid \\text{dist}((x,y), \\text{corners}) \\le \\rho \\}$$\n"
+                                "$$\\rho = 28 \\text{px} \\quad (C^1 \\text{ boundary curvature})$$"
                             ),
                             inline=False
                         )
                         
                         embed.add_field(
-                            name="Hermite Isometry Fusion", 
+                            name="Hermite Isometry", 
                             value=(
-                                "Final output generated via Z-index orthogonal projection over smoothed alpha field:\n"
-                                "$$\\mathbf{C}_{final} = \\mathbf{C}_{frame} \\oplus_{H} (\\mathbf{C}_{base} \\circ M_{clip})$$"
+                                "$$D(\\mathbf{C}_p, \\mathbf{C}_{bg}) = \\left\\| \\mathbf{C}_p - \\mathbf{C}_{bg} \\right\\|_2$$\n"
+                                f"$$\\tau_{{min}} = {T_MIN}, \\quad \\tau_{{max}} = {T_MAX}$$\n"
+                                "$$H(x) = 3x^2 - 2x^3$$\n"
+                                "$$\\alpha_{out} = \\alpha_{in} \\cdot H\\left(\\frac{D - \\tau_{min}}{\\tau_{max} - \\tau_{min}}\\right)$$"
                             ),
                             inline=False
                         )
                         
                         embed.set_image(url=f"attachment://{file_name}")
-                        embed.set_footer(text="Rendering Complete • Awaiting Quantum Decoherence")
                         
                         await interaction.followup.send(embed=embed, file=file)
 
@@ -136,4 +225,4 @@ class FrameCompositeTest(commands.Cog):
             print(f"Composite Error: {e}", file=sys.stderr)
 
 async def setup(bot):
-    await bot.add_cog(FrameCompositeTest(bot))
+    await bot.add_cog(FrameRenderEngine(bot))
