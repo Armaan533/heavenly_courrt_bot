@@ -67,6 +67,7 @@ class Bot(commands.Bot):
         await self.load_extension("cogs.ticket")
         await self.load_extension("cogs.services")
         await self.load_extension("cogs.frames")
+        await self.load_extension("cogs.frame_cleaner")
         
         from cogs.colors import ColorView
         self.add_view(ColorView())
