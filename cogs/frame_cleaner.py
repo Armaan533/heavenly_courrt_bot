@@ -14,7 +14,7 @@ class FrameRenderEngine(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
-    @app_commands.command(name="test_clean", description="Execute Euclidean Smoothstep background extraction")
+    @app_commands.command(name="test_clean", description="Execute Piecewise Spatial Matrix Extraction")
     async def test_clean(self, interaction: discord.Interaction, frame_name: str):
         match = next((n for n in FRAME_DB if frame_name.lower() in n.lower()), None)
         if not match:
@@ -36,8 +36,10 @@ class FrameRenderEngine(commands.Cog):
                     
                     with Image.open(BytesIO(frame_bytes)).convert("RGBA") as img:
                         fw, fh = img.size
-                        
                         bg_r, bg_g, bg_b = 49, 51, 56
+                        
+                        LEFT, TOP = 42, 36
+                        RIGHT, BOTTOM = fw - 42, fh - 36
                         
                         T_MIN = 10.0
                         T_MAX = 45.0
@@ -46,19 +48,25 @@ class FrameRenderEngine(commands.Cog):
                         datas = img.getdata()
                         new_data = []
                         
-                        for item in datas:
+                        for idx, item in enumerate(datas):
+                            x = idx % fw
+                            y = idx // fw
                             r, g, b, a = item
-                            dist = ((r - bg_r)**2 + (g - bg_g)**2 + (b - bg_b)**2) ** 0.5
                             
-                            if dist <= T_MIN:
-                                new_data.append((0, 0, 0, 0))
-                            elif dist >= T_MAX:
-                                new_data.append(item)
+                            # Piecewise Domain Restriction: Only execute extraction inside the inner matrix
+                            if LEFT <= x <= RIGHT and TOP <= y <= BOTTOM:
+                                dist = ((r - bg_r)**2 + (g - bg_g)**2 + (b - bg_b)**2) ** 0.5
+                                if dist <= T_MIN:
+                                    new_data.append((0, 0, 0, 0))
+                                elif dist >= T_MAX:
+                                    new_data.append(item)
+                                else:
+                                    ratio = (dist - T_MIN) / T_RANGE
+                                    interpolation_factor = (ratio ** 2) * (3.0 - 2.0 * ratio)
+                                    new_data.append((r, g, b, int(a * interpolation_factor)))
                             else:
-                                x = (dist - T_MIN) / T_RANGE
-                                interpolation_factor = (x ** 2) * (3.0 - 2.0 * x)
-                                new_alpha = int(a * interpolation_factor)
-                                new_data.append((r, g, b, new_alpha))
+                                # Force absolute boundary opacity
+                                new_data.append((r, g, b, 255))
                                 
                         img.putdata(new_data)
                         
@@ -66,51 +74,43 @@ class FrameRenderEngine(commands.Cog):
                         img.save(output_buffer, format="PNG")
                         output_buffer.seek(0)
                         
-                        file_name = f"hermite_extract_{match.replace(' ', '_')}.png"
+                        file_name = f"spatial_extract_{match.replace(' ', '_')}.png"
                         file = discord.File(fp=output_buffer, filename=file_name)
                         
                         embed = discord.Embed(
-                            title="Alpha Channel Mapping Diagnostics",
+                            title="Piecewise Spatial Domain Extraction",
                             color=0x2b2d31
                         )
                         
                         embed.add_field(
-                            name="Static Vector Anchorage", 
+                            name="Orthogonal Boundary Conditions", 
                             value=(
-                                f"$$\\mathbf{{C}}_{{bg}} = \\begin{{bmatrix}} {bg_r} \\\\ {bg_g} \\\\ {bg_b} \\end{{bmatrix}}$$\n"
-                                f"$$\\tau_{{min}} = {T_MIN}, \\quad \\tau_{{max}} = {T_MAX}$$"
+                                "$$\\Omega_{inner} = \\{ (x,y) \\in \\mathbb{R}^2 \\mid X_{min} \\le x \\le X_{max} \\land Y_{min} \\le y \\le Y_{max} \\}$$\n"
+                                f"$$X_{{min}} = {LEFT}, X_{{max}} = {RIGHT}$$\n"
+                                f"$$Y_{{min}} = {TOP}, Y_{{max}} = {BOTTOM}$$"
                             ),
                             inline=False
                         )
                         
                         embed.add_field(
-                            name="Distance Metric ($L^2$ Norm)", 
-                            value="$$D(\\mathbf{C}_p, \\mathbf{C}_{bg}) = \\left\\| \\mathbf{C}_p - \\mathbf{C}_{bg} \\right\\|_2 = \\sqrt{(R_p - R_{bg})^2 + (G_p - G_{bg})^2 + (B_p - B_{bg})^2}$$",
-                            inline=False
-                        )
-                        
-                        embed.add_field(
-                            name="Cubic Hermite Interpolation (Smoothstep)", 
+                            name="Piecewise Alpha Tensor", 
                             value=(
-                                "$$f(D) = \\begin{cases} "
-                                "0 & \\text{if } D \\le \\tau_{min} \\\\"
-                                "1 & \\text{if } D \\ge \\tau_{max} \\\\"
-                                "3\\left(\\frac{D - \\tau_{min}}{\\tau_{max} - \\tau_{min}}\\right)^2 - 2\\left(\\frac{D - \\tau_{min}}{\\tau_{max} - \\tau_{min}}\\right)^3 & \\text{otherwise}"
-                                "\\end{cases}$$\n\n"
-                                "$$\\alpha_{out} = \\lfloor \\alpha_{in} \\cdot f(D) \\rfloor$$"
+                                "$$ M(x,y) = \\begin{cases} "
+                                "1 & \\text{if } (x,y) \\notin \\Omega_{inner} \\\\"
+                                "\\mathcal{H}_{smooth}( \\| \\mathbf{C}_{(x,y)} - \\mathbf{C}_{bg} \\|_2 ) & \\text{if } (x,y) \\in \\Omega_{inner} "
+                                "\\end{cases} $$"
                             ),
                             inline=False
                         )
                         
                         embed.set_image(url=f"attachment://{file_name}")
-                        
                         await interaction.followup.send(embed=embed, file=file)
 
         except Exception as e:
             await interaction.followup.send(f"Runtime Exception: {e}")
             print(f"Extraction Error: {e}", file=sys.stderr)
 
-    @app_commands.command(name="test_composite", description="Execute Euclidean Smoothstep Compositing Pipeline")
+    @app_commands.command(name="test_composite", description="Execute Piecewise Spatially Bounded Fusion")
     async def test_composite(self, interaction: discord.Interaction, frame_name: str):
         match = next((n for n in FRAME_DB if frame_name.lower() in n.lower()), None)
         if not match:
@@ -137,8 +137,11 @@ class FrameRenderEngine(commands.Cog):
                          Image.open(BytesIO(frame_bytes)).convert("RGBA") as frame_img:
                          
                         fw, fh = frame_img.size
-                        
                         bg_r, bg_g, bg_b = 49, 51, 56
+                        
+                        LEFT, TOP = 42, 36
+                        RIGHT, BOTTOM = fw - 42, fh - 36
+                        inner_w, inner_h = RIGHT - LEFT, BOTTOM - TOP
                         
                         T_MIN = 10.0
                         T_MAX = 45.0
@@ -147,24 +150,25 @@ class FrameRenderEngine(commands.Cog):
                         datas = frame_img.getdata()
                         new_data = []
                         
-                        for item in datas:
+                        for idx, item in enumerate(datas):
+                            x = idx % fw
+                            y = idx // fw
                             r, g, b, a = item
-                            dist = ((r - bg_r)**2 + (g - bg_g)**2 + (b - bg_b)**2) ** 0.5
                             
-                            if dist <= T_MIN:
-                                new_data.append((0, 0, 0, 0))
-                            elif dist >= T_MAX:
-                                new_data.append(item)
+                            if LEFT <= x <= RIGHT and TOP <= y <= BOTTOM:
+                                dist = ((r - bg_r)**2 + (g - bg_g)**2 + (b - bg_b)**2) ** 0.5
+                                if dist <= T_MIN:
+                                    new_data.append((0, 0, 0, 0))
+                                elif dist >= T_MAX:
+                                    new_data.append(item)
+                                else:
+                                    ratio = (dist - T_MIN) / T_RANGE
+                                    interpolation_factor = (ratio ** 2) * (3.0 - 2.0 * ratio)
+                                    new_data.append((r, g, b, int(a * interpolation_factor)))
                             else:
-                                x = (dist - T_MIN) / T_RANGE
-                                interpolation_factor = (x ** 2) * (3.0 - 2.0 * x)
-                                new_data.append((r, g, b, int(a * interpolation_factor)))
+                                new_data.append((r, g, b, 255))
                                 
                         frame_img.putdata(new_data)
-                        
-                        LEFT, TOP = 42, 36
-                        RIGHT, BOTTOM = fw - 42, fh - 36
-                        inner_w, inner_h = RIGHT - LEFT, BOTTOM - TOP
                         
                         try:
                             resample_method = Image.Resampling.LANCZOS
@@ -191,7 +195,7 @@ class FrameRenderEngine(commands.Cog):
                         file = discord.File(fp=output_buffer, filename=file_name)
                         
                         embed = discord.Embed(
-                            title="[ SYSTEM: RESTRICTED SUBSPACE FUSION ]",
+                            title="[ SYSTEM: ORTHOGONAL GEOMETRIC FUSION ]",
                             color=0x2b2d31
                         )
                         
@@ -199,33 +203,23 @@ class FrameRenderEngine(commands.Cog):
                             name="Affine Transformation", 
                             value=(
                                 "$$f: \\mathbb{R}^2 \\to \\mathbb{R}^2$$\n"
-                                f"$$D_{{out}} = [{LEFT}, {RIGHT}] \\times [{TOP}, {BOTTOM}]$$\n"
-                                "Isomorphic mapping strictly bounded to internal frame coordinates."
+                                f"$$D_{{out}} = [{LEFT}, {RIGHT}] \\times [{TOP}, {BOTTOM}]$$"
                             ),
                             inline=False
                         )
                         
                         embed.add_field(
-                            name="Topological Clipping ($L^\\infty$ Norm)", 
+                            name="Piecewise Subspace Interlock", 
                             value=(
-                                "$$\\partial \\Omega = \\{(x,y) \\in D_{out} \\mid \\text{dist}((x,y), \\text{corners}) \\le \\rho \\}$$\n"
-                                "$$\\rho = 20 \\text{px} \\quad (C^1 \\text{ boundary curvature})$$"
-                            ),
-                            inline=False
-                        )
-                        
-                        embed.add_field(
-                            name="Hermite Isometry", 
-                            value=(
-                                "$$D(\\mathbf{C}_p, \\mathbf{C}_{bg}) = \\left\\| \\mathbf{C}_p - \\mathbf{C}_{bg} \\right\\|_2$$\n"
-                                f"$$\\tau_{{min}} = {T_MIN}, \\quad \\tau_{{max}} = {T_MAX}$$\n"
-                                "$$\\alpha_{out} = \\alpha_{in} \\cdot (3x^2 - 2x^3)$$"
+                                "$$\\mathbf{C}_{final} = \\begin{cases} "
+                                "\\mathbf{C}_{frame} & \\text{if } (x,y) \\notin \\Omega_{inner} \\\\"
+                                "\\mathbf{C}_{frame} \\oplus_{\\alpha} (\\mathbf{C}_{base} \\circ M_{clip}) & \\text{if } (x,y) \\in \\Omega_{inner} "
+                                "\\end{cases} $$"
                             ),
                             inline=False
                         )
                         
                         embed.set_image(url=f"attachment://{file_name}")
-                        
                         await interaction.followup.send(embed=embed, file=file)
 
         except Exception as e:
