@@ -11,7 +11,7 @@ class FrameCleanerTest(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
-    @app_commands.command(name="test_clean", description="DEV TOOL: Extraction")
+    @app_commands.command(name="test_clean", description="DEV TOOL: Process frame transparency")
     async def test_clean(self, interaction: discord.Interaction, frame_name: str):
         match = next((n for n in FRAME_DB if frame_name.lower() in n.lower()), None)
         if not match:
@@ -19,7 +19,7 @@ class FrameCleanerTest(commands.Cog):
 
         image_url = FRAME_DB[match].get("image")
         if not image_url:
-            return await interaction.response.send_message("❌ Matrix data unavailable.", ephemeral=True)
+            return await interaction.response.send_message("❌ Asset URL unavailable.", ephemeral=True)
 
         await interaction.response.defer()
 
@@ -27,7 +27,7 @@ class FrameCleanerTest(commands.Cog):
             async with aiohttp.ClientSession() as session:
                 async with session.get(image_url) as resp:
                     if resp.status != 200:
-                        return await interaction.followup.send("❌ Data stream interrupted.")
+                        return await interaction.followup.send("❌ HTTP Stream failed.")
                     
                     frame_bytes = await resp.read()
                     
@@ -35,8 +35,8 @@ class FrameCleanerTest(commands.Cog):
                         fw, fh = img.size
                         bg_r, bg_g, bg_b = img.getpixel((fw // 2, fh // 2))[:3]
                         
-                        LOW_THRESHOLD = 80
-                        HIGH_THRESHOLD = 650
+                        LOW_THRESHOLD = 350
+                        HIGH_THRESHOLD = 800
                         
                         datas = img.getdata()
                         new_data = []
@@ -44,10 +44,11 @@ class FrameCleanerTest(commands.Cog):
                         for item in datas:
                             r, g, b, a = item
                             dist_sq = (r - bg_r)**2 + (g - bg_g)**2 + (b - bg_b)**2
+                            color_variance = max(abs(r-g), abs(g-b), abs(r-b))
                             
-                            if dist_sq <= LOW_THRESHOLD:
+                            if dist_sq <= LOW_THRESHOLD and color_variance < 25:
                                 new_data.append((0, 0, 0, 0))
-                            elif dist_sq >= HIGH_THRESHOLD:
+                            elif dist_sq >= HIGH_THRESHOLD or color_variance >= 25:
                                 new_data.append(item)
                             else:
                                 ratio = (dist_sq - LOW_THRESHOLD) / (HIGH_THRESHOLD - LOW_THRESHOLD)
@@ -60,41 +61,43 @@ class FrameCleanerTest(commands.Cog):
                         img.save(output_buffer, format="PNG")
                         output_buffer.seek(0)
                         
-                        file_name = f"heuristic_extraction_{match.replace(' ', '_')}.png"
+                        file_name = f"processed_{match.replace(' ', '_')}.png"
                         file = discord.File(fp=output_buffer, filename=file_name)
                         
                         embed = discord.Embed(
-                            title="[ EXTRACTION ]",
-                            description=f"Target Asset: **{match.title()}**\nInitiating Non-Linear Alpha Interpolation Protocol...",
+                            title="Background Extraction Diagnostics",
                             color=0x2b2d31
                         )
-                        
                         embed.add_field(
-                            name="[ DATA: CHROMATIC TENSOR ]", 
-                            value=f"Origin Node: `({fw // 2}, {fh // 2})`\nBase Vector Space: `RGB({bg_r}, {bg_g}, {bg_b})`", 
-                            inline=False
+                            name="Asset ID", 
+                            value=f"`{match}`", 
+                            inline=True
                         )
-                        
                         embed.add_field(
-                            name="[ ALGORITHM: 3D EUCLIDEAN ISOMETRY ]", 
+                            name="Sample Vector", 
+                            value=f"`RGB({bg_r}, {bg_g}, {bg_b})`", 
+                            inline=True
+                        )
+                        embed.add_field(
+                            name="Alpha Band", 
+                            value=f"`T_low: {LOW_THRESHOLD} | T_high: {HIGH_THRESHOLD}`", 
+                            inline=True
+                        )
+                        embed.add_field(
+                            name="Algorithm Parameters", 
                             value=(
-                                "Employing tri-axial chromatic distance thresholding via scalar projections:\n\n"
-                                "$$ \\Delta E^2 = (R_p - R_o)^2 + (G_p - G_o)^2 + (B_p - B_o)^2 $$\n\n"
-                                "**Isolating Sub-pixel Raster Gradient:**\n"
-                                "If $$\\Delta E^2 \\le \\beta$$ : $$\\alpha = 0$$ *(Null State)*\n"
-                                "If $$\\Delta E^2 \\ge \\gamma$$ : $$\\alpha = 255$$ *(Solid State)*\n"
-                                "Else : $$\\alpha_{new} = \\alpha_{org} \\times \\left( \\frac{\\Delta E^2 - \\beta}{\\gamma - \\beta} \\right)$$"
+                                "**Distance Metric:** Euclidean squared ($d^2$)\n"
+                                "**Color Variance Gate:** $\\Delta_{max} < 25$ (Isolates achromatic regions)\n"
+                                "**Interpolation:** Linear mapping within transition boundary."
                             ), 
                             inline=False
                         )
-                        
                         embed.set_image(url=f"attachment://{file_name}")
-                        embed.set_footer(text="Process Complete • Stochastic Alpha-Compositing Verified")
                         
                         await interaction.followup.send(embed=embed, file=file)
 
         except Exception as e:
-            await interaction.followup.send(f"❌ Exception in extraction pipeline: {e}")
+            await interaction.followup.send(f"❌ Exception: {e}")
             print(f"Extraction Error: {e}", file=sys.stderr)
 
 async def setup(bot):
