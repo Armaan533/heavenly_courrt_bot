@@ -53,7 +53,6 @@ class FrameRenderEngine(commands.Cog):
                             y = idx // fw
                             r, g, b, a = item
                             
-                            # Piecewise Domain Restriction: Only execute extraction inside the inner matrix
                             if LEFT <= x <= RIGHT and TOP <= y <= BOTTOM:
                                 dist = ((r - bg_r)**2 + (g - bg_g)**2 + (b - bg_b)**2) ** 0.5
                                 if dist <= T_MIN:
@@ -65,8 +64,7 @@ class FrameRenderEngine(commands.Cog):
                                     interpolation_factor = (ratio ** 2) * (3.0 - 2.0 * ratio)
                                     new_data.append((r, g, b, int(a * interpolation_factor)))
                             else:
-                                # Force absolute boundary opacity
-                                new_data.append((r, g, b, 255))
+                                new_data.append(item)
                                 
                         img.putdata(new_data)
                         
@@ -93,10 +91,10 @@ class FrameRenderEngine(commands.Cog):
                         )
                         
                         embed.add_field(
-                            name="Piecewise Alpha Tensor", 
+                            name="Topological Preservation Tensor", 
                             value=(
                                 "$$ M(x,y) = \\begin{cases} "
-                                "1 & \\text{if } (x,y) \\notin \\Omega_{inner} \\\\"
+                                "\\mathbf{C}_{original} & \\text{if } (x,y) \\notin \\Omega_{inner} \\\\"
                                 "\\mathcal{H}_{smooth}( \\| \\mathbf{C}_{(x,y)} - \\mathbf{C}_{bg} \\|_2 ) & \\text{if } (x,y) \\in \\Omega_{inner} "
                                 "\\end{cases} $$"
                             ),
@@ -166,7 +164,7 @@ class FrameRenderEngine(commands.Cog):
                                     interpolation_factor = (ratio ** 2) * (3.0 - 2.0 * ratio)
                                     new_data.append((r, g, b, int(a * interpolation_factor)))
                             else:
-                                new_data.append((r, g, b, 255))
+                                new_data.append(item)
                                 
                         frame_img.putdata(new_data)
                         
