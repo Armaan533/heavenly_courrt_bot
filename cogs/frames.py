@@ -3,9 +3,8 @@ from discord import app_commands
 from discord.ext import commands
 import aiohttp
 from io import BytesIO
-from PIL import Image, ImageOps, ImageDraw, ImageFont
+from PIL import Image, ImageOps, ImageDraw
 import os
-import sys
 
 from frame_prices import FRAME_DB
 
@@ -93,57 +92,61 @@ class FrameItemSelect(discord.ui.Select):
                             with Image.open(BASE_CARD_PATH).convert("RGBA") as base_img, Image.open(BytesIO(frame_bytes)).convert("RGBA") as frame_img:
                                 fw, fh = frame_img.size
                                 
-                                # 1. THE FLOOD FILL ENGINE (Like the Photoshop Paint Bucket)
-                                # Target center, top-left, top-right, bottom-left, bottom-right
-                                fill_points = [
-                                    (fw // 2, fh // 2), 
-                                    (5, 5), (fw - 5, 5), (5, fh - 5), (fw - 5, fh - 5)
-                                ]
+                                # 1. SOFT CHROMA KEY: Perfectly removes gray and blends anti-aliased edges
+                                datas = frame_img.getdata()
+                                newData = []
+                                for idx, item in enumerate(datas):
+                                    x = idx % fw
+                                    y = idx // fw
+                                    r, g, b, a = item
+                                    
+                                    # Target the solid black nameplate areas and wipe them entirely
+                                    is_top_plate = (0.08 <= x / fw <= 0.48) and (0.015 <= y / fh <= 0.075)
+                                    is_bottom_plate = (0.55 <= x / fw <= 0.95) and (0.91 <= y / fh <= 0.985)
+                                    
+                                    if (is_top_plate or is_bottom_plate) and (r < 35 and g < 35 and b < 35):
+                                        newData.append((0, 0, 0, 0))
+                                        continue
+                                        
+                                    # Mathematical distance to Discord's gray color variants
+                                    dr, dg, db = abs(r - 49), abs(g - 51), abs(b - 56)
+                                    dr2, dg2, db2 = abs(r - 47), abs(g - 49), abs(b - 54)
+                                    dist = min(max(dr, dg, db), max(dr2, dg2, db2))
+                                    
+                                    if dist <= 6:
+                                        newData.append((0, 0, 0, 0)) # Pure background
+                                    elif dist <= 24:
+                                        # Smooth 18-step transparency transition for edge blending
+                                        alpha = int(((dist - 6) / 18) * 255)
+                                        newData.append((r, g, b, min(a, alpha)))
+                                    else:
+                                        newData.append(item)
+                                        
+                                frame_img.putdata(newData)
                                 
-                                for point in fill_points:
-                                    ImageDraw.floodfill(frame_img, point, (0, 0, 0, 0), thresh=30)
-                                
-                                # 2. FORCE WIPE THE NAMEPLATES
-                                draw_frame = ImageDraw.Draw(frame_img)
-                                draw_frame.rectangle((int(fw * 0.08), int(fh * 0.015), int(fw * 0.48), int(fh * 0.075)), fill=(0, 0, 0, 0))
-                                draw_frame.rectangle((int(fw * 0.55), int(fh * 0.91), int(fw * 0.95), int(fh * 0.985)), fill=(0, 0, 0, 0))
-                                
-                                # 3. PREPARE THE BASE CARD
+                                # 2. PREPARE BASE CARD: Squeeze slightly so corners don't bleed outside frame
                                 try:
                                     resample_filter = Image.Resampling.LANCZOS
                                 except AttributeError:
                                     resample_filter = Image.ANTIALIAS
                                     
-                                base_cropped = ImageOps.fit(base_img, (fw, fh), method=resample_filter)
+                                inset_x = int(fw * 0.04) # Squeeze inward 4% on left/right
+                                inset_y = int(fh * 0.01) # Squeeze inward 1% on top/bottom
+                                inner_w = fw - (2 * inset_x)
+                                inner_h = fh - (2 * inset_y)
                                 
-                                mask = Image.new("L", (fw, fh), 0)
+                                base_resized = ImageOps.fit(base_img, (inner_w, inner_h), method=resample_filter)
+                                
+                                mask = Image.new("L", (inner_w, inner_h), 0)
                                 draw_mask = ImageDraw.Draw(mask)
-                                draw_mask.rounded_rectangle((0, 0, fw, fh), radius=22, fill=255)
-                                base_cropped.putalpha(mask)
+                                draw_mask.rounded_rectangle((0, 0, inner_w, inner_h), radius=28, fill=255)
+                                base_resized.putalpha(mask)
                                 
-                                # 4. DRAW OUR CUSTOM NAMEPLATES & TEXT ON THE BASE CARD
-                                draw_base = ImageDraw.Draw(base_cropped)
-                                draw_base.rectangle((int(fw * 0.08), int(fh * 0.015), int(fw * 0.48), int(fh * 0.075)), fill=(0, 0, 0, 150))
-                                draw_base.rectangle((int(fw * 0.55), int(fh * 0.91), int(fw * 0.95), int(fh * 0.985)), fill=(0, 0, 0, 150))
+                                # 3. COMPOSITE
+                                base_canvas = Image.new("RGBA", (fw, fh), (0, 0, 0, 0))
+                                base_canvas.paste(base_resized, (inset_x, inset_y), base_resized)
                                 
-                                try:
-                                    font_large = ImageFont.load_default(size=26)
-                                    font_small = ImageFont.load_default(size=18)
-                                except TypeError:
-                                    font_large = ImageFont.load_default()
-                                    font_small = ImageFont.load_default()
-                                    
-                                def draw_shadow_text(draw, pos, text, font):
-                                    x, y = pos
-                                    shadow = (0, 0, 0, 255)
-                                    draw.text((x+2, y+2), text, font=font, fill=shadow)
-                                    draw.text((x, y), text, font=font, fill=(255, 255, 255, 255))
-                                    
-                                draw_shadow_text(draw_base, (int(fw * 0.12), int(fh * 0.025)), "Fang Yuan", font_large)
-                                draw_shadow_text(draw_base, (int(fw * 0.58), int(fh * 0.93)), "Heavenly Court", font_small)
-                                
-                                # 5. COMPOSITE
-                                final_composite = Image.alpha_composite(base_cropped, frame_img)
+                                final_composite = Image.alpha_composite(base_canvas, frame_img)
                                 
                                 output_buffer = BytesIO()
                                 final_composite.save(output_buffer, format="PNG")
@@ -152,7 +155,7 @@ class FrameItemSelect(discord.ui.Select):
                                 file = discord.File(fp=output_buffer, filename="preview.png")
                                 embed.set_image(url="attachment://preview.png")
             except Exception as e:
-                print(f"Frame Processing Error: {e}", file=sys.stderr)
+                print(f"Frame Processing Error: {e}")
 
         view = discord.ui.View(timeout=180)
         view.add_item(BackButton(self.bot, target="category_list", current_category=self.category))
