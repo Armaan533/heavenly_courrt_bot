@@ -14,7 +14,101 @@ class FrameRenderEngine(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
-    @app_commands.command(name="test_composite", description="Execute Pure Topological Overlay (Zero Chroma-Key)")
+    @app_commands.command(name="test_clean", description="Execute Piecewise Spatial Matrix Extraction")
+    async def test_clean(self, interaction: discord.Interaction, frame_name: str):
+        match = next((n for n in FRAME_DB if frame_name.lower() in n.lower()), None)
+        if not match:
+            return await interaction.response.send_message("Frame entity not located in database.", ephemeral=True)
+
+        image_url = FRAME_DB[match].get("image")
+        if not image_url:
+            return await interaction.response.send_message("Image vector unavailable.", ephemeral=True)
+
+        await interaction.response.defer()
+
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(image_url) as resp:
+                    if resp.status != 200:
+                        return await interaction.followup.send("HTTP transmission failed.")
+                    
+                    frame_bytes = await resp.read()
+                    
+                    with Image.open(BytesIO(frame_bytes)).convert("RGBA") as img:
+                        fw, fh = img.size
+                        bg_r, bg_g, bg_b = 49, 51, 56
+                        
+                        LEFT, TOP = 40, 32
+                        RIGHT, BOTTOM = fw - 40, fh - 32
+                        
+                        T_MIN = 10.0
+                        T_MAX = 45.0
+                        T_RANGE = T_MAX - T_MIN
+                        
+                        datas = img.getdata()
+                        new_data = []
+                        
+                        for idx, item in enumerate(datas):
+                            x = idx % fw
+                            y = idx // fw
+                            r, g, b, a = item
+                            
+                            if LEFT <= x <= RIGHT and TOP <= y <= BOTTOM:
+                                dist = ((r - bg_r)**2 + (g - bg_g)**2 + (b - bg_b)**2) ** 0.5
+                                if dist <= T_MIN:
+                                    new_data.append((0, 0, 0, 0))
+                                elif dist >= T_MAX:
+                                    new_data.append(item)
+                                else:
+                                    ratio = (dist - T_MIN) / T_RANGE
+                                    interpolation_factor = (ratio ** 2) * (3.0 - 2.0 * ratio)
+                                    new_data.append((r, g, b, int(a * interpolation_factor)))
+                            else:
+                                new_data.append(item)
+                                
+                        img.putdata(new_data)
+                        
+                        output_buffer = BytesIO()
+                        img.save(output_buffer, format="PNG")
+                        output_buffer.seek(0)
+                        
+                        file_name = f"spatial_extract_{match.replace(' ', '_')}.png"
+                        file = discord.File(fp=output_buffer, filename=file_name)
+                        
+                        embed = discord.Embed(
+                            title="[ SYSTEM: SPATIAL DOMAIN EXTRACTION ]",
+                            color=0x2b2d31
+                        )
+                        
+                        embed.add_field(
+                            name="Orthogonal Boundary Conditions", 
+                            value=(
+                                "$$\\Omega_{inner} = \\{ (x,y) \\in \\mathbb{R}^2 \\mid X_{min} \\le x \\le X_{max} \\land Y_{min} \\le y \\le Y_{max} \\}$$\n"
+                                f"$$X_{{min}} = {LEFT}, X_{{max}} = {RIGHT}$$\n"
+                                f"$$Y_{{min}} = {TOP}, Y_{{max}} = {BOTTOM}$$"
+                            ),
+                            inline=False
+                        )
+                        
+                        embed.add_field(
+                            name="Topological Preservation Tensor", 
+                            value=(
+                                "$$ M(x,y) = \\begin{cases} "
+                                "\\mathbf{C}_{original} & \\text{if } (x,y) \\notin \\Omega_{inner} \\\\"
+                                "\\mathcal{H}_{smooth}( \\| \\mathbf{C}_{(x,y)} - \\mathbf{C}_{bg} \\|_2 ) & \\text{if } (x,y) \\in \\Omega_{inner} "
+                                "\\end{cases} $$"
+                            ),
+                            inline=False
+                        )
+                        
+                        embed.set_image(url=f"attachment://{file_name}")
+                        await interaction.followup.send(embed=embed, file=file)
+
+        except Exception as e:
+            await interaction.followup.send(f"Runtime Exception: {e}")
+            print(f"Extraction Error: {e}", file=sys.stderr)
+
+    @app_commands.command(name="test_composite", description="Execute Piecewise Spatially Bounded Fusion")
     async def test_composite(self, interaction: discord.Interaction, frame_name: str):
         match = next((n for n in FRAME_DB if frame_name.lower() in n.lower()), None)
         if not match:
@@ -41,10 +135,38 @@ class FrameRenderEngine(commands.Cog):
                          Image.open(BytesIO(frame_bytes)).convert("RGBA") as frame_img:
                          
                         fw, fh = frame_img.size
+                        bg_r, bg_g, bg_b = 49, 51, 56
                         
                         LEFT, TOP = 40, 32
                         RIGHT, BOTTOM = fw - 40, fh - 32
                         inner_w, inner_h = RIGHT - LEFT, BOTTOM - TOP
+                        
+                        T_MIN = 10.0
+                        T_MAX = 45.0
+                        T_RANGE = T_MAX - T_MIN
+                        
+                        datas = frame_img.getdata()
+                        new_data = []
+                        
+                        for idx, item in enumerate(datas):
+                            x = idx % fw
+                            y = idx // fw
+                            r, g, b, a = item
+                            
+                            if LEFT <= x <= RIGHT and TOP <= y <= BOTTOM:
+                                dist = ((r - bg_r)**2 + (g - bg_g)**2 + (b - bg_b)**2) ** 0.5
+                                if dist <= T_MIN:
+                                    new_data.append((0, 0, 0, 0))
+                                elif dist >= T_MAX:
+                                    new_data.append(item)
+                                else:
+                                    ratio = (dist - T_MIN) / T_RANGE
+                                    interpolation_factor = (ratio ** 2) * (3.0 - 2.0 * ratio)
+                                    new_data.append((r, g, b, int(a * interpolation_factor)))
+                            else:
+                                new_data.append(item)
+                                
+                        frame_img.putdata(new_data)
                         
                         try:
                             resample_method = Image.Resampling.LANCZOS
@@ -55,7 +177,7 @@ class FrameRenderEngine(commands.Cog):
                         
                         mask = Image.new("L", (inner_w, inner_h), 0)
                         draw = ImageDraw.Draw(mask)
-                        draw.rounded_rectangle((0, 0, inner_w, inner_h), radius=22, fill=255)
+                        draw.rounded_rectangle((0, 0, inner_w, inner_h), radius=20, fill=255)
                         card_resized.putalpha(mask)
                         
                         canvas = Image.new("RGBA", (fw, fh), (0, 0, 0, 0))
@@ -71,25 +193,26 @@ class FrameRenderEngine(commands.Cog):
                         file = discord.File(fp=output_buffer, filename=file_name)
                         
                         embed = discord.Embed(
-                            title="[ SYSTEM: PURE TOPOLOGICAL OVERLAY ]",
-                            description="Chroma-key matrix bypassed. Utilizing native asset alpha channels.",
+                            title="[ SYSTEM: ORTHOGONAL GEOMETRIC FUSION ]",
                             color=0x2b2d31
                         )
                         
                         embed.add_field(
-                            name="Diagnostic Revelation", 
+                            name="Affine Transformation", 
                             value=(
-                                "The 'gray background' was a phantom visual artifact caused by the Discord client's "
-                                "native `#313338` background rendering beneath the pre-existing transparent alpha layer."
+                                "$$f: \\mathbb{R}^2 \\to \\mathbb{R}^2$$\n"
+                                f"$$D_{{out}} = [{LEFT}, {RIGHT}] \\times [{TOP}, {BOTTOM}]$$"
                             ),
                             inline=False
                         )
-
+                        
                         embed.add_field(
-                            name="Geometric Subspace Interlock", 
+                            name="Piecewise Subspace Interlock", 
                             value=(
-                                f"$$D_{{out}} = [{LEFT}, {RIGHT}] \\times [{TOP}, {BOTTOM}]$$\n"
-                                "$$\\partial \\Omega = \\rho_{22} \\quad (C^1 \\text{ boundary curvature})$$"
+                                "$$\\mathbf{C}_{final} = \\begin{cases} "
+                                "\\mathbf{C}_{frame} & \\text{if } (x,y) \\notin \\Omega_{inner} \\\\"
+                                "\\mathbf{C}_{frame} \\oplus_{\\alpha} (\\mathbf{C}_{base} \\circ M_{clip}) & \\text{if } (x,y) \\in \\Omega_{inner} "
+                                "\\end{cases} $$"
                             ),
                             inline=False
                         )
