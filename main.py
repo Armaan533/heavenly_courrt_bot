@@ -26,22 +26,26 @@ class Bot(commands.Bot):
     async def restrict_slash_commands(self, interaction: discord.Interaction) -> bool:
         if interaction.command:
             base_cmd = interaction.command.root_parent.name if interaction.command.root_parent else interaction.command.name
-            if base_cmd == "ad" and any(role.id == 1503778482977771682 for role in interaction.user.roles):
+            
+            if base_cmd == "ad" and any(role.id == 150377848297771682 for role in interaction.user.roles):
                 return True
-        
+                
+            if base_cmd == "services":
+                return True
+
         if interaction.type == discord.InteractionType.application_command:
             EVENT_MANAGER_ROLE_ID = 1508333073668898996
-            
+
             is_admin = interaction.user.guild_permissions.administrator
             is_event_manager = any(role.id == EVENT_MANAGER_ROLE_ID for role in interaction.user.roles)
-            
+
             if not (is_admin or is_event_manager):
                 await interaction.response.send_message(
                     "❌ You do not have permission to use Heavenly Court commands.",
                     ephemeral=True
                 )
                 return False
-                
+
         return True
             
     async def setup_hook(self):
