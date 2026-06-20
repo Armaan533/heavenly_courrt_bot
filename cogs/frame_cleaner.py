@@ -14,7 +14,7 @@ class FrameRenderEngine(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
-    @app_commands.command(name="test_clean", description="Execute Piecewise Spatial Matrix Extraction")
+    @app_commands.command(name="test_clean", description="Execute Dual-Zone Spatial Matrix Extraction")
     async def test_clean(self, interaction: discord.Interaction, frame_name: str):
         match = next((n for n in FRAME_DB if frame_name.lower() in n.lower()), None)
         if not match:
@@ -41,9 +41,8 @@ class FrameRenderEngine(commands.Cog):
                         LEFT, TOP = 40, 32
                         RIGHT, BOTTOM = fw - 40, fh - 32
                         
-                        T_MIN = 10.0
-                        T_MAX = 45.0
-                        T_RANGE = T_MAX - T_MIN
+                        IN_T_MIN, IN_T_MAX = 10.0, 45.0
+                        OUT_T_MIN, OUT_T_MAX = 5.0, 15.0
                         
                         datas = img.getdata()
                         new_data = []
@@ -53,18 +52,26 @@ class FrameRenderEngine(commands.Cog):
                             y = idx // fw
                             r, g, b, a = item
                             
+                            dist = ((r - bg_r)**2 + (g - bg_g)**2 + (b - bg_b)**2) ** 0.5
+                            
                             if LEFT <= x <= RIGHT and TOP <= y <= BOTTOM:
-                                dist = ((r - bg_r)**2 + (g - bg_g)**2 + (b - bg_b)**2) ** 0.5
-                                if dist <= T_MIN:
+                                if dist <= IN_T_MIN:
                                     new_data.append((0, 0, 0, 0))
-                                elif dist >= T_MAX:
+                                elif dist >= IN_T_MAX:
                                     new_data.append(item)
                                 else:
-                                    ratio = (dist - T_MIN) / T_RANGE
-                                    interpolation_factor = (ratio ** 2) * (3.0 - 2.0 * ratio)
-                                    new_data.append((r, g, b, int(a * interpolation_factor)))
+                                    ratio = (dist - IN_T_MIN) / (IN_T_MAX - IN_T_MIN)
+                                    factor = (ratio ** 2) * (3.0 - 2.0 * ratio)
+                                    new_data.append((r, g, b, int(a * factor)))
                             else:
-                                new_data.append(item)
+                                if dist <= OUT_T_MIN:
+                                    new_data.append((0, 0, 0, 0))
+                                elif dist >= OUT_T_MAX:
+                                    new_data.append(item)
+                                else:
+                                    ratio = (dist - OUT_T_MIN) / (OUT_T_MAX - OUT_T_MIN)
+                                    factor = (ratio ** 2) * (3.0 - 2.0 * ratio)
+                                    new_data.append((r, g, b, int(a * factor)))
                                 
                         img.putdata(new_data)
                         
@@ -72,31 +79,29 @@ class FrameRenderEngine(commands.Cog):
                         img.save(output_buffer, format="PNG")
                         output_buffer.seek(0)
                         
-                        file_name = f"spatial_extract_{match.replace(' ', '_')}.png"
+                        file_name = f"dual_extract_{match.replace(' ', '_')}.png"
                         file = discord.File(fp=output_buffer, filename=file_name)
                         
                         embed = discord.Embed(
-                            title="[ SYSTEM: SPATIAL DOMAIN EXTRACTION ]",
+                            title="[ SYSTEM: DUAL-ZONE DOMAIN EXTRACTION ]",
                             color=0x2b2d31
                         )
                         
                         embed.add_field(
-                            name="Orthogonal Boundary Conditions", 
+                            name="Internal Subspace (Gradient Sweep)", 
                             value=(
-                                "$$\\Omega_{inner} = \\{ (x,y) \\in \\mathbb{R}^2 \\mid X_{min} \\le x \\le X_{max} \\land Y_{min} \\le y \\le Y_{max} \\}$$\n"
-                                f"$$X_{{min}} = {LEFT}, X_{{max}} = {RIGHT}$$\n"
-                                f"$$Y_{{min}} = {TOP}, Y_{{max}} = {BOTTOM}$$"
+                                "$$(x,y) \\in \\Omega_{inner}$$\n"
+                                f"$$\\tau_{{min}} = {IN_T_MIN}, \\quad \\tau_{{max}} = {IN_T_MAX}$$"
                             ),
                             inline=False
                         )
                         
                         embed.add_field(
-                            name="Topological Preservation Tensor", 
+                            name="External Boundary (Strict Cutoff)", 
                             value=(
-                                "$$ M(x,y) = \\begin{cases} "
-                                "\\mathbf{C}_{original} & \\text{if } (x,y) \\notin \\Omega_{inner} \\\\"
-                                "\\mathcal{H}_{smooth}( \\| \\mathbf{C}_{(x,y)} - \\mathbf{C}_{bg} \\|_2 ) & \\text{if } (x,y) \\in \\Omega_{inner} "
-                                "\\end{cases} $$"
+                                "$$(x,y) \\notin \\Omega_{inner}$$\n"
+                                f"$$\\tau_{{min}} = {OUT_T_MIN}, \\quad \\tau_{{max}} = {OUT_T_MAX}$$\n"
+                                "Isolates and terminates residual topological artifacts in outer geometries."
                             ),
                             inline=False
                         )
@@ -108,7 +113,7 @@ class FrameRenderEngine(commands.Cog):
             await interaction.followup.send(f"Runtime Exception: {e}")
             print(f"Extraction Error: {e}", file=sys.stderr)
 
-    @app_commands.command(name="test_composite", description="Execute Piecewise Spatially Bounded Fusion")
+    @app_commands.command(name="test_composite", description="Execute Dual-Zone Spatially Bounded Fusion")
     async def test_composite(self, interaction: discord.Interaction, frame_name: str):
         match = next((n for n in FRAME_DB if frame_name.lower() in n.lower()), None)
         if not match:
@@ -141,9 +146,8 @@ class FrameRenderEngine(commands.Cog):
                         RIGHT, BOTTOM = fw - 40, fh - 32
                         inner_w, inner_h = RIGHT - LEFT, BOTTOM - TOP
                         
-                        T_MIN = 10.0
-                        T_MAX = 45.0
-                        T_RANGE = T_MAX - T_MIN
+                        IN_T_MIN, IN_T_MAX = 10.0, 45.0
+                        OUT_T_MIN, OUT_T_MAX = 5.0, 15.0
                         
                         datas = frame_img.getdata()
                         new_data = []
@@ -153,18 +157,26 @@ class FrameRenderEngine(commands.Cog):
                             y = idx // fw
                             r, g, b, a = item
                             
+                            dist = ((r - bg_r)**2 + (g - bg_g)**2 + (b - bg_b)**2) ** 0.5
+                            
                             if LEFT <= x <= RIGHT and TOP <= y <= BOTTOM:
-                                dist = ((r - bg_r)**2 + (g - bg_g)**2 + (b - bg_b)**2) ** 0.5
-                                if dist <= T_MIN:
+                                if dist <= IN_T_MIN:
                                     new_data.append((0, 0, 0, 0))
-                                elif dist >= T_MAX:
+                                elif dist >= IN_T_MAX:
                                     new_data.append(item)
                                 else:
-                                    ratio = (dist - T_MIN) / T_RANGE
-                                    interpolation_factor = (ratio ** 2) * (3.0 - 2.0 * ratio)
-                                    new_data.append((r, g, b, int(a * interpolation_factor)))
+                                    ratio = (dist - IN_T_MIN) / (IN_T_MAX - IN_T_MIN)
+                                    factor = (ratio ** 2) * (3.0 - 2.0 * ratio)
+                                    new_data.append((r, g, b, int(a * factor)))
                             else:
-                                new_data.append(item)
+                                if dist <= OUT_T_MIN:
+                                    new_data.append((0, 0, 0, 0))
+                                elif dist >= OUT_T_MAX:
+                                    new_data.append(item)
+                                else:
+                                    ratio = (dist - OUT_T_MIN) / (OUT_T_MAX - OUT_T_MIN)
+                                    factor = (ratio ** 2) * (3.0 - 2.0 * ratio)
+                                    new_data.append((r, g, b, int(a * factor)))
                                 
                         frame_img.putdata(new_data)
                         
@@ -193,7 +205,7 @@ class FrameRenderEngine(commands.Cog):
                         file = discord.File(fp=output_buffer, filename=file_name)
                         
                         embed = discord.Embed(
-                            title="[ SYSTEM: ORTHOGONAL GEOMETRIC FUSION ]",
+                            title="[ SYSTEM: DUAL-ZONE FUSION MATRIX ]",
                             color=0x2b2d31
                         )
                         
@@ -207,12 +219,11 @@ class FrameRenderEngine(commands.Cog):
                         )
                         
                         embed.add_field(
-                            name="Piecewise Subspace Interlock", 
+                            name="Bifurcated Interpolation Protocol", 
                             value=(
-                                "$$\\mathbf{C}_{final} = \\begin{cases} "
-                                "\\mathbf{C}_{frame} & \\text{if } (x,y) \\notin \\Omega_{inner} \\\\"
-                                "\\mathbf{C}_{frame} \\oplus_{\\alpha} (\\mathbf{C}_{base} \\circ M_{clip}) & \\text{if } (x,y) \\in \\Omega_{inner} "
-                                "\\end{cases} $$"
+                                "$$\\mathcal{H}_{in} = \\text{Smoothstep}(\\tau \\in [10, 45])$$\n"
+                                "$$\\mathcal{H}_{out} = \\text{Smoothstep}(\\tau \\in [5, 15])$$\n"
+                                "Frame matrix unified successfully without object degradation."
                             ),
                             inline=False
                         )
