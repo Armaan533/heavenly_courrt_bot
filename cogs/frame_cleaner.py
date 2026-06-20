@@ -36,10 +36,11 @@ class FrameRenderEngine(commands.Cog):
                     
                     with Image.open(BytesIO(frame_bytes)).convert("RGBA") as img:
                         fw, fh = img.size
-                        bg_r, bg_g, bg_b = img.getpixel((fw // 2, fh // 2))[:3]
                         
-                        T_MIN = 12.0
-                        T_MAX = 55.0
+                        bg_r, bg_g, bg_b = 49, 51, 56
+                        
+                        T_MIN = 10.0
+                        T_MAX = 45.0
                         T_RANGE = T_MAX - T_MIN
                         
                         datas = img.getdata()
@@ -74,7 +75,7 @@ class FrameRenderEngine(commands.Cog):
                         )
                         
                         embed.add_field(
-                            name="Vector Inputs", 
+                            name="Static Vector Anchorage", 
                             value=(
                                 f"$$\\mathbf{{C}}_{{bg}} = \\begin{{bmatrix}} {bg_r} \\\\ {bg_g} \\\\ {bg_b} \\end{{bmatrix}}$$\n"
                                 f"$$\\tau_{{min}} = {T_MIN}, \\quad \\tau_{{max}} = {T_MAX}$$"
@@ -136,10 +137,11 @@ class FrameRenderEngine(commands.Cog):
                          Image.open(BytesIO(frame_bytes)).convert("RGBA") as frame_img:
                          
                         fw, fh = frame_img.size
-                        bg_r, bg_g, bg_b = frame_img.getpixel((fw // 2, fh // 2))[:3]
                         
-                        T_MIN = 15.0
-                        T_MAX = 40.0
+                        bg_r, bg_g, bg_b = 49, 51, 56
+                        
+                        T_MIN = 10.0
+                        T_MAX = 45.0
                         T_RANGE = T_MAX - T_MIN
                         
                         datas = frame_img.getdata()
@@ -160,19 +162,26 @@ class FrameRenderEngine(commands.Cog):
                                 
                         frame_img.putdata(new_data)
                         
+                        LEFT, TOP = 42, 36
+                        RIGHT, BOTTOM = fw - 42, fh - 36
+                        inner_w, inner_h = RIGHT - LEFT, BOTTOM - TOP
+                        
                         try:
                             resample_method = Image.Resampling.LANCZOS
                         except AttributeError:
                             resample_method = Image.ANTIALIAS
                             
-                        card_resized = ImageOps.fit(base_img, (fw, fh), method=resample_method)
+                        card_resized = ImageOps.fit(base_img, (inner_w, inner_h), method=resample_method)
                         
-                        mask = Image.new("L", (fw, fh), 0)
+                        mask = Image.new("L", (inner_w, inner_h), 0)
                         draw = ImageDraw.Draw(mask)
-                        draw.rounded_rectangle((0, 0, fw, fh), radius=28, fill=255)
+                        draw.rounded_rectangle((0, 0, inner_w, inner_h), radius=20, fill=255)
                         card_resized.putalpha(mask)
                         
-                        final_composite = Image.alpha_composite(card_resized, frame_img)
+                        canvas = Image.new("RGBA", (fw, fh), (0, 0, 0, 0))
+                        canvas.paste(card_resized, (LEFT, TOP), card_resized)
+                        
+                        final_composite = Image.alpha_composite(canvas, frame_img)
                         
                         output_buffer = BytesIO()
                         final_composite.save(output_buffer, format="PNG")
@@ -182,7 +191,7 @@ class FrameRenderEngine(commands.Cog):
                         file = discord.File(fp=output_buffer, filename=file_name)
                         
                         embed = discord.Embed(
-                            title="[ SYSTEM: GLOBAL COORDINATE FUSION ]",
+                            title="[ SYSTEM: RESTRICTED SUBSPACE FUSION ]",
                             color=0x2b2d31
                         )
                         
@@ -190,8 +199,8 @@ class FrameRenderEngine(commands.Cog):
                             name="Affine Transformation", 
                             value=(
                                 "$$f: \\mathbb{R}^2 \\to \\mathbb{R}^2$$\n"
-                                f"$$D_{{out}} = [0, {fw}] \\times [0, {fh}]$$\n"
-                                "Isomorphic mapping to global frame bounding box."
+                                f"$$D_{{out}} = [{LEFT}, {RIGHT}] \\times [{TOP}, {BOTTOM}]$$\n"
+                                "Isomorphic mapping strictly bounded to internal frame coordinates."
                             ),
                             inline=False
                         )
@@ -200,7 +209,7 @@ class FrameRenderEngine(commands.Cog):
                             name="Topological Clipping ($L^\\infty$ Norm)", 
                             value=(
                                 "$$\\partial \\Omega = \\{(x,y) \\in D_{out} \\mid \\text{dist}((x,y), \\text{corners}) \\le \\rho \\}$$\n"
-                                "$$\\rho = 28 \\text{px} \\quad (C^1 \\text{ boundary curvature})$$"
+                                "$$\\rho = 20 \\text{px} \\quad (C^1 \\text{ boundary curvature})$$"
                             ),
                             inline=False
                         )
@@ -210,8 +219,7 @@ class FrameRenderEngine(commands.Cog):
                             value=(
                                 "$$D(\\mathbf{C}_p, \\mathbf{C}_{bg}) = \\left\\| \\mathbf{C}_p - \\mathbf{C}_{bg} \\right\\|_2$$\n"
                                 f"$$\\tau_{{min}} = {T_MIN}, \\quad \\tau_{{max}} = {T_MAX}$$\n"
-                                "$$H(x) = 3x^2 - 2x^3$$\n"
-                                "$$\\alpha_{out} = \\alpha_{in} \\cdot H\\left(\\frac{D - \\tau_{min}}{\\tau_{max} - \\tau_{min}}\\right)$$"
+                                "$$\\alpha_{out} = \\alpha_{in} \\cdot (3x^2 - 2x^3)$$"
                             ),
                             inline=False
                         )
