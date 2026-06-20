@@ -99,11 +99,21 @@ class FrameItemSelect(discord.ui.Select):
                 
         embed.set_footer(text="Estimates based on ledger logs. Verify before finalizing trades.")
         
+        
         file = None
         if image_url and os.path.exists(BASE_CARD_PATH):
             try:
+                import re
+                
+                clean_url = image_url
+                match = re.search(r'(https?://[^/]+\.cloudfront\.net/[^\?]+)', image_url)
+                if match:
+                    clean_url = match.group(1)
+                
+                clean_url = clean_url.replace('.jpg', '.png').replace('.webp', '.png')
+                
                 async with aiohttp.ClientSession() as session:
-                    async with session.get(image_url) as resp:
+                    async with session.get(clean_url) as resp:
                         if resp.status == 200:
                             frame_bytes = await resp.read()
                             
@@ -118,15 +128,11 @@ class FrameItemSelect(discord.ui.Select):
                                     x = idx % target_width
                                     y = idx // target_width
                                     
-                                    if 40 <= item[0] <= 55 and 40 <= item[1] <= 55 and 40 <= item[2] <= 55:
-                                        newData.append((0, 0, 0, 0))
-                                        
-                                    elif (0.10 * target_width <= x <= 0.60 * target_width) and (0.04 * target_height <= y <= 0.13 * target_height) and (item[0] < 25 and item[1] < 25 and item[2] < 25):
-                                        newData.append((0, 0, 0, 0))
-                                        
-                                    elif (0.40 * target_width <= x <= 0.92 * target_width) and (0.87 * target_height <= y <= 0.96 * target_height) and (item[0] < 25 and item[1] < 25 and item[2] < 25):
-                                        newData.append((0, 0, 0, 0))
-                                        
+                                    is_top_plate = (0.08 <= x / target_width <= 0.48) and (0.015 <= y / target_height <= 0.075)
+                                    is_bottom_plate = (0.55 <= x / target_width <= 0.95) and (0.91 <= y / target_height <= 0.985)
+                                    
+                                    if (is_top_plate or is_bottom_plate) and (item[0] < 45 and item[1] < 45 and item[2] < 45):
+                                        newData.append((0, 0, 0, 0)) 
                                     else:
                                         newData.append(item)
                                         
@@ -159,8 +165,9 @@ class FrameItemSelect(discord.ui.Select):
                                 
                                 file = discord.File(fp=output_buffer, filename="preview.jpg")
                                 embed.set_image(url="attachment://preview.jpg")
-            except Exception:
-                pass 
+            except Exception as e:
+                print(f"Frame Composite Error: {e}")
+                pass
 
         view = discord.ui.View(timeout=180)
         view.add_item(BackButton(self.bot, target="category_list", current_category=self.category))
