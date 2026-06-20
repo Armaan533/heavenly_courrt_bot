@@ -111,26 +111,38 @@ class FrameItemSelect(discord.ui.Select):
                                 frame_rgba = frame_img.convert("RGBA")
                                 datas = frame_rgba.getdata()
                                 
+                                target_width, target_height = frame_rgba.size
+                                
                                 newData = []
-                                for item in datas:
+                                for idx, item in enumerate(datas):
+                                    x = idx % target_width
+                                    y = idx // target_width
+                                    
                                     if 40 <= item[0] <= 55 and 40 <= item[1] <= 55 and 40 <= item[2] <= 55:
-                                        newData.append((0, 0, 0, 0)) 
+                                        newData.append((0, 0, 0, 0))
+                                        
+                                    elif (0.10 * target_width <= x <= 0.60 * target_width) and (0.04 * target_height <= y <= 0.13 * target_height) and (item[0] < 25 and item[1] < 25 and item[2] < 25):
+                                        newData.append((0, 0, 0, 0))
+                                        
+                                    elif (0.40 * target_width <= x <= 0.92 * target_width) and (0.87 * target_height <= y <= 0.96 * target_height) and (item[0] < 25 and item[1] < 25 and item[2] < 25):
+                                        newData.append((0, 0, 0, 0))
+                                        
                                     else:
                                         newData.append(item)
+                                        
                                 frame_rgba.putdata(newData)
                                 
-                                target_width, target_height = frame_rgba.size
                                 base_w, base_h = base_img.size
                                 
                                 scale = max(target_width / base_w, target_height / base_h)
                                 new_w = int(base_w * scale)
                                 new_h = int(base_h * scale)
-
+                                
                                 try:
                                     resample_filter = Image.Resampling.LANCZOS
                                 except AttributeError:
                                     resample_filter = Image.ANTIALIAS
-
+                                    
                                 resized_base = base_img.resize((new_w, new_h), resample_filter)
                                 
                                 left = (new_w - target_width) / 2
