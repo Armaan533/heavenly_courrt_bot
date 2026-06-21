@@ -454,11 +454,11 @@ class ProviderProfileView(discord.ui.View):
         
         # INVISIBLE STRETCHER: Combines the Braille Pattern Blank (\u2800) with Non-Breaking Spaces (\u00A0)
         # Discord treats this as an unbreakable word, stretching the blockquote outward invisibly!
-        invisible_stretcher = "```testing```"
+        invisible_stretcher = "```​                         ```"
         
         main_embed.add_field(
             name="<:two_flowers:1516684386546880614> Pricing", 
-            value=f">>> {pricing_text}\n{invisible_stretcher}", 
+            value=f"{pricing_text}\n{invisible_stretcher}", 
             inline=False
         )
         
