@@ -3,7 +3,6 @@ from discord import app_commands
 from discord.ext import commands
 from frame_prices import FRAME_DB
 
-
 async def frame_autocomplete(interaction: discord.Interaction, current: str) -> list[app_commands.Choice[str]]:
     """Filters the frame database dynamically as the user types."""
     matches = [frame_name for frame_name in FRAME_DB.keys() if current.lower() in frame_name.lower()]
@@ -12,11 +11,18 @@ async def frame_autocomplete(interaction: discord.Interaction, current: str) -> 
         app_commands.Choice(name=match.title()[:100], value=match[:100])
         for match in matches[:25]
     ]
+
 class FrameCategorySelect(discord.ui.Select):
     def __init__(self, bot):
         self.bot = bot
         categories = sorted(list(set(data.get("type", "Unknown") for data in FRAME_DB.values())))
-        options = [discord.SelectOption(label=cat, value=cat, emoji="🗂️") for cat in categories]
+        
+        options = []
+        for cat in categories:
+            # Change Zodiac to Monthly Frame visually
+            display_cat = "Monthly Frame" if cat.lower() == "zodiac" else cat
+            options.append(discord.SelectOption(label=display_cat, value=cat, emoji="🗂️"))
+            
         super().__init__(placeholder="Select a frame category...", min_values=1, max_values=1, options=options)
 
     async def callback(self, interaction: discord.Interaction):
@@ -24,13 +30,7 @@ class FrameCategorySelect(discord.ui.Select):
         frames = sorted([name for name, data in FRAME_DB.items() if data.get("type") == category])
         
         view = FramePaginationView(self.bot, category, frames)
-        
-        embed = discord.Embed(
-            title=f"<:two_flowers:1516684386546880614> [ {category.upper()} CATALOG ]",
-            description=f"Browse our complete collection of **{category}** frames below.",
-            color=0x6b1614
-        )
-        await interaction.response.edit_message(embed=embed, view=view)
+        await interaction.response.edit_message(embed=view.get_current_embed(), view=view)
 
 class FramePaginationView(discord.ui.View):
     def __init__(self, bot, category, frames):
@@ -42,6 +42,24 @@ class FramePaginationView(discord.ui.View):
         self.current_page = 0
         self.build_pagination()
 
+    def get_current_embed(self):
+        """Generates the embed detailing the exact frames on the current page."""
+        display_cat = "Monthly Frame" if self.category.lower() == "zodiac" else self.category.title()
+        
+        start_idx = self.current_page * self.per_page
+        end_idx = start_idx + self.per_page
+        current_chunk = self.frames[start_idx:end_idx]
+        
+        desc = f"Browse our complete collection of **{display_cat}** frames below.\n\n**Frames on this page:**\n"
+        for name in current_chunk:
+            desc += f"• {name.title()}\n"
+            
+        return discord.Embed(
+            title=f"<:two_flowers:1516684386546880614> [ {display_cat.upper()} CATALOG ]",
+            description=desc,
+            color=0x6b1614
+        )
+
     def build_pagination(self):
         self.clear_items()
         
@@ -50,7 +68,9 @@ class FramePaginationView(discord.ui.View):
         current_chunk = self.frames[start_idx:end_idx]
         total_pages = ((len(self.frames) - 1) // self.per_page) + 1
         
-        placeholder = f"{self.category} (Page {self.current_page + 1}/{total_pages})"
+        display_cat = "Monthly Frame" if self.category.lower() == "zodiac" else self.category.title()
+        placeholder = f"{display_cat} (Page {self.current_page + 1}/{total_pages})"
+        
         self.add_item(FrameItemSelect(self.bot, placeholder, current_chunk, self.category))
         
         if self.current_page > 0:
@@ -74,13 +94,7 @@ class FramePageButton(discord.ui.Button):
             view.current_page += 1
             
         view.build_pagination()
-        
-        embed = discord.Embed(
-            title=f"<:two_flowers:1516684386546880614> [ {view.category.upper()} CATALOG ]",
-            description=f"Browse our complete collection of **{view.category}** frames below.",
-            color=0x6b1614
-        )
-        await interaction.response.edit_message(embed=embed, view=view)
+        await interaction.response.edit_message(embed=view.get_current_embed(), view=view)
 
 class FrameItemSelect(discord.ui.Select):
     def __init__(self, bot, placeholder, frame_list, category):
@@ -105,7 +119,9 @@ class FrameItemSelect(discord.ui.Select):
             title=f"<:two_flowers:1516684386546880614> Preview: {frame_name.title()}",
             color=0x6b1614
         )
-        embed.add_field(name="<:book_ig:1516683126066253844> Category", value=f"`{frame_type}`", inline=False)
+        
+        display_cat = "Monthly Frame" if frame_type.lower() == "zodiac" else frame_type.title()
+        embed.add_field(name="<:book_ig:1516683126066253844> Category", value=f"`{display_cat}`", inline=False)
         
         if market_price == 0 and liquid_price == 0:
             embed.add_field(
@@ -152,13 +168,7 @@ class BackButton(discord.ui.Button):
             frames = sorted([name for name, data in FRAME_DB.items() if data.get("type") == category])
             
             view = FramePaginationView(self.bot, category, frames)
-            
-            embed = discord.Embed(
-                title=f"<:two_flowers:1516684386546880614> [ {category.upper()} CATALOG ]",
-                description=f"Browse our complete collection of **{category}** frames below.",
-                color=0x6b1614
-            )
-            await interaction.response.edit_message(embed=embed, view=view, attachments=[])
+            await interaction.response.edit_message(embed=view.get_current_embed(), view=view, attachments=[])
 
 class FramesCog(commands.Cog):
     def __init__(self, bot):
@@ -197,7 +207,9 @@ class FramesCog(commands.Cog):
             title=f"🔍 Search Result: {frame_name.title()}",
             color=0x6b1614
         )
-        embed.add_field(name="<:book_ig:1516683126066253844> Category", value=f"`{frame_type}`", inline=False)
+        
+        display_cat = "Monthly Frame" if frame_type.lower() == "zodiac" else frame_type.title()
+        embed.add_field(name="<:book_ig:1516683126066253844> Category", value=f"`{display_cat}`", inline=False)
         
         if market_price == 0 and liquid_price == 0:
             embed.add_field(name="💰 Pricing Estimate", value="*⚠️ Pricing fluctuates heavily. Insufficient market data available.*", inline=False)
