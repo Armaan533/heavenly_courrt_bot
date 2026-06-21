@@ -9,6 +9,7 @@ import re
 import math
 
 DATA_FILE = "services.json"
+# Updated to your new custom gradient placeholder
 PLACEHOLDER_IMG = "https://i.pinimg.com/1200x/5c/45/a6/5c45a6b23447a2ad2755c0768fd9de46.jpg"
 SERVICE_ROLE_ID = 1517559992163631185
 
@@ -71,28 +72,31 @@ class FeaturedDyeListener(discord.ui.View):
             karuta_msg = await self.bot.wait_for('message', check=check, timeout=120.0)
             embed = karuta_msg.embeds[0]
             if embed.thumbnail and embed.thumbnail.url:
-                # Sanitize immediately upon extraction
-                dye_url = embed.thumbnail.url.strip('[]"\'<> \n\r')
-                
-                if "featured_dyes" not in SERVICE_DB["dyers"][self.user.id]:
-                    SERVICE_DB["dyers"][self.user.id]["featured_dyes"] = []
+                # Forcefully extract clean URL to prevent bad database entries
+                match = re.search(r'(https?://[^"\'\[\]<>\s]+)', embed.thumbnail.url)
+                if match:
+                    dye_url = match.group(1)
                     
-                SERVICE_DB["dyers"][self.user.id]["featured_dyes"].append(dye_url)
-                self.dyes_collected += 1
-                save_data()
-                
-                status_msg = f"<:eight_side_sparkle:1516681364806570105> Successfully extracted and saved Featured Dye **{self.dyes_collected}/{self.max_dyes}**!"
-                if self.dyes_collected >= self.max_dyes:
-                    self.listening = False
-                    status_msg += "\n\nMaximum dyes reached. Gallery complete! ✅"
-                    for child in self.children: child.disabled = True
-                    await message.edit(view=self)
-                else:
-                    status_msg += "\nRun another `kv <dye code>` to add more, or click Finish."
-                
-                await self.channel.send(status_msg)
-                if self.listening: 
-                    await self.listen_for_dyes(message)
+                    if "featured_dyes" not in SERVICE_DB["dyers"][self.user.id]:
+                        SERVICE_DB["dyers"][self.user.id]["featured_dyes"] = []
+                        
+                    SERVICE_DB["dyers"][self.user.id]["featured_dyes"].append(dye_url)
+                    self.dyes_collected += 1
+                    save_data()
+                    
+                    status_msg = f"<:eight_side_sparkle:1516681364806570105> Successfully extracted and saved Featured Dye **{self.dyes_collected}/{self.max_dyes}**!"
+                    if self.dyes_collected >= self.max_dyes:
+                        self.listening = False
+                        status_msg += "\n\nMaximum dyes reached. Gallery complete! ✅"
+                        for child in self.children: child.disabled = True
+                        await message.edit(view=self)
+                    else:
+                        status_msg += "\nRun another `kv <dye code>` to add more, or click Finish."
+                    
+                    await self.channel.send(status_msg)
+            
+            if self.listening: 
+                await self.listen_for_dyes(message)
                     
         except asyncio.TimeoutError:
             self.listening = False
@@ -175,25 +179,28 @@ class PortfolioListener(discord.ui.View):
             urls = re.findall(r'(https?://[^\s]+)', user_msg.content)
             
             if urls:
-                # Sanitize immediately upon extraction
-                img_url = urls[0].strip('[]"\'<> \n\r')
-                if "portfolio" not in SERVICE_DB["sketchers"][self.user.id]:
-                    SERVICE_DB["sketchers"][self.user.id]["portfolio"] = []
+                # Forcefully extract clean URL
+                match = re.search(r'(https?://[^"\'\[\]<>\s]+)', urls[0])
+                if match:
+                    img_url = match.group(1)
                     
-                SERVICE_DB["sketchers"][self.user.id]["portfolio"].append(img_url)
-                self.images_collected += 1
-                save_data()
-                
-                status_msg = f"<:book_ig:1516683126066253844> Successfully added image link **{self.images_collected}/{self.max_images}**!"
-                if self.images_collected >= self.max_images:
-                    self.listening = False
-                    status_msg += "\n\nMaximum portfolio slots reached! ✅"
-                    for child in self.children: child.disabled = True
-                    await message.edit(view=self)
-                else:
-                    status_msg += "\nPaste another link, or click Finish."
-                
-                await self.channel.send(status_msg)
+                    if "portfolio" not in SERVICE_DB["sketchers"][self.user.id]:
+                        SERVICE_DB["sketchers"][self.user.id]["portfolio"] = []
+                        
+                    SERVICE_DB["sketchers"][self.user.id]["portfolio"].append(img_url)
+                    self.images_collected += 1
+                    save_data()
+                    
+                    status_msg = f"<:book_ig:1516683126066253844> Successfully added image link **{self.images_collected}/{self.max_images}**!"
+                    if self.images_collected >= self.max_images:
+                        self.listening = False
+                        status_msg += "\n\nMaximum portfolio slots reached! ✅"
+                        for child in self.children: child.disabled = True
+                        await message.edit(view=self)
+                    else:
+                        status_msg += "\nPaste another link, or click Finish."
+                    
+                    await self.channel.send(status_msg)
             
             if self.listening: 
                 await self.listen_for_links(message)
@@ -427,7 +434,7 @@ class ProviderProfileView(discord.ui.View):
         data = SERVICE_DB[self.category_name].get(self.user_id, {})
         user = self.bot.get_user(self.user_id) or await self.bot.fetch_user(self.user_id)
         display_name = user.display_name if user else f"User {self.user_id}"
-        shared_url = "[https://discord.com](https://discord.com)" 
+        shared_url = "https://discord.com" 
         
         main_embed = discord.Embed(
             title=f"<:red_lotus:1516679367743377448> Service Provider: {display_name}",
@@ -444,12 +451,9 @@ class ProviderProfileView(discord.ui.View):
             main_embed.add_field(name="<:for_booster:1517226639438778503> Normal Dyes", value=f"`{data.get('normal', '0')}`", inline=True)
             main_embed.add_field(name="<:eight_side_sparkle:1516681364806570105> Mystic Dyes", value=f"`{data.get('mystic', '0')}`", inline=True)
             
-        # Pricing with blockquote to allow emojis to render
         pricing_text = data.get('pricing', 'N/A')
         
-        # A 1-line empty code block packed with non-breaking spaces forces Discord to stretch the embed wide.
         stretch_bar = "```\u200b" + ("\u00A0" * 65) + "```"
-        
         main_embed.add_field(
             name="<:two_flowers:1516684386546880614> Pricing", 
             value=f">>> {pricing_text}\n{stretch_bar}", 
@@ -469,10 +473,12 @@ class ProviderProfileView(discord.ui.View):
                 chunk.append(PLACEHOLDER_IMG)
         
         for raw_url in chunk:
-            # Auto-sanitizer: Strips out JSON brackets, quotes, and invisible spaces
-            clean_url = raw_url.strip('[]"\'<> \n\r') if isinstance(raw_url, str) else PLACEHOLDER_IMG
-            if not clean_url.startswith('http'):
-                clean_url = PLACEHOLDER_IMG
+            clean_url = PLACEHOLDER_IMG
+            
+            if isinstance(raw_url, str):
+                match = re.search(r'(https?://[^"\'\[\]<>\s]+)', raw_url)
+                if match:
+                    clean_url = match.group(1)
 
             img_embed = discord.Embed(url=shared_url, color=0x6b1614)
             img_embed.set_image(url=clean_url)
