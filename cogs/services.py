@@ -480,7 +480,7 @@ class ProviderProfileView(discord.ui.View):
         for uid in self.providers:
             u = self.bot.get_user(uid)
             n = u.display_name if u else f"User {uid}"
-            desc += f"> • **{n}**\n"
+            desc += f"✦ **{n}**\n"
             
         embed = discord.Embed(
             title=f"<:two_flowers:1516684386546880614> [ {self.category_name.replace('_', ' ').upper()} DIRECTORY ] <:two_flowers:1516684386546880614>",
