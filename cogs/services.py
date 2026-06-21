@@ -9,7 +9,6 @@ import re
 import math
 
 DATA_FILE = "services.json"
-# Updated to your new custom gradient placeholder
 PLACEHOLDER_IMG = "https://i.pinimg.com/1200x/5c/45/a6/5c45a6b23447a2ad2755c0768fd9de46.jpg"
 SERVICE_ROLE_ID = 1517559992163631185
 
@@ -453,10 +452,13 @@ class ProviderProfileView(discord.ui.View):
             
         pricing_text = data.get('pricing', 'N/A')
         
-        stretch_bar = "```\u200b" + ("\u00A0" * 65) + "```"
+        # INVISIBLE STRETCHER: Combines the Braille Pattern Blank (\u2800) with Non-Breaking Spaces (\u00A0)
+        # Discord treats this as an unbreakable word, stretching the blockquote outward invisibly!
+        invisible_stretcher = "\u2800" + ("\u00A0" * 65) + "\u2800"
+        
         main_embed.add_field(
             name="<:two_flowers:1516684386546880614> Pricing", 
-            value=f">>> {pricing_text}\n{stretch_bar}", 
+            value=f">>> {pricing_text}\n{invisible_stretcher}", 
             inline=False
         )
         
