@@ -30,7 +30,7 @@ class Bot(commands.Bot):
             if base_cmd == "ad" and any(role.id == 150377848297771682 for role in interaction.user.roles):
                 return True
                 
-            if base_cmd == "services":
+            if base_cmd in ["services", "frame"]:
                 return True
 
         if interaction.type == discord.InteractionType.application_command:
