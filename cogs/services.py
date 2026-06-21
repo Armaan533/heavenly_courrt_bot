@@ -9,7 +9,7 @@ import re
 import math
 
 DATA_FILE = "services.json"
-PLACEHOLDER_IMG = "https://singlecolorimage.com/get/2b2d31/400x400"
+PLACEHOLDER_IMG = "https://i.pinimg.com/1200x/5c/45/a6/5c45a6b23447a2ad2755c0768fd9de46.jpg"
 SERVICE_ROLE_ID = 1517559992163631185
 
 def load_data():
@@ -425,7 +425,7 @@ class ProviderProfileView(discord.ui.View):
         data = SERVICE_DB[self.category_name].get(self.user_id, {})
         user = self.bot.get_user(self.user_id) or await self.bot.fetch_user(self.user_id)
         display_name = user.display_name if user else f"User {self.user_id}"
-        shared_url = "https://discord.com" 
+        shared_url = "[https://discord.com](https://discord.com)" 
         
         main_embed = discord.Embed(
             title=f"<:red_lotus:1516679367743377448> Service Provider: {display_name}",
@@ -442,7 +442,9 @@ class ProviderProfileView(discord.ui.View):
             main_embed.add_field(name="<:for_booster:1517226639438778503> Normal Dyes", value=f"`{data.get('normal', '0')}`", inline=True)
             main_embed.add_field(name="<:eight_side_sparkle:1516681364806570105> Mystic Dyes", value=f"`{data.get('mystic', '0')}`", inline=True)
             
-        main_embed.add_field(name="<:two_flowers:1516684386546880614> Pricing", value=f"```\n{data.get('pricing', 'N/A')}\n```", inline=False)
+        # FIX: Removed the codeblock so Emojis will properly render, and used blockquote formatting instead
+        pricing_text = data.get('pricing', 'N/A')
+        main_embed.add_field(name="<:two_flowers:1516684386546880614> Pricing", value=f">>> {pricing_text}", inline=False)
         
         if self.max_pages > 1:
             main_embed.set_footer(text=f"Gallery Page {self.page + 1} of {self.max_pages}")
@@ -480,7 +482,7 @@ class ProviderProfileView(discord.ui.View):
         for uid in self.providers:
             u = self.bot.get_user(uid)
             n = u.display_name if u else f"User {uid}"
-            desc += f"✦ **{n}**\n"
+            desc += f"• **{n}**\n"
             
         embed = discord.Embed(
             title=f"<:two_flowers:1516684386546880614> [ {self.category_name.replace('_', ' ').upper()} DIRECTORY ] <:two_flowers:1516684386546880614>",
@@ -565,7 +567,7 @@ class CategoryView(discord.ui.View):
             for user_id in providers:
                 user = self.bot.get_user(user_id)
                 name = user.display_name if user else f"User {user_id}"
-                desc += f"✦ **{name}**\n"
+                desc += f"• **{name}**\n"
                 
             embed = discord.Embed(
                 title=f"<:two_flowers:1516684386546880614> [ {category.replace('_', ' ').upper()} DIRECTORY ] <:two_flowers:1516684386546880614>",
