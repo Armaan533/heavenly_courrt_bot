@@ -2,13 +2,13 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 from frame_prices import FRAME_DB
-import traceback
 
+# --- PERMISSIONS ---
 FRAME_ROLE_ID = 1503778569300607097
 
 async def frame_autocomplete(interaction: discord.Interaction, current: str) -> list[app_commands.Choice[str]]:
     """Filters the frame database dynamically as the user types."""
-    matches = [frame_name for frame_name in FRAME_DB.keys() if current.lower() in frame_name.lower()]
+    matches = [name for name in FRAME_DB.keys() if current.lower() in name.lower()]
     
     return [
         app_commands.Choice(name=match.title()[:100], value=match[:100])
@@ -178,17 +178,12 @@ class FramesCog(commands.Cog):
 
     frame_group = app_commands.Group(name="frame", description="Heavenly Court Frame Utilities")
 
-    async def cog_app_command_error(self, interaction: discord.Interaction, error: app_commands.AppCommandError):
-        if isinstance(error, app_commands.MissingRole):
-            await interaction.response.send_message("❌ You do not have the required role to access the Frame Vault!", ephemeral=True)
-        else:
-            traceback.print_exc()
-            if not interaction.response.is_done():
-                await interaction.response.send_message("⚠️ An error occurred while executing the command.", ephemeral=True)
-
     @frame_group.command(name="menu", description="Open the interactive frame preview vault catalog")
-    @app_commands.checks.has_role(FRAME_ROLE_ID)
     async def frame_menu(self, interaction: discord.Interaction):
+        # MANUAL ROLE CHECK: Bypasses main.py error handler
+        if isinstance(interaction.user, discord.Member) and not any(role.id == FRAME_ROLE_ID for role in interaction.user.roles):
+            return await interaction.response.send_message("❌ You do not have the required role to access the Frame Vault!", ephemeral=True)
+
         view = discord.ui.View(timeout=180)
         view.add_item(FrameCategorySelect(self.bot))
         
@@ -200,9 +195,12 @@ class FramesCog(commands.Cog):
         await interaction.response.send_message(embed=embed, view=view)
 
     @frame_group.command(name="lookup", description="Instantly search for a specific frame by name")
-    @app_commands.checks.has_role(FRAME_ROLE_ID)
     @app_commands.autocomplete(frame_name=frame_autocomplete)
     async def frame_lookup(self, interaction: discord.Interaction, frame_name: str):
+        # MANUAL ROLE CHECK: Bypasses main.py error handler
+        if isinstance(interaction.user, discord.Member) and not any(role.id == FRAME_ROLE_ID for role in interaction.user.roles):
+            return await interaction.response.send_message("❌ You do not have the required role to access the Frame Vault!", ephemeral=True)
+
         if frame_name not in FRAME_DB:
             match = next((n for n in FRAME_DB if frame_name.lower() in n.lower()), None)
             if not match:
