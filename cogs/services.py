@@ -9,7 +9,7 @@ import re
 import math
 
 DATA_FILE = "services.json"
-PLACEHOLDER_IMG = "[https://singlecolorimage.com/get/2b2d31/400x400](https://singlecolorimage.com/get/2b2d31/400x400)"
+PLACEHOLDER_IMG = "https://i.pinimg.com/1200x/5c/45/a6/5c45a6b23447a2ad2755c0768fd9de46.jpg"
 SERVICE_ROLE_ID = 1517559992163631185
 
 def load_data():
