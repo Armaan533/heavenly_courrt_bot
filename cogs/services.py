@@ -452,9 +452,7 @@ class ProviderProfileView(discord.ui.View):
             
         pricing_text = data.get('pricing', 'N/A')
         
-        # INVISIBLE STRETCHER: Combines the Braille Pattern Blank (\u2800) with Non-Breaking Spaces (\u00A0)
-        # Discord treats this as an unbreakable word, stretching the blockquote outward invisibly!
-        invisible_stretcher = "```                𝒟𝓎𝑒 𝒢𝒶𝓁𝓁𝑒𝓇𝓎　　　　　　　　　　　↓```"
+        invisible_stretcher = "```              ✦ 𝒟𝓎𝑒 𝒢𝒶𝓁𝓁𝑒𝓇𝓎　✦　　　　　　　　　```"
         
         main_embed.add_field(
             name="<:two_flowers:1516684386546880614> Pricing", 
