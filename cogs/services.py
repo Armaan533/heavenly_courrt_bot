@@ -9,7 +9,7 @@ import re
 import math
 
 DATA_FILE = "services.json"
-PLACEHOLDER_IMG = "https://singlecolorimage.com/get/2b2d31/400x400"
+PLACEHOLDER_IMG = "[https://singlecolorimage.com/get/2b2d31/400x400](https://singlecolorimage.com/get/2b2d31/400x400)"
 SERVICE_ROLE_ID = 1517559992163631185
 
 def load_data():
@@ -427,7 +427,7 @@ class ProviderProfileView(discord.ui.View):
         data = SERVICE_DB[self.category_name].get(self.user_id, {})
         user = self.bot.get_user(self.user_id) or await self.bot.fetch_user(self.user_id)
         display_name = user.display_name if user else f"User {self.user_id}"
-        shared_url = "https://discord.com" 
+        shared_url = "[https://discord.com](https://discord.com)" 
         
         main_embed = discord.Embed(
             title=f"<:red_lotus:1516679367743377448> Service Provider: {display_name}",
@@ -446,7 +446,15 @@ class ProviderProfileView(discord.ui.View):
             
         # Pricing with blockquote to allow emojis to render
         pricing_text = data.get('pricing', 'N/A')
-        main_embed.add_field(name="<:two_flowers:1516684386546880614> Pricing", value=f">>> {pricing_text}", inline=False)
+        
+        # A 1-line empty code block packed with non-breaking spaces forces Discord to stretch the embed wide.
+        stretch_bar = "```\u200b" + ("\u00A0" * 65) + "```"
+        
+        main_embed.add_field(
+            name="<:two_flowers:1516684386546880614> Pricing", 
+            value=f">>> {pricing_text}\n{stretch_bar}", 
+            inline=False
+        )
         
         if self.max_pages > 1:
             main_embed.set_footer(text=f"Gallery Page {self.page + 1} of {self.max_pages}")
