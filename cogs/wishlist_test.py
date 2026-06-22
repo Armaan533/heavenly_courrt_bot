@@ -86,53 +86,66 @@ class KarutaPricingCog(commands.Cog):
     def calculate_card_value(self, edition: int, print_num: int, wl: int, cosmetics: dict, worker_stats: dict):
         base_min, base_max = 0.0, 0.0
 
+        # --- SINGLE PRINTS ---
         if 1 <= print_num <= 9:
             sp_rates = {1: (1.5, 2.2), 2: (1.8, 2.3), 3: (1.5, 1.8), 4: (2.0, 2.3), 5: (2.1, 2.4), 6: (1.8, 2.8), 7: (2.0, 2.4)}
             rate_min, rate_max = sp_rates.get(edition, (2.0, 2.4))
             base_min = wl / rate_max
             base_max = wl / rate_min
 
+        # --- LOW PRINTS ---
         elif 10 <= print_num <= 99:
             lp_configs = {
-                1: {"base": (8.0, 14.0), "brackets": [(1000, 200, 0.1), (2000, 1000, 0.5), (5000, 2000, 1.0)], "spike_threshold": 5000, "spike_val": 5.0},
-                2: {"base": (8.0, 15.0), "brackets": [(1000, 400, 0.3), (2500, 1200, 0.7), (6000, 2500, 1.2)], "spike_threshold": 5000, "spike_val": 6.0},
-                3: {"base": (8.0, 15.0), "brackets": [(1000, 150, 0.1), (2000, 500, 0.3), (5000, 1200, 0.8)], "spike_threshold": 5000, "spike_val": 4.0},
-                4: {"base": (7.1, 13.1), "brackets": [(1000, 300, 0.2), (2000, 800, 0.4), (5000, 2000, 0.9)], "spike_threshold": 5000, "spike_val": 4.5},
-                5: {"base": (8.2, 12.2), "brackets": [(1500, 600, 0.3), (3000, 1200, 0.5), (6000, 3000, 1.4)], "spike_threshold": 5000, "spike_val": 5.5},
-                6: {"base": (8.1, 11.1), "brackets": [(1000, 250, 0.1), (2000, 700, 0.3), (4000, 1500, 0.6)], "spike_threshold": 4000, "spike_val": 3.0},
-                7: {"base": (9.2, 12.2), "brackets": [(1000, 500, 0.3), (3000, 2000, 0.9), (7000, 5000, 2.0)], "spike_threshold": 6000, "spike_val": 7.0}
+                1: {"base": (8.0, 14.0), "brackets": [(1000, 200, 0.1), (3000, 1000, 0.5), (5000, 2000, 1.0)], "spike_threshold": 5000, "spike_val": 5.0},
+                2: {"base": (8.0, 15.0), "brackets": [(1200, 400, 0.3), (2500, 1200, 0.7), (5000, 2500, 1.2)], "spike_threshold": 5000, "spike_val": 6.0},
+                3: {"base": (8.0, 15.0), "brackets": [(1000, 150, 0.1), (2500, 500, 0.3), (5000, 1200, 0.8)], "spike_threshold": 5000, "spike_val": 4.0},
+                4: {"base": (7.1, 13.1), "brackets": [(1000, 300, 0.2), (2500, 800, 0.4), (5000, 2000, 0.9)], "spike_threshold": 5000, "spike_val": 4.5},
+                5: {"base": (8.2, 12.2), "brackets": [(1200, 600, 0.3), (3000, 1200, 0.5), (6000, 3000, 1.4)], "spike_threshold": 6000, "spike_val": 5.5},
+                6: {"base": (8.1, 11.1), "brackets": [(1000, 250, 0.1), (2500, 700, 0.3), (4000, 1500, 0.6)], "spike_threshold": 4000, "spike_val": 3.0},
+                7: {"base": (9.2, 12.2), "brackets": [(1500, 500, 0.3), (3500, 2000, 0.9), (8500, 5000, 2.0)], "spike_threshold": 6000, "spike_val": 7.0}
             }
             cfg = lp_configs.get(edition, lp_configs[1])
-            base_min, base_max = cfg["base"]
+            rate_min, rate_max = cfg["base"]
             
+            rate_modifier = 0.0
             remaining_wl = wl
             current_floor = 0
+            
             for limit, step, mod in cfg["brackets"]:
                 bracket_capacity = limit - current_floor
                 wl_in_this_bracket = min(remaining_wl, bracket_capacity)
                 if wl_in_this_bracket > 0:
                     bonus = (wl_in_this_bracket / step) * mod
-                    base_min += bonus
-                    base_max += bonus
+                    rate_modifier += bonus
                     remaining_wl -= wl_in_this_bracket
                 current_floor = limit
             
             if wl > cfg["spike_threshold"]:
-                base_min += cfg["spike_val"]
-                base_max += cfg["spike_val"]
+                rate_modifier += cfg["spike_val"]
 
+            # Calculate final Rate (WL per Ticket divisor)
+            final_rate_min = rate_min + rate_modifier
+            final_rate_max = rate_max + rate_modifier
+
+            # Calculate ACTUAL ticket value (WL divided by Rate)
+            base_min = wl / final_rate_max if final_rate_max > 0 else 0
+            base_max = wl / final_rate_min if final_rate_min > 0 else 0
+
+        # --- MID PRINTS ---
         elif 100 <= print_num <= 999:
             mp_rates = {1: (70, 100), 2: (65, 95), 3: (60, 90), 4: (55, 85), 5: (65, 80), 6: (55, 70), 7: (50, 65)}
             rate_min, rate_max = mp_rates.get(edition, (55, 70))
             base_min = wl / rate_max
             base_max = wl / rate_min
 
+        # --- HIGH PRINTS ---
         else:
             hp_rates = {1: (750, 950), 2: (720, 840), 3: (590, 700), 4: (380, 470), 5: (200, 240), 6: (190, 220), 7: (140, 180)}
             rate_min, rate_max = hp_rates.get(edition, (190, 220))
             base_min = wl / rate_max
             base_max = wl / rate_min
 
+        # --- COSMETICS ---
         cosmetic_total = 0.0
         dye_cost = 0
         if cosmetics.get("has_dye"):
@@ -167,6 +180,7 @@ class KarutaPricingCog(commands.Cog):
 
         cosmetic_total += frame_cost
 
+        # --- WORKER BONUS ---
         worker_bonus = 0.0
         if worker_stats.get("has_stats"):
             s_count = worker_stats.get("s_grades", 0)
