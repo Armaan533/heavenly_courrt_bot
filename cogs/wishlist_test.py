@@ -15,7 +15,6 @@ class WishlistTestCog(commands.Cog):
 
     def load_database(self):
         if not os.path.exists(self.filepath):
-            print(f"File '{self.filepath}' not found.")
             return
             
         try:
@@ -33,9 +32,8 @@ class WishlistTestCog(commands.Cog):
                         "wishlists": int(row['wishlist'].strip())
                     }
                 self.wishlist_db = temp_db
-            print(f"Loaded {len(self.wishlist_db)} entries.")
-        except Exception as e:
-            print(f"Load error: {e}")
+        except Exception:
+            pass
 
     def save_database(self):
         if not self.wishlist_db:
@@ -52,8 +50,8 @@ class WishlistTestCog(commands.Cog):
                         'series': data['series'],
                         'wishlist': data['wishlists']
                     })
-        except Exception as e:
-            print(f"Save error: {e}")
+        except Exception:
+            pass
 
     def update_db_entry(self, char_name: str, series_name: str, wishlists: int) -> bool:
         char_lower = char_name.lower()
@@ -104,16 +102,26 @@ class WishlistTestCog(commands.Cog):
             return
 
         embed = message.embeds[0]
-        if not embed.description:
+        
+        full_text_parts = []
+        if embed.description:
+            full_text_parts.append(embed.description)
+        for field in embed.fields:
+            if field.name:
+                full_text_parts.append(field.name)
+            if field.value:
+                full_text_parts.append(field.value)
+                
+        full_text = "\n".join(full_text_parts)
+        if not full_text:
             return
 
-        description = embed.description
         needs_global_save = False
         title = str(embed.title) if embed.title else ""
 
         if "Character Lookup" in title:
             char_name, series_name, wishlists = None, None, None
-            for line in description.splitlines():
+            for line in full_text.splitlines():
                 clean_line = line.replace('*', '').replace('_', '').strip()
                 if clean_line.startswith('Character'):
                     parts = re.split(r'[·:]', clean_line, maxsplit=1)
@@ -131,15 +139,7 @@ class WishlistTestCog(commands.Cog):
                 needs_global_save = self.update_db_entry(char_name, series_name, wishlists)
 
         elif "Character Results" in title:
-            print("\n" + "="*50)
-            print("RAW DESCRIPTION DUMP:")
-            print(repr(description))
-            print("-" * 50)
-            print("CHAR CODES DUMP (First 100 chars):")
-            print([hex(ord(c)) for c in description[:100]])
-            print("="*50 + "\n")
-            
-            chunks = re.split(r'(?=\d+\s*\.\s*[♡❤❤️♥️🤍💖])', description)
+            chunks = re.split(r'(?=\d+\s*\.\s*[♡❤❤️♥️🤍💖])', full_text)
             
             for chunk in chunks:
                 chunk = chunk.replace('*', '').replace('_', '').replace('~', '').strip()
