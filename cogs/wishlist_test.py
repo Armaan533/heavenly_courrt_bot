@@ -3,7 +3,7 @@ from discord.ext import commands
 import csv
 import os
 import re
-import json
+from frame_prices import FRAME_DB
 
 KARUTA_BOT_ID = 646937666251915264
 GEM_RATE = 19
@@ -12,10 +12,8 @@ class KarutaPricingCog(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.wishlist_db = {}
-        self.frame_db = {}
         self.pending_prices = {}
         self.wishlist_filepath = "final_readable_master.csv"
-        self.frame_filepath = "frames_db.json"
         self.load_databases()
 
     def load_databases(self):
@@ -35,16 +33,6 @@ class KarutaPricingCog(commands.Cog):
             except Exception:
                 pass
 
-        if os.path.exists(self.frame_filepath):
-            try:
-                with open(self.frame_filepath, 'r', encoding='utf-8') as file:
-                    self.frame_db = json.load(file)
-            except Exception:
-                pass
-        else:
-            self.frame_db = {"Noble Frame": 15, "Cyberpunk Frame": 25}
-            self.save_frame_database()
-
         if "" in self.wishlist_db:
             del self.wishlist_db[""]
 
@@ -60,13 +48,6 @@ class KarutaPricingCog(commands.Cog):
                         'series': data['series'],
                         'wishlist': data['wishlists']
                     })
-        except Exception:
-            pass
-
-    def save_frame_database(self):
-        try:
-            with open(self.frame_filepath, 'w', encoding='utf-8') as file:
-                json.dump(self.frame_db, file, indent=4)
         except Exception:
             pass
 
@@ -103,7 +84,6 @@ class KarutaPricingCog(commands.Cog):
 
     def calculate_card_value(self, edition: int, print_num: int, wl: int, cosmetics: dict, worker_stats: dict):
         base_min, base_max = 0.0, 0.0
-        is_lp = False
 
         if 1 <= print_num <= 9:
             sp_rates = {1: (1.5, 2.2), 2: (1.8, 2.3), 3: (1.5, 1.8), 4: (2.0, 2.3), 5: (2.1, 2.4), 6: (1.8, 2.8), 7: (2.0, 2.4)}
@@ -112,7 +92,6 @@ class KarutaPricingCog(commands.Cog):
             base_max = wl / rate_min
 
         elif 10 <= print_num <= 99:
-            is_lp = True
             lp_configs = {
                 1: {"base": (8.0, 14.0), "brackets": [(1000, 200, 0.1), (2000, 1000, 0.5), (5000, 2000, 1.0)], "spike_threshold": 5000, "spike_val": 5.0},
                 2: {"base": (8.0, 15.0), "brackets": [(1000, 400, 0.3), (2500, 1200, 0.7), (6000, 2500, 1.2)], "spike_threshold": 5000, "spike_val": 6.0},
@@ -169,9 +148,19 @@ class KarutaPricingCog(commands.Cog):
         frame_cost = 0
         frame_status = "None"
         if frame_name:
-            if frame_name in self.frame_db:
-                frame_cost = self.frame_db[frame_name]
-                frame_status = f"{frame_name} (+{frame_cost}🎟️)"
+            cleaned_f = frame_name.lower().strip()
+            search_keys = [cleaned_f, f"{cleaned_f} frame"]
+            matched_key = None
+            
+            for sk in search_keys:
+                if sk in FRAME_DB:
+                    matched_key = sk
+                    break
+                    
+            if matched_key:
+                frame_cost = FRAME_DB[matched_key].get("market", 0)
+                display_name = matched_key.replace(" frame", "").title()
+                frame_status = f"{display_name} Frame (+{frame_cost} 🎟️)"
             else:
                 frame_status = f"{frame_name} (Price Unmapped)"
 
@@ -187,9 +176,10 @@ class KarutaPricingCog(commands.Cog):
         total_max = max(1, round(base_max + cosmetic_total + worker_bonus))
         
         return {
+            "base_min": base_min,
+            "base_max": base_max,
             "min_tix": total_min,
             "max_tix": total_max,
-            "base_range": f"{round(base_min, 1)}-{round(base_max, 1)}🎟️" if not is_lp else f"{round(base_min, 1)}🎟️*",
             "dye_cost": dye_cost,
             "sketch_cost": round(sketch_cost, 1),
             "alias_cost": alias_cost,
@@ -217,27 +207,19 @@ class KarutaPricingCog(commands.Cog):
 
         if header_line:
             clean_header = header_line.replace('*', '').replace('_', '').replace('~', '').strip()
-            
-            # Extract Print
             print_match = re.search(r'#(\d+)', clean_header)
             if print_match:
                 print_num = int(print_match.group(1))
 
             parts = re.split(r'\s*[·•・‧|∙⋅]\s*', clean_header)
-            
             for i, p in enumerate(parts):
                 if '#' in p:
-                    # The next part is Edition 
                     if i + 1 < len(parts):
                         ed_match = re.search(r'(\d+)', parts[i+1])
                         if ed_match:
                             edition = int(ed_match.group(1))
-                    
-                    # The next part is Series
                     if i + 2 < len(parts):
                         series_name = parts[i+2].strip()
-                        
-                    # The next part is Character 
                     if i + 3 < len(parts):
                         raw_char = parts[i+3].strip()
                         if "alias of" in raw_char:
@@ -251,10 +233,8 @@ class KarutaPricingCog(commands.Cog):
                             char_name = raw_char
                     break
 
-        # 3. Extract Cosmetics and Worker Stats from the rest of the text
         for line in full_text.splitlines():
             clean = line.replace('*', '').replace('_', '').replace('`', '').strip()
-            
             if "Framed with" in clean:
                 cosmetics["frame"] = clean.split("Framed with")[-1].strip()
             elif "Dyed with" in clean:
@@ -284,34 +264,52 @@ class KarutaPricingCog(commands.Cog):
         calcs = self.calculate_card_value(edition, print_num, wl_count, cosmetics, worker_stats)
         
         embed = discord.Embed(
-            title=f"💳 Strategic Valuation Breakdown", 
-            description=f"Market analysis tool for <@{user_id}>", 
-            color=0x2f3136
+            title="<:eight_side_sparkle:1516681364806570105> Card Pricing",
+            color=0x6b1614
         )
-        embed.add_field(name="🃏 Asset Identity", value=f"**{char_name}**\n*Ed {edition} · #{print_num}*", inline=True)
-        embed.add_field(name="📊 Public Demand", value=f"💌 **{wl_count:,}** Wishlists", inline=True)
-        
-        cosmetic_desc = []
-        if calcs['dye_cost']: cosmetic_desc.append(f"🎨 Dye Layer: `+{calcs['dye_cost']}🎟️`")
-        if calcs['sketch_cost']: cosmetic_desc.append(f"✍️ Sketch Matrix: `+{calcs['sketch_cost']}🎟️`")
-        if calcs['alias_cost']: cosmetic_desc.append(f"🏷️ Identity Alias: `+1🎟️`")
-        if calcs['frame_status'] != "None": cosmetic_desc.append(f"🖼️ Frame Profile: {calcs['frame_status']}")
-        
-        if not cosmetic_desc: cosmetic_desc.append("*No premium modifications recorded.*")
-        embed.add_field(name="💎 Cosmetic Assets", value="\n".join(cosmetic_desc), inline=False)
-        
-        if calcs['worker_bonus'] > 0:
-            embed.add_field(name="⚙️ Workforce Scaling", value=f"Bonus efficiency modifier applied: `+{calcs['worker_bonus']}🎟️`", inline=False)
+        embed.description = f"Requested by <@{user_id}>"
 
+        embed.add_field(
+            name="<:book_ig:1516683126066253844> Card Info", 
+            value=f"**{char_name}** • *{series_name}*\nEdition {edition} • #{print_num} • 💌 {wl_count:,}", 
+            inline=False
+        )
+        
+        base_min_rnd = round(calcs['base_min'], 1)
+        base_max_rnd = round(calcs['base_max'], 1)
+        embed.add_field(
+            name="<:red_lotus:1516679367743377448> Standalone Price", 
+            value=f"`{base_min_rnd} - {base_max_rnd} 🎟️`", 
+            inline=False
+        )
+        
+        extras_text = ""
+        if calcs['frame_status'] != "None":
+            extras_text += f"**Frame:** {calcs['frame_status']}\n"
+        if calcs['dye_cost']:
+            d_type = "Mystic" if cosmetics.get("is_mystic") else "Normal"
+            extras_text += f"**Dye ({d_type}):** +{calcs['dye_cost']} 🎟️\n"
+        if calcs['sketch_cost']:
+            extras_text += f"**Sketch:** +{calcs['sketch_cost']} 🎟️\n"
+        if calcs['alias_cost']:
+            extras_text += f"**Alias:** +{calcs['alias_cost']} 🎟️\n"
+        if calcs['worker_bonus'] > 0:
+            extras_text += f"**Worker Stats:** +{calcs['worker_bonus']} 🎟️\n"
+            
+        if extras_text:
+            embed.add_field(name="<:two_flowers:1516684386546880614> Extras", value=extras_text.strip(), inline=False)
+            
         min_gems = calcs['min_tix'] * GEM_RATE
         max_gems = calcs['max_tix'] * GEM_RATE
         
         embed.add_field(
-            name="🏁 Net Valuation Assessment", 
-            value=f"🎟️ **{calcs['min_tix']:,} – {calcs['max_tix']:,} Tickets**\n🔮 **{min_gems:,} – {max_gems:,} Gems**", 
+            name="<:for_booster:1517226639438778503> Total Price", 
+            value=f"**{calcs['min_tix']:,} - {calcs['max_tix']:,} 🎟️**\n**{min_gems:,} - {max_gems:,} <:emoji_for_oddny:1517225564023554219>**", 
             inline=False
         )
-        embed.set_footer(text="Values aggregated from active market datasets.")
+
+        if print_num <= 9:
+            embed.set_footer(text="⚠️ Single Print detected. Prices are estimates—always take offers!")
         
         await channel.send(embed=embed)
 
@@ -436,7 +434,6 @@ class KarutaPricingCog(commands.Cog):
             char_name, series_name, edition, print_num, cosmetics, worker_stats = self.parse_kci_message(embed)
             
             if not char_name or not series_name or edition is None or print_num is None:
-                print(f"FAILED PARSE -> Char: {char_name}, Series: {series_name}, Ed: {edition}, Print: {print_num}")
                 return
 
             db_key = f"{char_name.lower()}||{series_name.lower()}"
@@ -456,18 +453,11 @@ class KarutaPricingCog(commands.Cog):
                 )
                 await channel.send(
                     f"⚠️ **{char_name}** does not have a wishlist count in the database.\n"
-                    f"Please run `klu {char_name}` to automatically resolve and print the valuation matrix!",
+                    f"Please run `klu {char_name}` to automatically resolve and price the card!",
                     delete_after=15
                 )
-        except Exception as e:
-            print(f"CRASH ON REACTION: {e}")
-
-    @commands.command(name="fadd")
-    @commands.has_permissions(administrator=True)
-    async def add_frame_price(self, ctx, ticket_value: int, *, frame_name: str):
-        self.frame_db[frame_name.strip()] = ticket_value
-        self.save_frame_database()
-        await ctx.send(f"✅ Added **{frame_name}** to the frame database at **{ticket_value}🎟️**.")
+        except Exception:
+            pass
 
 async def setup(bot):
     await bot.add_cog(KarutaPricingCog(bot))
