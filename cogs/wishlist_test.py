@@ -54,18 +54,28 @@ class WishlistTestCog(commands.Cog):
     async def process_karuta_embed(self, message: discord.Message):
         """Scans a Karuta lookup message to extract and save wishlist data."""
         
-        if message.author.id != KARUTA_BOT_ID or not message.embeds:
+        # FILTER: Ensure it's Karuta
+        if message.author.id != KARUTA_BOT_ID:
+            return
+
+        # DEBUG 1: Show whenever Karuta sends ANY message
+        print(f"\n--- [DEBUG] KARUTA MESSAGE RECEIVED ---")
+        print(f"[DEBUG] Embeds found: {len(message.embeds)}")
+
+        if not message.embeds:
+            print("[DEBUG] Exiting: Message contains no embeds.")
+            print(f"---------------------------------------\n")
             return
 
         embed = message.embeds[0]
         
-        if not embed.title or "Character Lookup" not in embed.title:
-            return
-            
-        print(f"\n--- [DEBUG] KARUTA KLU DETECTED ---")
+        # DEBUG 2: Log what fields Karuta is using for headings
+        print(f"[DEBUG] Embed Title: '{embed.title}'")
+        print(f"[DEBUG] Embed Author Field: '{embed.author.name if embed.author else 'None'}'")
 
         if not embed.description:
-            print("[DEBUG] FAILED: Embed has no description text.")
+            print("[DEBUG] Exiting: Embed has no description text.")
+            print(f"---------------------------------------\n")
             return
 
         description = embed.description
@@ -74,10 +84,12 @@ class WishlistTestCog(commands.Cog):
         series_name = None
         wishlists = None
 
+        # Line-by-Line Parsing
         lines = description.split('\n')
         for line in lines:
             clean_line = line.replace('*', '').replace('_', '').strip()
             
+            # Use regex split on the middle dot (·) or colons to isolate values safely
             if clean_line.startswith('Character'):
                 parts = re.split(r'[·:]', clean_line, maxsplit=1)
                 if len(parts) > 1:
@@ -93,8 +105,9 @@ class WishlistTestCog(commands.Cog):
                     if wl_str.isdigit():
                         wishlists = int(wl_str)
 
-        print(f"[DEBUG] Extracted -> Char: '{char_name}', Series: '{series_name}', WL: '{wishlists}'")
+        print(f"[DEBUG] Parsed -> Char: '{char_name}', Series: '{series_name}', WL: '{wishlists}'")
 
+        # Validate that all data was successfully extracted
         if char_name and series_name and wishlists is not None:
             try:
                 search_query = char_name.lower()
@@ -102,13 +115,13 @@ class WishlistTestCog(commands.Cog):
                 
                 if search_query in self.wishlist_db:
                     if self.wishlist_db[search_query]['wishlists'] != wishlists:
-                        print(f"🔄 [DEBUG] Updating existing character: {char_name} (from {self.wishlist_db[search_query]['wishlists']} to {wishlists})")
+                        print(f"🔄 [DEBUG] Updating entry: {char_name} (from {self.wishlist_db[search_query]['wishlists']} to {wishlists})")
                         self.wishlist_db[search_query]['wishlists'] = wishlists
                         needs_update = True
                     else:
-                        print(f"⏭️ [DEBUG] No update needed for {char_name}. WL count is already {wishlists}.")
+                        print(f"⏭️ [DEBUG] Match current: No updates required for {char_name}.")
                 else:
-                    print(f"🌟 [DEBUG] New Character Found! Adding {char_name} to database.")
+                    print(f"🌟 [DEBUG] New entry detected: Adding {char_name} to database.")
                     self.wishlist_db[search_query] = {
                         "name": char_name,
                         "series": series_name,
@@ -119,13 +132,14 @@ class WishlistTestCog(commands.Cog):
                 if needs_update:
                     self.save_database()
                     await message.add_reaction("✅")
+                    print("[DEBUG] Operations completed successfully.")
                     
             except Exception as e:
-                print(f"❌ [DEBUG] Save process failure: {e}")
+                print(f"❌ [DEBUG] Database write failure: {e}")
         else:
-            print("❌ [DEBUG] FAILED: Could not parse all required data fields from the embed.")
+            print("❌ [DEBUG] FAILED: Could not isolate target structural lines inside description.")
         
-        print(f"-----------------------------------\n")
+        print(f"---------------------------------------\n")
 
     # --- EVENT LISTENERS ---
     
@@ -136,14 +150,7 @@ class WishlistTestCog(commands.Cog):
 
     @commands.Cog.listener()
     async def on_raw_message_edit(self, payload: discord.RawMessageUpdateEvent):
-        """
-        Using the RAW API payload ensures we catch Karuta's slash command edits 
-        even if the message wasn't inside the bot's internal cache!
-        """
-        author_data = payload.data.get("author", {})
-        if str(author_data.get("id")) != str(KARUTA_BOT_ID) and payload.data.get("author") is not None:
-            pass
-
+        """Fires when Karuta edits an embed into an existing message framework."""
         try:
             channel = self.bot.get_channel(payload.channel_id)
             if not channel:
@@ -152,10 +159,7 @@ class WishlistTestCog(commands.Cog):
             if channel:
                 message = await channel.fetch_message(payload.message_id)
                 await self.process_karuta_embed(message)
-                
-        except discord.errors.NotFound:
-            pass
-        except Exception as e:
+        except Exception:
             pass
 
     # --- COMMANDS ---
