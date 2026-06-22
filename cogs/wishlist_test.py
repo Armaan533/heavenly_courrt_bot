@@ -216,56 +216,42 @@ class KarutaPricingCog(commands.Cog):
                 break
 
         if header_line:
-            parts = re.split(r'\s*[·•・‧|∙⋅◈🔹🔸♦✨]\s*', header_line)
-            print_part_idx = -1
+            clean_header = header_line.replace('*', '').replace('_', '').replace('~', '').strip()
             
-            for i, part in enumerate(parts):
-                if "#" in part:
-                    print_match = re.search(r'#(\d+)', part)
-                    if print_match:
-                        print_num = int(print_match.group(1))
-                        print_part_idx = i
+            # Extract Print
+            print_match = re.search(r'#(\d+)', clean_header)
+            if print_match:
+                print_num = int(print_match.group(1))
+
+            parts = re.split(r'\s*[·•・‧|∙⋅]\s*', clean_header)
+            
+            for i, p in enumerate(parts):
+                if '#' in p:
+                    # The next part is Edition 
+                    if i + 1 < len(parts):
+                        ed_match = re.search(r'(\d+)', parts[i+1])
+                        if ed_match:
+                            edition = int(ed_match.group(1))
+                    
+                    # The next part is Series
+                    if i + 2 < len(parts):
+                        series_name = parts[i+2].strip()
                         
-            if print_part_idx != -1 and print_part_idx + 1 < len(parts):
-                ed_match = re.search(r'(\d+)', parts[print_part_idx + 1])
-                if ed_match:
-                    edition = int(ed_match.group(1))
+                    # The next part is Character 
+                    if i + 3 < len(parts):
+                        raw_char = parts[i+3].strip()
+                        if "alias of" in raw_char:
+                            cosmetics["has_alias"] = True
+                            alias_match = re.search(r'alias of\s+([^)]+)', raw_char)
+                            if alias_match:
+                                char_name = alias_match.group(1).strip()
+                            else:
+                                char_name = raw_char.split('(')[0].strip()
+                        else:
+                            char_name = raw_char
+                    break
 
-            eligible_text_parts = []
-            char_part = None
-            for part in parts:
-                if "**" in part:
-                    char_part = part
-                    continue
-                clean_p = part.strip()
-                if not clean_p or "#" in clean_p or "★" in clean_p:
-                    continue
-                if edition is not None and clean_p == str(edition):
-                    continue
-                if print_num is not None and clean_p == str(print_num):
-                    continue
-                if len(clean_p) <= 7 and clean_p.isalnum() and parts.index(part) == 0:
-                    continue
-                eligible_text_parts.append(clean_p)
-
-            if char_part:
-                raw_char = char_part.replace('**', '').strip()
-                if "alias of" in raw_char:
-                    cosmetics["has_alias"] = True
-                    alias_match = re.search(r'alias of\s+([^)]+)', raw_char)
-                    if alias_match:
-                        char_name = alias_match.group(1).strip()
-                    else:
-                        char_name = raw_char.split('(')[0].strip()
-                else:
-                    char_name = raw_char
-                if eligible_text_parts:
-                    series_name = eligible_text_parts[0]
-            else:
-                if len(eligible_text_parts) >= 2:
-                    series_name = eligible_text_parts[0]
-                    char_name = eligible_text_parts[1]
-
+        # 3. Extract Cosmetics and Worker Stats from the rest of the text
         for line in full_text.splitlines():
             clean = line.replace('*', '').replace('_', '').replace('`', '').strip()
             
@@ -450,6 +436,7 @@ class KarutaPricingCog(commands.Cog):
             char_name, series_name, edition, print_num, cosmetics, worker_stats = self.parse_kci_message(embed)
             
             if not char_name or not series_name or edition is None or print_num is None:
+                print(f"FAILED PARSE -> Char: {char_name}, Series: {series_name}, Ed: {edition}, Print: {print_num}")
                 return
 
             db_key = f"{char_name.lower()}||{series_name.lower()}"
@@ -472,8 +459,8 @@ class KarutaPricingCog(commands.Cog):
                     f"Please run `klu {char_name}` to automatically resolve and print the valuation matrix!",
                     delete_after=15
                 )
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"CRASH ON REACTION: {e}")
 
     @commands.command(name="fadd")
     @commands.has_permissions(administrator=True)
