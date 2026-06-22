@@ -102,14 +102,6 @@ class WishlistTestCog(commands.Cog):
             return
 
         embed = message.embeds[0]
-
-        print("\n" + "="*50)
-        print("TITLE:", repr(embed.title))
-        print("DESCRIPTION:", repr(embed.description))
-        for i, field in enumerate(embed.fields):
-            print(f"FIELD {i} NAME:", repr(field.name))
-            print(f"FIELD {i} VALUE:", repr(field.value))
-        print("="*50 + "\n")
         
         full_text_parts = []
         if embed.description:
@@ -147,11 +139,9 @@ class WishlistTestCog(commands.Cog):
                 needs_global_save = self.update_db_entry(char_name, series_name, wishlists)
 
         elif "Character Results" in title:
-            chunks = re.split(r'(?=\d+\s*\.\s*[♡❤❤️♥️🤍💖])', full_text)
-            
-            for chunk in chunks:
-                chunk = chunk.replace('*', '').replace('_', '').replace('~', '').replace('`', '').strip()
-                match = re.match(r'^\d+\s*\.\s*[♡❤❤️♥️🤍💖]?([\d,]+)\s*·\s*(.*?)\s*·\s*(.+)$', chunk)
+            for line in full_text.splitlines():
+                clean_line = line.replace('*', '').replace('_', '').replace('~', '').replace('`', '').strip()
+                match = re.match(r'^\d+\s*\.\s*[♡❤❤️♥️🤍💖]?([\d,]+)\s*·\s*(.*?)\s*·\s*(.+)$', clean_line)
                 
                 if match:
                     wishlists = int(match.group(1).replace(',', ''))
