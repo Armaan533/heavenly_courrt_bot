@@ -4,7 +4,6 @@ import csv
 import os
 import re
 
-# Standard Karuta Bot ID
 KARUTA_BOT_ID = 432610292342587392
 
 class WishlistTestCog(commands.Cog):
@@ -56,20 +55,24 @@ class WishlistTestCog(commands.Cog):
             return
 
         embed = message.embeds[0]
+
+        if not embed.title or "Character Lookup" not in embed.title:
+            return
+            
         if not embed.description:
             return
 
-        description = embed.description
+        clean_desc = embed.description.replace('*', '').replace('_', '')
 
-        char_match = re.search(r'Character\s*·\s*\*?\*?([^\n\*]+)\*?\*?', description)
-        series_match = re.search(r'Series\s*·\s*\*?\*?([^\n\*]+)\*?\*?', description)
-        wl_match = re.search(r'Wishlisted\s*·\s*\*?\*?([\d,]+)\*?\*?', description)
+        char_match = re.search(r'Character\s*.\s*(.+)', clean_desc)
+        series_match = re.search(r'Series\s*.\s*(.+)', clean_desc)
+        wl_match = re.search(r'Wishlisted\s*.\s*([\d,]+)', clean_desc)
         
         if char_match and series_match and wl_match:
             try:
                 char_name = char_match.group(1).strip()
                 series_name = series_match.group(1).strip()
-                wishlists = int(wl_match.group(1).replace(',', ''))
+                wishlists = int(wl_match.group(1).replace(',', '').strip())
                 
                 search_query = char_name.lower()
                 needs_update = False
@@ -78,7 +81,7 @@ class WishlistTestCog(commands.Cog):
                     if self.wishlist_db[search_query]['wishlists'] != wishlists:
                         self.wishlist_db[search_query]['wishlists'] = wishlists
                         needs_update = True
-                        print(f"🔄 [Wishlist DB] Updated wishlist for {char_name} to {wishlists}")
+                        print(f"🔄 [Wishlist DB] Updated {char_name} to {wishlists} WL")
                 else:
                     self.wishlist_db[search_query] = {
                         "name": char_name,
@@ -86,10 +89,11 @@ class WishlistTestCog(commands.Cog):
                         "wishlists": wishlists
                     }
                     needs_update = True
-                    print(f"🌟 [Wishlist DB] Discovered new character: {char_name} ({wishlists} wl)")
+                    print(f"🌟 [Wishlist DB] Discovered new character: {char_name} ({wishlists} WL)")
 
                 if needs_update:
                     self.save_database()
+                    await message.add_reaction("✅")
 
             except Exception as e:
                 print(f"❌ [Wishlist DB] Parsing processing failure: {e}")
@@ -126,7 +130,7 @@ class WishlistTestCog(commands.Cog):
             
             await ctx.send(embed=embed)
         else:
-            await ctx.send(f"❌ Could not find **{character_name}** in the database. Ensure it is spelled exactly as it is in the CSV.", delete_after=10)
+            await ctx.send(f"❌ Could not find **{character_name}** in the database. Run `klu {character_name}` to automatically add them!", delete_after=10)
 
     @commands.command(name="wlreload")
     @commands.has_permissions(administrator=True)
