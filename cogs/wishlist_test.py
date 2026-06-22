@@ -2,6 +2,7 @@ import discord
 from discord.ext import commands
 import csv
 import os
+import re
 
 # Standard Karuta Bot ID
 KARUTA_BOT_ID = 432610292342587392
@@ -62,14 +63,12 @@ class WishlistTestCog(commands.Cog):
             return
             
         print(f"\n--- [DEBUG] KARUTA KLU DETECTED ---")
-        print(f"[DEBUG] Title: {embed.title}")
 
         if not embed.description:
             print("[DEBUG] FAILED: Embed has no description text.")
             return
 
         description = embed.description
-        print(f"[DEBUG] Raw Description Length: {len(description)} characters")
 
         char_name = None
         series_name = None
@@ -80,15 +79,15 @@ class WishlistTestCog(commands.Cog):
             clean_line = line.replace('*', '').replace('_', '').strip()
             
             if clean_line.startswith('Character'):
-                parts = clean_line.split('·', 1)
+                parts = re.split(r'[·:]', clean_line, maxsplit=1)
                 if len(parts) > 1:
                     char_name = parts[1].strip()
             elif clean_line.startswith('Series'):
-                parts = clean_line.split('·', 1)
+                parts = re.split(r'[·:]', clean_line, maxsplit=1)
                 if len(parts) > 1:
                     series_name = parts[1].strip()
             elif clean_line.startswith('Wishlisted'):
-                parts = clean_line.split('·', 1)
+                parts = re.split(r'[·:]', clean_line, maxsplit=1)
                 if len(parts) > 1:
                     wl_str = parts[1].replace(',', '').strip()
                     if wl_str.isdigit():
@@ -136,9 +135,28 @@ class WishlistTestCog(commands.Cog):
         await self.process_karuta_embed(message)
 
     @commands.Cog.listener()
-    async def on_message_edit(self, before: discord.Message, after: discord.Message):
-        """Fires when Karuta edits an embed."""
-        await self.process_karuta_embed(after)
+    async def on_raw_message_edit(self, payload: discord.RawMessageUpdateEvent):
+        """
+        Using the RAW API payload ensures we catch Karuta's slash command edits 
+        even if the message wasn't inside the bot's internal cache!
+        """
+        author_data = payload.data.get("author", {})
+        if str(author_data.get("id")) != str(KARUTA_BOT_ID) and payload.data.get("author") is not None:
+            pass
+
+        try:
+            channel = self.bot.get_channel(payload.channel_id)
+            if not channel:
+                channel = await self.bot.fetch_channel(payload.channel_id)
+
+            if channel:
+                message = await channel.fetch_message(payload.message_id)
+                await self.process_karuta_embed(message)
+                
+        except discord.errors.NotFound:
+            pass
+        except Exception as e:
+            pass
 
     # --- COMMANDS ---
 
