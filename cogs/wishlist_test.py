@@ -105,8 +105,13 @@ class WishlistTestCog(commands.Cog):
         if not embed.description:
             return
 
-        description = embed.description
+        description = embed.description or ""
+
+        full_text = description + "\n"
+        for field in embed.fields:
+            full_text += field.value + "\n"
         needs_global_save = False
+
         title = str(embed.title) if embed.title else ""
 
         if "Character Lookup" in title:
@@ -129,11 +134,11 @@ class WishlistTestCog(commands.Cog):
                 needs_global_save = self.update_db_entry(char_name, series_name, wishlists)
 
         elif "Character Results" in title:
-            for line in description.splitlines():
+            for line in full_text.splitlines():
                 line = line.strip()
 
                 match = re.match(
-                    r'^\d+\.\s*[♡❤❤️♥️🤍💖]?([\d,]+)\s*·\s*(.*?)\s*·\s*(.+)$',
+                    r'^\d+\.\s*[^\d]*([\d,]+)\s*·\s*(.*?)\s*·\s*(.+)$',
                     line
                 )
 
@@ -141,6 +146,8 @@ class WishlistTestCog(commands.Cog):
                     wishlists = int(match.group(1).replace(',', ''))
                     series_name = match.group(2).strip()
                     char_name = match.group(3).strip()
+
+                    print(f"FOUND: {char_name} | {series_name} | {wishlists}")
 
                     if self.update_db_entry(char_name, series_name, wishlists):
                         needs_global_save = True
