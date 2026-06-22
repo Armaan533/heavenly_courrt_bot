@@ -129,21 +129,19 @@ class WishlistTestCog(commands.Cog):
                 needs_global_save = self.update_db_entry(char_name, series_name, wishlists)
 
         elif "Character Results" in title:
-            chunks = re.split(r'\d+\s*\.\s*(?=[<♡❤❤️♥️🤍💖])', description)
+            chunks = re.split(r'(?=\d+\s*\.\s*[♡❤❤️♥️🤍💖])', description)
             
             for chunk in chunks:
-                clean_chunk = chunk.replace('*', '').replace('_', '').replace('~', '').strip()
-                parts = re.split(r'\s*[·•・‧|∙⋅◈]\s*', clean_chunk)
+                chunk = chunk.replace('*', '').replace('_', '').replace('~', '').strip()
+                match = re.match(r'^\d+\s*\.\s*[♡❤❤️♥️🤍💖]?([\d,]+)\s*·\s*(.*?)\s*·\s*(.+)$', chunk)
                 
-                if len(parts) >= 3:
-                    wl_match = re.search(r'([\d,]+)[^\d]*$', parts[0])
-                    if wl_match:
-                        wishlists = int(wl_match.group(1).replace(',', ''))
-                        series_name = parts[1].strip()
-                        char_name = '·'.join(parts[2:]).strip()
-                        
-                        if self.update_db_entry(char_name, series_name, wishlists):
-                            needs_global_save = True
+                if match:
+                    wishlists = int(match.group(1).replace(',', ''))
+                    series_name = match.group(2).strip()
+                    char_name = match.group(3).strip()
+                    
+                    if self.update_db_entry(char_name, series_name, wishlists):
+                        needs_global_save = True
 
         if needs_global_save:
             self.save_database()
