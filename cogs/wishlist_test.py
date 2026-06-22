@@ -5,7 +5,7 @@ import os
 import re
 
 # Standard Karuta Bot ID
-KARUTA_BOT_ID = 432610292342587392
+KARUTA_BOT_ID = 646937666251915264
 
 class WishlistTestCog(commands.Cog):
     def __init__(self, bot):
