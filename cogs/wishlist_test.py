@@ -141,53 +141,41 @@ class WishlistTestCog(commands.Cog):
             for line in description.splitlines():
                 clean_line = line.replace('*', '').replace('_', '').strip()
                 
-                heart = None
-                for h in ['♡', '❤', '❤️', '♥️']:
-                    if h in clean_line:
-                        heart = h
-                        break
-                        
-                if heart:
-                    right_side = clean_line.split(heart, 1)[1]
+                # Indestructible Regex: Ignores whatever weird heart emojis Karuta uses
+                match = re.search(r'\d+\s*\.\s*[^\d]*([\d,]+)\s*[·•・‧|:]\s*(.+?)\s*[·•・‧|:]\s*(.+)', clean_line)
+                
+                if match:
+                    wl_str = match.group(1).replace(',', '').strip()
+                    series_name = match.group(2).strip()
+                    char_name = match.group(3).strip()
                     
-                    sub_parts = re.split(r'[\s\u200B]+[·•・‧|:][\s\u200B]+', right_side)
-                    
-                    if len(sub_parts) >= 3:
-                        wl_str = sub_parts[0].replace(',', '').strip()
-                        series_name = sub_parts[1].strip()
-                        
-                        char_name = ' '.join(sub_parts[2:]).strip() 
-                        
-                        if wl_str.isdigit():
-                            wishlists = int(wl_str)
-                            parsed_count += 1
-                            if self.update_db_entry(char_name, series_name, wishlists):
-                                needs_global_save = True
-                    else:
-                        print(f"[DEBUG] Parser choked on line: {repr(right_side)} | Found parts: {sub_parts}")
+                    if wl_str.isdigit():
+                        wishlists = int(wl_str)
+                        parsed_count += 1
+                        if self.update_db_entry(char_name, series_name, wishlists):
+                            needs_global_save = True
+                else:
+                    # Ignore empty lines or footer navigation text, but warn if a real line failed
+                    if clean_line and not clean_line.startswith("Page") and not clean_line.startswith("Use"):
+                        print(f"[DEBUG] Regex missed line: {repr(clean_line)}")
                         
             print(f"[DEBUG] Successfully extracted {parsed_count} characters from this page.")
 
         if needs_global_save:
             self.save_database()
-            
-        try:
-            await message.add_reaction("✅")
-        except:
-            pass
+            try:
+                await message.add_reaction("✅")
+            except:
+                pass
 
     # --- RAW EVENT LISTENERS ---
     
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message):
-        """Catches the initial command embed"""
         await self.process_karuta_embed(message)
 
     @commands.Cog.listener()
     async def on_raw_message_edit(self, payload: discord.RawMessageUpdateEvent):
-        """Catches button presses and silent page flips perfectly"""
-        
-
         author_data = payload.data.get("author")
         if author_data:
             if str(author_data.get("id")) != str(KARUTA_BOT_ID):
@@ -201,7 +189,6 @@ class WishlistTestCog(commands.Cog):
             message = await channel.fetch_message(payload.message_id)
             
             if message.author.id == KARUTA_BOT_ID:
-                # Clear the old checkmark so it can add a new one for the new page
                 for r in message.reactions:
                     if str(r.emoji) == "✅" and r.me:
                         await message.remove_reaction("✅", self.bot.user)
@@ -209,7 +196,7 @@ class WishlistTestCog(commands.Cog):
                 await self.process_karuta_embed(message)
                 
         except discord.errors.NotFound:
-            pass # Message was deleted before bot could scan it
+            pass 
         except Exception as e:
             print(f"⚠️ [Wishlist DB] Error on raw edit fetch: {e}")
 
@@ -228,7 +215,6 @@ class WishlistTestCog(commands.Cog):
         if not matches:
             return await ctx.send(f"❌ Could not find any character matching **{character_name}** in the database.", delete_after=10)
 
-        # Sort matches by highest wishlist count first
         matches.sort(key=lambda x: x['wishlists'], reverse=True)
 
         if len(matches) == 1:
