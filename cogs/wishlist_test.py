@@ -144,24 +144,44 @@ class WishlistTestCog(commands.Cog):
 
         if needs_global_save:
             self.save_database()
-            await message.add_reaction("✅")
+            try:
+                await message.add_reaction("✅")
+            except:
+                pass
 
+    # --- RAW PAYLOAD EVENT LISTENERS ---
+    
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message):
+        """Catches the initial klu send"""
         await self.process_karuta_embed(message)
 
     @commands.Cog.listener()
     async def on_raw_message_edit(self, payload: discord.RawMessageUpdateEvent):
+        """Catches every single page flip purely through the Discord API"""
         author_data = payload.data.get("author", {})
         if author_data.get("id") and str(author_data.get("id")) != str(KARUTA_BOT_ID):
             return
+            
+        if "embeds" not in payload.data:
+            return
+
         try:
-            channel = self.bot.get_channel(payload.channel_id) or await self.bot.fetch_channel(payload.channel_id)
+            channel = self.bot.get_channel(payload.channel_id)
+            if not channel:
+                channel = await self.bot.fetch_channel(payload.channel_id)
+                
             if channel:
                 message = await channel.fetch_message(payload.message_id)
+                reaction = discord.utils.get(message.reactions, emoji="✅")
+                if reaction and reaction.me:
+                    await message.remove_reaction("✅", self.bot.user)
+                    
                 await self.process_karuta_embed(message)
         except Exception:
             pass
+
+    # --- COMMANDS ---
 
     @commands.command(name="wl", aliases=["wishlist", "check"])
     async def test_wishlist(self, ctx, *, character_name: str):
