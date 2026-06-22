@@ -331,10 +331,17 @@ class KarutaPricingCog(commands.Cog):
         title = str(embed.title) if embed.title else ""
 
         if "Card Details" in title or "Card Information" in title:
-            try:
-                await message.add_reaction("💵")
-            except:
-                pass
+            full_text_parts = []
+            if embed.description: full_text_parts.append(embed.description)
+            for field in embed.fields:
+                if field.value: full_text_parts.append(field.value)
+            full_text = "\n".join(full_text_parts).lower()
+
+            if any(x in full_text for x in ["condition", "dropped on", "grabbed by", "inkwell"]):
+                try:
+                    await message.add_reaction("💵")
+                except:
+                    pass
             return
 
         if "Character Lookup" in title:
