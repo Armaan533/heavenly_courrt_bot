@@ -32,24 +32,19 @@ class WishlistTestCog(commands.Cog):
                         "series": series_name,
                         "wishlists": int(row['wishlist'].strip())
                     }
-                
                 self.wishlist_db = temp_db
-                
             print(f"✅ [Wishlist DB] Successfully loaded {len(self.wishlist_db):,} entries!")
         except Exception as e:
             print(f"❌ [Wishlist DB] Error loading data: {e}")
 
     def save_database(self):
-        """Safely saves current memory to the CSV to prevent accidental wiping."""
         if not self.wishlist_db:
-            print("⚠️ [Wishlist DB] Aborted save: Memory is empty, preventing accidental wipe!")
             return
             
         try:
             with open(self.filepath, mode='w', newline='', encoding='utf-8-sig') as file:
                 fieldnames = ['character', 'series', 'wishlist']
                 writer = csv.DictWriter(file, fieldnames=fieldnames)
-                
                 writer.writeheader()
                 for data in self.wishlist_db.values():
                     writer.writerow({
@@ -57,15 +52,12 @@ class WishlistTestCog(commands.Cog):
                         'series': data['series'],
                         'wishlist': data['wishlists']
                     })
-            print(f"💾 [Wishlist DB] Successfully saved {len(self.wishlist_db)} entries to CSV.")
         except Exception as e:
-            print(f"❌ [Wishlist DB] Error saving to CSV: {e}")
+            print(f"❌ [Wishlist DB] Error saving: {e}")
 
     def update_db_entry(self, char_name: str, series_name: str, wishlists: int) -> bool:
-        """Intelligently updates the DB, handling truncated series names safely."""
         char_lower = char_name.lower()
         series_lower = series_name.lower()
-        
         matched_key = None
         
         for key in self.wishlist_db.keys():
@@ -86,21 +78,17 @@ class WishlistTestCog(commands.Cog):
         
         if matched_key:
             entry = self.wishlist_db[matched_key]
-            
             if entry['wishlists'] != wishlists:
-                print(f"🔄 [DEBUG] Updated {char_name} ({entry['series']}): {entry['wishlists']} -> {wishlists} WL")
                 entry['wishlists'] = wishlists
                 needs_update = True
                 
             if entry['series'].endswith('...') and not series_name.endswith('...'):
-                print(f"✨ [DEBUG] Upgraded series name: '{entry['series']}' -> '{series_name}'")
                 entry['series'] = series_name
                 new_key = f"{char_lower}||{series_name.lower()}"
                 self.wishlist_db[new_key] = entry
                 del self.wishlist_db[matched_key]
                 needs_update = True
         else:
-            print(f"🌟 [DEBUG] Discovered new character: {char_name} | {series_name} ({wishlists} WL)")
             new_key = f"{char_lower}||{series_lower}"
             self.wishlist_db[new_key] = {
                 "name": char_name,
@@ -122,10 +110,8 @@ class WishlistTestCog(commands.Cog):
         description = embed.description
         needs_global_save = False
 
-        # --- SCENARIO 1: Single Character Lookup ---
         if "Character Lookup" in embed.title:
             char_name, series_name, wishlists = None, None, None
-
             for line in description.split('\n'):
                 clean_line = line.replace('*', '').replace('_', '').strip()
                 if clean_line.startswith('Character'):
@@ -143,11 +129,9 @@ class WishlistTestCog(commands.Cog):
             if char_name and series_name and wishlists is not None:
                 needs_global_save = self.update_db_entry(char_name, series_name, wishlists)
 
-        # --- SCENARIO 2: Multiple Character Results ---
         elif "Character Results" in embed.title:
             for line in description.split('\n'):
                 clean_line = line.replace('*', '').replace('_', '').strip()
-                
                 match = re.search(r'\d+\s*\.\s*[♡❤❤️♥️]\s*([\d,]+)\s*·\s*(.+?)\s*·\s*(.+)', clean_line)
                 
                 if match:
@@ -162,8 +146,6 @@ class WishlistTestCog(commands.Cog):
             self.save_database()
             await message.add_reaction("✅")
 
-    # --- EVENT LISTENERS ---
-    
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message):
         await self.process_karuta_embed(message)
@@ -173,7 +155,6 @@ class WishlistTestCog(commands.Cog):
         author_data = payload.data.get("author", {})
         if author_data.get("id") and str(author_data.get("id")) != str(KARUTA_BOT_ID):
             return
-
         try:
             channel = self.bot.get_channel(payload.channel_id) or await self.bot.fetch_channel(payload.channel_id)
             if channel:
@@ -182,8 +163,6 @@ class WishlistTestCog(commands.Cog):
         except Exception:
             pass
 
-    # --- COMMANDS ---
-
     @commands.command(name="wl", aliases=["wishlist", "check"])
     async def test_wishlist(self, ctx, *, character_name: str):
         search_query = character_name.strip().lower()
@@ -191,11 +170,13 @@ class WishlistTestCog(commands.Cog):
         matches = []
         for key, data in self.wishlist_db.items():
             k_char, k_series = key.split('||', 1)
-            if k_char == search_query:
+            if search_query in k_char:
                 matches.append(data)
                 
         if not matches:
-            return await ctx.send(f"❌ Could not find **{character_name}** in the database. Run `klu {character_name}` to automatically add them!", delete_after=10)
+            return await ctx.send(f"❌ Could not find any character matching **{character_name}** in the database.", delete_after=10)
+
+        matches.sort(key=lambda x: x['wishlists'], reverse=True)
 
         if len(matches) == 1:
             data = matches[0]
@@ -207,22 +188,24 @@ class WishlistTestCog(commands.Cog):
         else:
             embed = discord.Embed(title=f"🔍 Multiple Matches for '{character_name.title()}'", color=0x6b1614)
             desc = ""
-            for data in matches:
+            for data in matches[:15]:
                 desc += f"• **{data['name']}** from *{data['series']}* — 💌 **{data['wishlists']:,}** WL\n"
+            
+            if len(matches) > 15:
+                desc += f"\n*...and {len(matches) - 15} more matches.*"
+                
             embed.description = desc
             await ctx.send(embed=embed)
 
     @commands.command(name="wlreload")
     @commands.has_permissions(administrator=True)
     async def reload_wishlist(self, ctx):
-        """Forces the bot to dump memory and reload purely from the CSV."""
         self.load_database()
         await ctx.send(f"✅ Reloaded the Wishlist database! Current character count: **{len(self.wishlist_db):,}**")
 
     @commands.command(name="wlbackup")
     @commands.has_permissions(administrator=True)
     async def backup_wishlist(self, ctx):
-        """Sends the current CSV database as a file to the channel."""
         if os.path.exists(self.filepath):
             await ctx.send("📥 Here is the latest Wishlist Database backup:", file=discord.File(self.filepath))
         else:
