@@ -6,21 +6,19 @@ import re
 import json
 
 KARUTA_BOT_ID = 646937666251915264
-GEM_RATE = 19  
+GEM_RATE = 19
 
 class KarutaPricingCog(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.wishlist_db = {}
         self.frame_db = {}
-        self.pending_prices = {}  
+        self.pending_prices = {}
         self.wishlist_filepath = "final_readable_master.csv"
         self.frame_filepath = "frames_db.json"
-        
         self.load_databases()
 
     def load_databases(self):
-        # Load Wishlist DB
         if os.path.exists(self.wishlist_filepath):
             try:
                 with open(self.wishlist_filepath, mode='r', encoding='utf-8-sig') as file:
@@ -34,19 +32,21 @@ class KarutaPricingCog(commands.Cog):
                             "series": series_name,
                             "wishlists": int(row['wishlist'].strip())
                         }
-            except Exception as e:
-                print(f"Error loading wishlist DB: {e}")
+            except Exception:
+                pass
 
-        # Load Frame DB
         if os.path.exists(self.frame_filepath):
             try:
                 with open(self.frame_filepath, 'r', encoding='utf-8') as file:
                     self.frame_db = json.load(file)
-            except Exception as e:
-                print(f"Error loading frame DB: {e}")
+            except Exception:
+                pass
         else:
             self.frame_db = {"Noble Frame": 15, "Cyberpunk Frame": 25}
             self.save_frame_database()
+
+        if "" in self.wishlist_db:
+            del self.wishlist_db[""]
 
     def save_wishlist_database(self):
         try:
@@ -60,15 +60,15 @@ class KarutaPricingCog(commands.Cog):
                         'series': data['series'],
                         'wishlist': data['wishlists']
                     })
-        except Exception as e:
-            print(f"Error saving wishlist DB: {e}")
+        except Exception:
+            pass
 
     def save_frame_database(self):
         try:
             with open(self.frame_filepath, 'w', encoding='utf-8') as file:
                 json.dump(self.frame_db, file, indent=4)
-        except Exception as e:
-            print(f"Error saving frame DB: {e}")
+        except Exception:
+            pass
 
     def update_db_entry(self, char_name: str, series_name: str, wishlists: int) -> bool:
         char_lower = char_name.lower()
@@ -105,13 +105,13 @@ class KarutaPricingCog(commands.Cog):
         base_min, base_max = 0.0, 0.0
         is_lp = False
 
-        if 1 <= print_num <= 9:  # Single Print (
+        if 1 <= print_num <= 9:
             sp_rates = {1: (1.5, 2.2), 2: (1.8, 2.3), 3: (1.5, 1.8), 4: (2.0, 2.3), 5: (2.1, 2.4), 6: (1.8, 2.8), 7: (2.0, 2.4)}
             rate_min, rate_max = sp_rates.get(edition, (2.0, 2.4))
             base_min = wl / rate_max
             base_max = wl / rate_min
 
-        elif 10 <= print_num <= 99:  # Low Print  - Tax-Bracket Progressive Method
+        elif 10 <= print_num <= 99:
             is_lp = True
             lp_configs = {
                 1: {"base": (8.0, 14.0), "brackets": [(1000, 200, 0.1), (2000, 1000, 0.5), (5000, 2000, 1.0)], "spike_threshold": 5000, "spike_val": 5.0},
@@ -125,7 +125,6 @@ class KarutaPricingCog(commands.Cog):
             cfg = lp_configs.get(edition, lp_configs[1])
             base_min, base_max = cfg["base"]
             
-            # Progressive calculation loop
             remaining_wl = wl
             current_floor = 0
             for limit, step, mod in cfg["brackets"]:
@@ -142,35 +141,30 @@ class KarutaPricingCog(commands.Cog):
                 base_min += cfg["spike_val"]
                 base_max += cfg["spike_val"]
 
-        elif 100 <= print_num <= 999:  # Mid Print (MP)
+        elif 100 <= print_num <= 999:
             mp_rates = {1: (70, 100), 2: (65, 95), 3: (60, 90), 4: (55, 85), 5: (65, 80), 6: (55, 70), 7: (50, 65)}
             rate_min, rate_max = mp_rates.get(edition, (55, 70))
             base_min = wl / rate_max
             base_max = wl / rate_min
 
-        else:  # High Print (HP)
+        else:
             hp_rates = {1: (750, 950), 2: (720, 840), 3: (590, 700), 4: (380, 470), 5: (200, 240), 6: (190, 220), 7: (140, 180)}
             rate_min, rate_max = hp_rates.get(edition, (190, 220))
             base_min = wl / rate_max
             base_max = wl / rate_min
 
         cosmetic_total = 0.0
-        
-        # Dye Logic
         dye_cost = 0
         if cosmetics.get("has_dye"):
             dye_cost = 25 if cosmetics.get("is_mystic") else 2
             cosmetic_total += dye_cost
             
-        # Sketch Logic
         sketch_cost = cosmetics.get("inkwell", 0) / GEM_RATE
         cosmetic_total += sketch_cost
         
-        # Alias Logic
         alias_cost = 1 if cosmetics.get("has_alias") else 0
         cosmetic_total += alias_cost
         
-        # Frame Logic
         frame_name = cosmetics.get("frame", "")
         frame_cost = 0
         frame_status = "None"
@@ -207,49 +201,91 @@ class KarutaPricingCog(commands.Cog):
         full_text_parts = []
         if embed.description: full_text_parts.append(embed.description)
         for field in embed.fields:
-            if field.name: full_text_parts.append(field.name)
             if field.value: full_text_parts.append(field.value)
         full_text = "\n".join(full_text_parts)
 
         char_name, series_name = None, None
         edition, print_num = None, None
-        
         cosmetics = {"has_dye": False, "is_mystic": False, "inkwell": 0, "has_alias": False, "frame": ""}
         worker_stats = {"has_stats": False, "s_grades": 0, "a_grades": 0}
 
+        header_line = ""
         for line in full_text.splitlines():
-            clean = line.replace('*', '').replace('_', '').strip()
+            if "#" in line:
+                header_line = line
+                break
+
+        if header_line:
+            parts = re.split(r'\s*[·•・‧|∙⋅◈🔹🔸♦✨]\s*', header_line)
+            print_part_idx = -1
             
-            if "Character" in clean:
-                parts = re.split(r'[·:]', clean, maxsplit=1)
-                if len(parts) > 1:
-                    raw_char = parts[1].strip()
-                    if "(alias of" in raw_char:
-                        cosmetics["has_alias"] = True
-                        char_name = raw_char.split("(alias of")[0].strip()
+            for i, part in enumerate(parts):
+                if "#" in part:
+                    print_match = re.search(r'#(\d+)', part)
+                    if print_match:
+                        print_num = int(print_match.group(1))
+                        print_part_idx = i
+                        
+            if print_part_idx != -1 and print_part_idx + 1 < len(parts):
+                ed_match = re.search(r'(\d+)', parts[print_part_idx + 1])
+                if ed_match:
+                    edition = int(ed_match.group(1))
+
+            eligible_text_parts = []
+            char_part = None
+            for part in parts:
+                if "**" in part:
+                    char_part = part
+                    continue
+                clean_p = part.strip()
+                if not clean_p or "#" in clean_p or "★" in clean_p:
+                    continue
+                if edition is not None and clean_p == str(edition):
+                    continue
+                if print_num is not None and clean_p == str(print_num):
+                    continue
+                if len(clean_p) <= 7 and clean_p.isalnum() and parts.index(part) == 0:
+                    continue
+                eligible_text_parts.append(clean_p)
+
+            if char_part:
+                raw_char = char_part.replace('**', '').strip()
+                if "alias of" in raw_char:
+                    cosmetics["has_alias"] = True
+                    alias_match = re.search(r'alias of\s+([^)]+)', raw_char)
+                    if alias_match:
+                        char_name = alias_match.group(1).strip()
                     else:
-                        char_name = raw_char
-            elif "Series" in clean:
-                parts = re.split(r'[·:]', clean, maxsplit=1)
-                if len(parts) > 1: series_name = parts[1].strip()
-            elif "Edition" in clean:
-                nums = re.findall(r'\d+', clean)
-                if nums: edition = int(nums[0])
-            elif "Print" in clean:
-                nums = re.findall(r'\d+', clean)
-                if nums: print_num = int(nums[0])
-            elif "Dye" in clean:
-                cosmetics["has_dye"] = True
-                if "mystic" in clean.lower():
-                    cosmetics["is_mystic"] = True
-            elif "Inkwell" in clean or "Ink:" in clean:
-                nums = re.findall(r'\d+', clean.replace(',', ''))
-                if nums: cosmetics["io_inkwell"] = int(nums[0])
-            elif "Frame" in clean:
-                parts = re.split(r'[·:]', clean, maxsplit=1)
-                if len(parts) > 1: cosmetics["frame"] = parts[1].strip()
+                        char_name = raw_char.split('(')[0].strip()
+                else:
+                    char_name = raw_char
+                if eligible_text_parts:
+                    series_name = eligible_text_parts[0]
+            else:
+                if len(eligible_text_parts) >= 2:
+                    series_name = eligible_text_parts[0]
+                    char_name = eligible_text_parts[1]
+
+        for line in full_text.splitlines():
+            clean = line.replace('*', '').replace('_', '').replace('`', '').strip()
             
-            if any(stat in clean for stat in ["Vanity", "Toughness", "Quickness"]):
+            if "Framed with" in clean:
+                cosmetics["frame"] = clean.split("Framed with")[-1].strip()
+            elif "Dyed with" in clean:
+                cosmetics["has_dye"] = True
+                dye_info = clean.split("Dyed with")[-1].strip()
+                if "mystic" in dye_info.lower():
+                    cosmetics["is_mystic"] = True
+            elif "Inkwell is at" in clean:
+                ink_match = re.search(r'Inkwell is at\s+([\d,]+)', clean)
+                if ink_match:
+                    cosmetics["inkwell"] = int(ink_match.group(1).replace(',', ''))
+            elif "Ink:" in clean:
+                ink_match = re.search(r'Ink:\s+([\d,]+)', clean)
+                if ink_match:
+                    cosmetics["inkwell"] = int(ink_match.group(1).replace(',', ''))
+                    
+            if any(stat in clean for stat in ["Vanity", "Toughness", "Quickness", "Effort"]):
                 worker_stats["has_stats"] = True
                 grades = re.findall(r'\b([SA])\b', clean.upper())
                 for g in grades:
@@ -293,36 +329,77 @@ class KarutaPricingCog(commands.Cog):
         
         await channel.send(embed=embed)
 
-    @commands.Cog.listener()
-    async def on_message(self, message: discord.Message):
+    async def process_karuta_embed(self, message: discord.Message):
         if message.author.id != KARUTA_BOT_ID or not message.embeds:
             return
 
         embed = message.embeds[0]
         title = str(embed.title) if embed.title else ""
 
-        if "Card Information" in title or (embed.description and "Character" in embed.description and "Series" in embed.description):
+        if "Card Details" in title or "Card Information" in title:
             try:
                 await message.add_reaction("💵")
             except:
                 pass
+            return
 
-        elif "Character Results" in title or "Character Lookup" in title:
+        if "Character Lookup" in title:
             full_text_parts = []
             if embed.description: full_text_parts.append(embed.description)
             for field in embed.fields:
                 if field.value: full_text_parts.append(field.value)
             full_text = "\n".join(full_text_parts)
-            
+
+            char_name, series_name, wishlists = None, None, None
             for line in full_text.splitlines():
                 clean_line = line.replace('*', '').replace('_', '').replace('`', '').strip()
-                match = re.match(r'^\d+\s*\.\s*[♡❤❤️♥️🤍💖]?([\d,]+)\s*·\s*(.*?)\s*·\s*(.+)$', clean_line)
+                if clean_line.startswith('Character'):
+                    parts = re.split(r'[·:]', clean_line, maxsplit=1)
+                    if len(parts) > 1: char_name = parts[1].strip()
+                elif clean_line.startswith('Series'):
+                    parts = re.split(r'[·:]', clean_line, maxsplit=1)
+                    if len(parts) > 1: series_name = parts[1].strip()
+                elif clean_line.startswith('Wishlisted'):
+                    parts = re.split(r'[·:]', clean_line, maxsplit=1)
+                    if len(parts) > 1:
+                        wl_str = parts[1].replace(',', '').strip()
+                        if wl_str.isdigit(): wishlists = int(wl_str)
+
+            if char_name and series_name and wishlists is not None:
+                if self.update_db_entry(char_name, series_name, wishlists):
+                    self.save_wishlist_database()
+                
+                hk = (char_name.lower(), series_name.lower())
+                if hk in self.pending_prices:
+                    ch_id, u_id, cdata = self.pending_prices.pop(hk)
+                    channel = self.bot.get_channel(ch_id)
+                    if channel:
+                        await self.generate_price_embed(
+                            channel, u_id, cdata['char_name'], cdata['series_name'],
+                            cdata['edition'], cdata['print_num'], cdata['cosmetics'],
+                            cdata['worker_stats'], wishlists
+                        )
+
+        elif "Character Results" in title:
+            full_text_parts = []
+            if embed.description: full_text_parts.append(embed.description)
+            for field in embed.fields:
+                if field.value: full_text_parts.append(field.value)
+            full_text = "\n".join(full_text_parts)
+
+            chunks = re.split(r'(?=\d+\s*\.\s*[♡❤❤️♥️🤍💖])', full_text)
+            needs_save = False
+            for chunk in chunks:
+                chunk = chunk.replace('*', '').replace('_', '').replace('~', '').replace('`', '').strip()
+                match = re.match(r'^\d+\s*\.\s*[♡❤❤️♥️🤍💖]?([\d,]+)\s*·\s*(.*?)\s*·\s*(.+)$', chunk)
+                
                 if match:
-                    wl_count = int(match.group(1).replace(',', ''))
+                    wishlists = int(match.group(1).replace(',', ''))
                     s_name = match.group(2).strip()
                     c_name = match.group(3).strip()
                     
-                    self.update_db_entry(c_name, s_name, wl_count)
+                    if self.update_db_entry(c_name, s_name, wishlists):
+                        needs_save = True
                     
                     hk = (c_name.lower(), s_name.lower())
                     if hk in self.pending_prices:
@@ -332,9 +409,30 @@ class KarutaPricingCog(commands.Cog):
                             await self.generate_price_embed(
                                 channel, u_id, cdata['char_name'], cdata['series_name'],
                                 cdata['edition'], cdata['print_num'], cdata['cosmetics'],
-                                cdata['worker_stats'], wl_count
+                                cdata['worker_stats'], wishlists
                             )
-            self.save_wishlist_database()
+            if needs_save:
+                self.save_wishlist_database()
+
+    @commands.Cog.listener()
+    async def on_message(self, message: discord.Message):
+        await self.process_karuta_embed(message)
+
+    @commands.Cog.listener()
+    async def on_raw_message_edit(self, payload: discord.RawMessageUpdateEvent):
+        author_data = payload.data.get("author")
+        if author_data and str(author_data.get("id")) != str(KARUTA_BOT_ID):
+            return
+                
+        try:
+            channel = self.bot.get_channel(payload.channel_id) or await self.bot.fetch_channel(payload.channel_id)
+            if not channel:
+                return
+            message = await channel.fetch_message(payload.message_id)
+            if message.author.id == KARUTA_BOT_ID:
+                await self.process_karuta_embed(message)
+        except:
+            pass
 
     @commands.Cog.listener()
     async def on_raw_reaction_add(self, payload: discord.RawReactionActionEvent):
@@ -374,8 +472,8 @@ class KarutaPricingCog(commands.Cog):
                     f"Please run `klu {char_name}` to automatically resolve and print the valuation matrix!",
                     delete_after=15
                 )
-        except Exception as e:
-            print(f"Error handling calculator operation: {e}")
+        except Exception:
+            pass
 
     @commands.command(name="fadd")
     @commands.has_permissions(administrator=True)
