@@ -4,7 +4,6 @@ import csv
 import os
 import re
 
-# Corrected Live Karuta Bot ID
 KARUTA_BOT_ID = 646937666251915264
 
 class WishlistTestCog(commands.Cog):
@@ -22,6 +21,7 @@ class WishlistTestCog(commands.Cog):
         try:
             with open(self.filepath, mode='r', encoding='utf-8-sig') as file:
                 reader = csv.DictReader(file)
+                # We use a temporary dictionary to ensure we don't wipe memory if the file is corrupted
                 temp_db = {} 
                 for row in reader:
                     char_name = row['character'].strip()
@@ -34,6 +34,7 @@ class WishlistTestCog(commands.Cog):
                         "wishlists": int(row['wishlist'].strip())
                     }
                 
+                # If load was successful, apply it to the main memory
                 self.wishlist_db = temp_db
                 
             print(f"✅ [Wishlist DB] Successfully loaded {len(self.wishlist_db):,} entries!")
