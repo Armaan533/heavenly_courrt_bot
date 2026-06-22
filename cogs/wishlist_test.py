@@ -3,6 +3,7 @@ from discord.ext import commands
 import csv
 import os
 import re
+import json
 from frame_prices import FRAME_DB
 
 KARUTA_BOT_ID = 646937666251915264
@@ -194,6 +195,12 @@ class KarutaPricingCog(commands.Cog):
             if field.value: full_text_parts.append(field.value)
         full_text = "\n".join(full_text_parts)
 
+        image_url = None
+        if embed.image and embed.image.url:
+            image_url = embed.image.url
+        elif embed.thumbnail and embed.thumbnail.url:
+            image_url = embed.thumbnail.url
+
         char_name, series_name = None, None
         edition, print_num = None, None
         cosmetics = {"has_dye": False, "is_mystic": False, "inkwell": 0, "has_alias": False, "frame": ""}
@@ -258,9 +265,9 @@ class KarutaPricingCog(commands.Cog):
                     if g == 'S': worker_stats["s_grades"] += 1
                     if g == 'A': worker_stats["a_grades"] += 1
 
-        return char_name, series_name, edition, print_num, cosmetics, worker_stats
+        return char_name, series_name, edition, print_num, cosmetics, worker_stats, image_url
 
-    async def generate_price_embed(self, channel, user_id, char_name, series_name, edition, print_num, cosmetics, worker_stats, wl_count):
+    async def generate_price_embed(self, channel, user_id, char_name, series_name, edition, print_num, cosmetics, worker_stats, wl_count, image_url):
         calcs = self.calculate_card_value(edition, print_num, wl_count, cosmetics, worker_stats)
         
         embed = discord.Embed(
@@ -268,6 +275,9 @@ class KarutaPricingCog(commands.Cog):
             color=0x6b1614
         )
         embed.description = f"Requested by <@{user_id}>"
+
+        if image_url:
+            embed.set_thumbnail(url=image_url)
 
         embed.add_field(
             name="<:book_ig:1516683126066253844> Card Info", 
@@ -279,7 +289,7 @@ class KarutaPricingCog(commands.Cog):
         base_max_rnd = round(calcs['base_max'], 1)
         embed.add_field(
             name="<:red_lotus:1516679367743377448> Standalone Price", 
-            value=f"`{base_min_rnd} - {base_max_rnd} 🎟️`", 
+            value=f"`🎟️ {base_min_rnd} - {base_max_rnd}`", 
             inline=False
         )
         
@@ -304,7 +314,7 @@ class KarutaPricingCog(commands.Cog):
         
         embed.add_field(
             name="<:for_booster:1517226639438778503> Total Price", 
-            value=f"**{calcs['min_tix']:,} - {calcs['max_tix']:,} 🎟️**\n**{min_gems:,} - {max_gems:,} <:emoji_for_oddny:1517225564023554219>**", 
+            value=f"**🎟️ {calcs['min_tix']:,} - {calcs['max_tix']:,}**\n**💎 {min_gems:,} - {max_gems:,}**", 
             inline=False
         )
 
@@ -361,7 +371,7 @@ class KarutaPricingCog(commands.Cog):
                         await self.generate_price_embed(
                             channel, u_id, cdata['char_name'], cdata['series_name'],
                             cdata['edition'], cdata['print_num'], cdata['cosmetics'],
-                            cdata['worker_stats'], wishlists
+                            cdata['worker_stats'], wishlists, cdata['image_url']
                         )
 
         elif "Character Results" in title:
@@ -393,7 +403,7 @@ class KarutaPricingCog(commands.Cog):
                             await self.generate_price_embed(
                                 channel, u_id, cdata['char_name'], cdata['series_name'],
                                 cdata['edition'], cdata['print_num'], cdata['cosmetics'],
-                                cdata['worker_stats'], wishlists
+                                cdata['worker_stats'], wishlists, cdata['image_url']
                             )
             if needs_save:
                 self.save_wishlist_database()
@@ -431,7 +441,7 @@ class KarutaPricingCog(commands.Cog):
                 return
                 
             embed = message.embeds[0]
-            char_name, series_name, edition, print_num, cosmetics, worker_stats = self.parse_kci_message(embed)
+            char_name, series_name, edition, print_num, cosmetics, worker_stats, image_url = self.parse_kci_message(embed)
             
             if not char_name or not series_name or edition is None or print_num is None:
                 return
@@ -441,14 +451,15 @@ class KarutaPricingCog(commands.Cog):
                 wl_count = self.wishlist_db[db_key]["wishlists"]
                 await self.generate_price_embed(
                     channel, payload.user_id, char_name, series_name, 
-                    edition, print_num, cosmetics, worker_stats, wl_count
+                    edition, print_num, cosmetics, worker_stats, wl_count, image_url
                 )
             else:
                 self.pending_prices[(char_name.lower(), series_name.lower())] = (
                     payload.channel_id, payload.user_id, {
                         "char_name": char_name, "series_name": series_name,
                         "edition": edition, "print_num": print_num,
-                        "cosmetics": cosmetics, "worker_stats": worker_stats
+                        "cosmetics": cosmetics, "worker_stats": worker_stats,
+                        "image_url": image_url
                     }
                 )
                 await channel.send(
