@@ -15,7 +15,7 @@ class WishlistTestCog(commands.Cog):
 
     def load_database(self):
         if not os.path.exists(self.filepath):
-            print(f"⚠️ [Wishlist DB] File '{self.filepath}' not found!")
+            print(f"File '{self.filepath}' not found.")
             return
             
         try:
@@ -33,9 +33,9 @@ class WishlistTestCog(commands.Cog):
                         "wishlists": int(row['wishlist'].strip())
                     }
                 self.wishlist_db = temp_db
-            print(f"✅ [Wishlist DB] Successfully loaded {len(self.wishlist_db):,} entries!")
+            print(f"Loaded {len(self.wishlist_db)} entries.")
         except Exception as e:
-            print(f"❌ [Wishlist DB] Error loading data: {e}")
+            print(f"Load error: {e}")
 
     def save_database(self):
         if not self.wishlist_db:
@@ -52,9 +52,8 @@ class WishlistTestCog(commands.Cog):
                         'series': data['series'],
                         'wishlist': data['wishlists']
                     })
-            print(f"💾 [Wishlist DB] Background Save Complete.")
         except Exception as e:
-            print(f"❌ [Wishlist DB] Error saving: {e}")
+            print(f"Save error: {e}")
 
     def update_db_entry(self, char_name: str, series_name: str, wishlists: int) -> bool:
         char_lower = char_name.lower()
@@ -80,19 +79,16 @@ class WishlistTestCog(commands.Cog):
         if matched_key:
             entry = self.wishlist_db[matched_key]
             if entry['wishlists'] != wishlists:
-                print(f"   [+] Updated WL: {char_name} ({entry['wishlists']} -> {wishlists})")
                 entry['wishlists'] = wishlists
                 needs_update = True
                 
             if entry['series'].endswith('...') and not series_name.endswith('...'):
-                print(f"   [+] Upgraded Series Name: {series_name}")
                 entry['series'] = series_name
                 new_key = f"{char_lower}||{series_name.lower()}"
                 self.wishlist_db[new_key] = entry
                 del self.wishlist_db[matched_key]
                 needs_update = True
         else:
-            print(f"   [+] New Entry: {char_name} | {series_name} | {wishlists} WL")
             new_key = f"{char_lower}||{series_lower}"
             self.wishlist_db[new_key] = {
                 "name": char_name,
@@ -116,7 +112,6 @@ class WishlistTestCog(commands.Cog):
         title = str(embed.title) if embed.title else ""
 
         if "Character Lookup" in title:
-            print(f"\n🚀 [V5 SCANNER] Scanning Single Lookup...")
             char_name, series_name, wishlists = None, None, None
             for line in description.splitlines():
                 clean_line = line.replace('*', '').replace('_', '').strip()
@@ -136,27 +131,20 @@ class WishlistTestCog(commands.Cog):
                 needs_global_save = self.update_db_entry(char_name, series_name, wishlists)
 
         elif "Character Results" in title:
-            print(f"\n🚀 [V5 SCANNER] Scanning Results List...")
-            parsed_count = 0
-            
             for line in description.splitlines():
-                clean_line = line.replace('*', '').replace('_', '').strip()
-                clean_line = re.sub(r'[•・‧|]', '·', clean_line)
+                clean_line = line.replace('*', '').replace('_', '').replace('~', '').strip()
+                parts = re.split(r'\s*[·•・‧|∙⋅◈]\s*', clean_line)
                 
-                if clean_line.count('·') >= 2:
-                    parts = clean_line.split('·')
-                    
-                    wl_match = re.search(r'([\d,]+)\s*$', parts[0].strip())
-                    if wl_match:
-                        wishlists = int(wl_match.group(1).replace(',', ''))
-                        series_name = parts[1].strip()
-                        char_name = '·'.join(parts[2:]).strip()
-                        
-                        parsed_count += 1
-                        if self.update_db_entry(char_name, series_name, wishlists):
-                            needs_global_save = True
+                if len(parts) >= 3:
+                    if re.match(r'^\d+\s*', parts[0].strip()):
+                        wl_match = re.search(r'([\d,]+)[^\d]*$', parts[0])
+                        if wl_match:
+                            wishlists = int(wl_match.group(1).replace(',', ''))
+                            series_name = parts[1].strip()
+                            char_name = '·'.join(parts[2:]).strip()
                             
-            print(f"🚀 [V5 SCANNER] Found {parsed_count} characters on this page.")
+                            if self.update_db_entry(char_name, series_name, wishlists):
+                                needs_global_save = True
 
         if needs_global_save:
             self.save_database()
@@ -165,8 +153,6 @@ class WishlistTestCog(commands.Cog):
             except:
                 pass
 
-    # --- RAW EVENT LISTENERS ---
-    
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message):
         await self.process_karuta_embed(message)
@@ -194,10 +180,8 @@ class WishlistTestCog(commands.Cog):
                 
         except discord.errors.NotFound:
             pass 
-        except Exception as e:
+        except Exception:
             pass
-
-    # --- COMMANDS ---
 
     @commands.command(name="wl", aliases=["wishlist", "check"])
     async def test_wishlist(self, ctx, *, character_name: str):
