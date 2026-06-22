@@ -136,37 +136,45 @@ class WishlistTestCog(commands.Cog):
 
         elif "Character Results" in embed.title:
             print(f"\n--- [DEBUG] Character Results List Scanned ---")
+            parsed_count = 0
+            
             for line in description.splitlines():
                 clean_line = line.replace('*', '').replace('_', '').strip()
                 
-                # Physical Text Splitter (Bulletproof against Karuta formatting changes)
-                if any(heart in clean_line for heart in ['♡', '❤', '❤️', '♥️']):
-                    # Standardize the heart symbol so we can split it safely
-                    line_no_heart = re.sub(r'[♡❤❤️♥️]', 'HEART_MARKER', clean_line)
-                    parts = line_no_heart.split('HEART_MARKER')
-                    
-                    if len(parts) > 1:
-                        right_side = parts[1] # e.g. "8327 · Jujutsu Kaisen · Gojo Satoru"
-                        sub_parts = right_side.split('·')
+                heart = None
+                for h in ['♡', '❤', '❤️', '♥️']:
+                    if h in clean_line:
+                        heart = h
+                        break
                         
-                        if len(sub_parts) >= 3:
-                            wl_str = sub_parts[0].replace(',', '').strip()
-                            series_name = sub_parts[1].strip()
-                            char_name = '·'.join(sub_parts[2:]).strip() # Rejoin in case char has a dot
-                            
-                            if wl_str.isdigit():
-                                wishlists = int(wl_str)
-                                if self.update_db_entry(char_name, series_name, wishlists):
-                                    needs_global_save = True
+                if heart:
+                    right_side = clean_line.split(heart, 1)[1]
+                    
+                    sub_parts = re.split(r'[\s\u200B]+[·•・‧|:][\s\u200B]+', right_side)
+                    
+                    if len(sub_parts) >= 3:
+                        wl_str = sub_parts[0].replace(',', '').strip()
+                        series_name = sub_parts[1].strip()
+                        
+                        char_name = ' '.join(sub_parts[2:]).strip() 
+                        
+                        if wl_str.isdigit():
+                            wishlists = int(wl_str)
+                            parsed_count += 1
+                            if self.update_db_entry(char_name, series_name, wishlists):
+                                needs_global_save = True
+                    else:
+                        print(f"[DEBUG] Parser choked on line: {repr(right_side)} | Found parts: {sub_parts}")
+                        
+            print(f"[DEBUG] Successfully extracted {parsed_count} characters from this page.")
 
         if needs_global_save:
             self.save_database()
-            try:
-                await message.add_reaction("✅")
-            except Exception as e:
-                print(f"[DEBUG] Failed to add reaction: {e}")
-        else:
-            print("[DEBUG] No changes detected. Database is already up to date.")
+            
+        try:
+            await message.add_reaction("✅")
+        except:
+            pass
 
     # --- RAW EVENT LISTENERS ---
     
@@ -177,7 +185,14 @@ class WishlistTestCog(commands.Cog):
 
     @commands.Cog.listener()
     async def on_raw_message_edit(self, payload: discord.RawMessageUpdateEvent):
-        """Catches button presses and silent page flips"""
+        """Catches button presses and silent page flips perfectly"""
+        
+
+        author_data = payload.data.get("author")
+        if author_data:
+            if str(author_data.get("id")) != str(KARUTA_BOT_ID):
+                return
+                
         try:
             channel = self.bot.get_channel(payload.channel_id) or await self.bot.fetch_channel(payload.channel_id)
             if not channel:
@@ -185,17 +200,16 @@ class WishlistTestCog(commands.Cog):
                 
             message = await channel.fetch_message(payload.message_id)
             
-            # Ensure it is Karuta before doing anything
             if message.author.id == KARUTA_BOT_ID:
-                # Remove the checkmark if we are turning the page
-                for reaction in message.reactions:
-                    if str(reaction.emoji) == "✅" and reaction.me:
+                # Clear the old checkmark so it can add a new one for the new page
+                for r in message.reactions:
+                    if str(r.emoji) == "✅" and r.me:
                         await message.remove_reaction("✅", self.bot.user)
                         
                 await self.process_karuta_embed(message)
                 
         except discord.errors.NotFound:
-            pass # Message was deleted, ignore
+            pass # Message was deleted before bot could scan it
         except Exception as e:
             print(f"⚠️ [Wishlist DB] Error on raw edit fetch: {e}")
 
@@ -208,7 +222,6 @@ class WishlistTestCog(commands.Cog):
         matches = []
         for key, data in self.wishlist_db.items():
             k_char, k_series = key.split('||', 1)
-            # Searches if the word is ANYWHERE in the character's name
             if search_query in k_char:
                 matches.append(data)
                 
