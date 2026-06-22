@@ -2,8 +2,8 @@ import discord
 from discord.ext import commands
 import csv
 import os
-import re
 
+# Standard Karuta Bot ID
 KARUTA_BOT_ID = 432610292342587392
 
 class WishlistTestCog(commands.Cog):
@@ -46,57 +46,87 @@ class WishlistTestCog(commands.Cog):
                         'series': data['series'],
                         'wishlist': data['wishlists']
                     })
+            print("💾 [Wishlist DB] Successfully saved updates to CSV.")
         except Exception as e:
             print(f"❌ [Wishlist DB] Error saving to CSV: {e}")
 
     async def process_karuta_embed(self, message: discord.Message):
         """Scans a Karuta lookup message to extract and save wishlist data."""
+        
         if message.author.id != KARUTA_BOT_ID or not message.embeds:
             return
 
         embed = message.embeds[0]
-
+        
         if not embed.title or "Character Lookup" not in embed.title:
             return
             
+        print(f"\n--- [DEBUG] KARUTA KLU DETECTED ---")
+        print(f"[DEBUG] Title: {embed.title}")
+
         if not embed.description:
+            print("[DEBUG] FAILED: Embed has no description text.")
             return
 
-        clean_desc = embed.description.replace('*', '').replace('_', '')
+        description = embed.description
+        print(f"[DEBUG] Raw Description Length: {len(description)} characters")
 
-        char_match = re.search(r'Character\s*.\s*(.+)', clean_desc)
-        series_match = re.search(r'Series\s*.\s*(.+)', clean_desc)
-        wl_match = re.search(r'Wishlisted\s*.\s*([\d,]+)', clean_desc)
-        
-        if char_match and series_match and wl_match:
+        char_name = None
+        series_name = None
+        wishlists = None
+
+        lines = description.split('\n')
+        for line in lines:
+            clean_line = line.replace('*', '').replace('_', '').strip()
+            
+            if clean_line.startswith('Character'):
+                parts = clean_line.split('·', 1)
+                if len(parts) > 1:
+                    char_name = parts[1].strip()
+            elif clean_line.startswith('Series'):
+                parts = clean_line.split('·', 1)
+                if len(parts) > 1:
+                    series_name = parts[1].strip()
+            elif clean_line.startswith('Wishlisted'):
+                parts = clean_line.split('·', 1)
+                if len(parts) > 1:
+                    wl_str = parts[1].replace(',', '').strip()
+                    if wl_str.isdigit():
+                        wishlists = int(wl_str)
+
+        print(f"[DEBUG] Extracted -> Char: '{char_name}', Series: '{series_name}', WL: '{wishlists}'")
+
+        if char_name and series_name and wishlists is not None:
             try:
-                char_name = char_match.group(1).strip()
-                series_name = series_match.group(1).strip()
-                wishlists = int(wl_match.group(1).replace(',', '').strip())
-                
                 search_query = char_name.lower()
                 needs_update = False
                 
                 if search_query in self.wishlist_db:
                     if self.wishlist_db[search_query]['wishlists'] != wishlists:
+                        print(f"🔄 [DEBUG] Updating existing character: {char_name} (from {self.wishlist_db[search_query]['wishlists']} to {wishlists})")
                         self.wishlist_db[search_query]['wishlists'] = wishlists
                         needs_update = True
-                        print(f"🔄 [Wishlist DB] Updated {char_name} to {wishlists} WL")
+                    else:
+                        print(f"⏭️ [DEBUG] No update needed for {char_name}. WL count is already {wishlists}.")
                 else:
+                    print(f"🌟 [DEBUG] New Character Found! Adding {char_name} to database.")
                     self.wishlist_db[search_query] = {
                         "name": char_name,
                         "series": series_name,
                         "wishlists": wishlists
                     }
                     needs_update = True
-                    print(f"🌟 [Wishlist DB] Discovered new character: {char_name} ({wishlists} WL)")
 
                 if needs_update:
                     self.save_database()
                     await message.add_reaction("✅")
-
+                    
             except Exception as e:
-                print(f"❌ [Wishlist DB] Parsing processing failure: {e}")
+                print(f"❌ [DEBUG] Save process failure: {e}")
+        else:
+            print("❌ [DEBUG] FAILED: Could not parse all required data fields from the embed.")
+        
+        print(f"-----------------------------------\n")
 
     # --- EVENT LISTENERS ---
     
@@ -107,7 +137,7 @@ class WishlistTestCog(commands.Cog):
 
     @commands.Cog.listener()
     async def on_message_edit(self, before: discord.Message, after: discord.Message):
-        """Fires when Karuta edits an embed (often happens a split second after sending)."""
+        """Fires when Karuta edits an embed."""
         await self.process_karuta_embed(after)
 
     # --- COMMANDS ---
