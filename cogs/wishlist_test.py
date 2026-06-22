@@ -102,6 +102,14 @@ class WishlistTestCog(commands.Cog):
             return
 
         embed = message.embeds[0]
+
+        print("\n" + "="*50)
+        print("TITLE:", repr(embed.title))
+        print("DESCRIPTION:", repr(embed.description))
+        for i, field in enumerate(embed.fields):
+            print(f"FIELD {i} NAME:", repr(field.name))
+            print(f"FIELD {i} VALUE:", repr(field.value))
+        print("="*50 + "\n")
         
         full_text_parts = []
         if embed.description:
@@ -122,7 +130,6 @@ class WishlistTestCog(commands.Cog):
         if "Character Lookup" in title:
             char_name, series_name, wishlists = None, None, None
             for line in full_text.splitlines():
-                # We strip out backticks just in case Karuta uses them here too
                 clean_line = line.replace('*', '').replace('_', '').replace('`', '').strip()
                 if clean_line.startswith('Character'):
                     parts = re.split(r'[·:]', clean_line, maxsplit=1)
@@ -143,7 +150,6 @@ class WishlistTestCog(commands.Cog):
             chunks = re.split(r'(?=\d+\s*\.\s*[♡❤❤️♥️🤍💖])', full_text)
             
             for chunk in chunks:
-                # Stripped backticks (`) alongside other markdown
                 chunk = chunk.replace('*', '').replace('_', '').replace('~', '').replace('`', '').strip()
                 match = re.match(r'^\d+\s*\.\s*[♡❤❤️♥️🤍💖]?([\d,]+)\s*·\s*(.*?)\s*·\s*(.+)$', chunk)
                 
