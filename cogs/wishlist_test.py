@@ -21,7 +21,6 @@ class WishlistTestCog(commands.Cog):
         try:
             with open(self.filepath, mode='r', encoding='utf-8-sig') as file:
                 reader = csv.DictReader(file)
-                # We use a temporary dictionary to ensure we don't wipe memory if the file is corrupted
                 temp_db = {} 
                 for row in reader:
                     char_name = row['character'].strip()
@@ -34,7 +33,6 @@ class WishlistTestCog(commands.Cog):
                         "wishlists": int(row['wishlist'].strip())
                     }
                 
-                # If load was successful, apply it to the main memory
                 self.wishlist_db = temp_db
                 
             print(f"✅ [Wishlist DB] Successfully loaded {len(self.wishlist_db):,} entries!")
@@ -124,6 +122,7 @@ class WishlistTestCog(commands.Cog):
         description = embed.description
         needs_global_save = False
 
+        # --- SCENARIO 1: Single Character Lookup ---
         if "Character Lookup" in embed.title:
             char_name, series_name, wishlists = None, None, None
 
@@ -144,21 +143,20 @@ class WishlistTestCog(commands.Cog):
             if char_name and series_name and wishlists is not None:
                 needs_global_save = self.update_db_entry(char_name, series_name, wishlists)
 
+        # --- SCENARIO 2: Multiple Character Results ---
         elif "Character Results" in embed.title:
             for line in description.split('\n'):
                 clean_line = line.replace('*', '').replace('_', '').strip()
-                parts = clean_line.split('·')
                 
-                if len(parts) >= 4 and parts[0].strip().isdigit():
-                    char_name = parts[1].strip()
-                    series_name = parts[2].strip()
+                match = re.search(r'\d+\s*\.\s*[♡❤❤️♥️]\s*([\d,]+)\s*·\s*(.+?)\s*·\s*(.+)', clean_line)
+                
+                if match:
+                    wishlists = int(match.group(1).replace(',', ''))
+                    series_name = match.group(2).strip()
+                    char_name = match.group(3).strip()
                     
-                    wl_str = parts[-1].replace(',', '').strip()
-                    wl_match = re.search(r'(\d+)$', wl_str)
-                    if wl_match:
-                        wishlists = int(wl_match.group(1))
-                        if self.update_db_entry(char_name, series_name, wishlists):
-                            needs_global_save = True
+                    if self.update_db_entry(char_name, series_name, wishlists):
+                        needs_global_save = True
 
         if needs_global_save:
             self.save_database()
