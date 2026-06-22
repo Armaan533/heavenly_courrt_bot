@@ -3,7 +3,6 @@ from discord.ext import commands
 import csv
 import os
 import re
-import pandas as pd # We use pandas for safe, reliable CSV merging!
 
 # Corrected Live Karuta Bot ID
 KARUTA_BOT_ID = 646937666251915264
@@ -23,45 +22,43 @@ class WishlistTestCog(commands.Cog):
         try:
             with open(self.filepath, mode='r', encoding='utf-8-sig') as file:
                 reader = csv.DictReader(file)
-                # Clear memory safely before reloading
-                self.wishlist_db = {} 
+                temp_db = {} 
                 for row in reader:
                     char_name = row['character'].strip()
                     series_name = row['series'].strip()
                     key = f"{char_name.lower()}||{series_name.lower()}"
                     
-                    self.wishlist_db[key] = {
+                    temp_db[key] = {
                         "name": char_name,
                         "series": series_name,
                         "wishlists": int(row['wishlist'].strip())
                     }
+                
+                self.wishlist_db = temp_db
+                
             print(f"✅ [Wishlist DB] Successfully loaded {len(self.wishlist_db):,} entries!")
         except Exception as e:
             print(f"❌ [Wishlist DB] Error loading data: {e}")
 
     def save_database(self):
-        """Safely merges current memory with the CSV to prevent accidental wiping."""
+        """Safely saves current memory to the CSV to prevent accidental wiping."""
         if not self.wishlist_db:
             print("⚠️ [Wishlist DB] Aborted save: Memory is empty, preventing accidental wipe!")
             return
             
         try:
-            # Convert our memory dictionary into a list of rows
-            new_data = []
-            for data in self.wishlist_db.values():
-                new_data.append({
-                    'character': data['name'],
-                    'series': data['series'],
-                    'wishlist': data['wishlists']
-                })
+            with open(self.filepath, mode='w', newline='', encoding='utf-8-sig') as file:
+                fieldnames = ['character', 'series', 'wishlist']
+                writer = csv.DictWriter(file, fieldnames=fieldnames)
                 
-            # Create a temporary pandas dataframe
-            df = pd.DataFrame(new_data)
-            
-            # Save it safely
-            df.to_csv(self.filepath, index=False, encoding='utf-8-sig')
-            print(f"💾 [Wishlist DB] Successfully saved {len(df)} entries to CSV.")
-            
+                writer.writeheader()
+                for data in self.wishlist_db.values():
+                    writer.writerow({
+                        'character': data['name'],
+                        'series': data['series'],
+                        'wishlist': data['wishlists']
+                    })
+            print(f"💾 [Wishlist DB] Successfully saved {len(self.wishlist_db)} entries to CSV.")
         except Exception as e:
             print(f"❌ [Wishlist DB] Error saving to CSV: {e}")
 
@@ -222,6 +219,15 @@ class WishlistTestCog(commands.Cog):
         """Forces the bot to dump memory and reload purely from the CSV."""
         self.load_database()
         await ctx.send(f"✅ Reloaded the Wishlist database! Current character count: **{len(self.wishlist_db):,}**")
+
+    @commands.command(name="wlbackup")
+    @commands.has_permissions(administrator=True)
+    async def backup_wishlist(self, ctx):
+        """Sends the current CSV database as a file to the channel."""
+        if os.path.exists(self.filepath):
+            await ctx.send("📥 Here is the latest Wishlist Database backup:", file=discord.File(self.filepath))
+        else:
+            await ctx.send("❌ File not found on the server!")
 
 async def setup(bot):
     await bot.add_cog(WishlistTestCog(bot))
