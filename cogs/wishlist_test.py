@@ -122,7 +122,8 @@ class WishlistTestCog(commands.Cog):
         if "Character Lookup" in title:
             char_name, series_name, wishlists = None, None, None
             for line in full_text.splitlines():
-                clean_line = line.replace('*', '').replace('_', '').strip()
+                # We strip out backticks just in case Karuta uses them here too
+                clean_line = line.replace('*', '').replace('_', '').replace('`', '').strip()
                 if clean_line.startswith('Character'):
                     parts = re.split(r'[·:]', clean_line, maxsplit=1)
                     if len(parts) > 1: char_name = parts[1].strip()
@@ -142,7 +143,8 @@ class WishlistTestCog(commands.Cog):
             chunks = re.split(r'(?=\d+\s*\.\s*[♡❤❤️♥️🤍💖])', full_text)
             
             for chunk in chunks:
-                chunk = chunk.replace('*', '').replace('_', '').replace('~', '').strip()
+                # Stripped backticks (`) alongside other markdown
+                chunk = chunk.replace('*', '').replace('_', '').replace('~', '').replace('`', '').strip()
                 match = re.match(r'^\d+\s*\.\s*[♡❤❤️♥️🤍💖]?([\d,]+)\s*·\s*(.*?)\s*·\s*(.+)$', chunk)
                 
                 if match:
