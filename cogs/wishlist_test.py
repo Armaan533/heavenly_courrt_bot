@@ -108,14 +108,15 @@ class WishlistTestCog(commands.Cog):
             return
 
         embed = message.embeds[0]
-        if not embed.title or not embed.description:
+        if not embed.description:
             return
 
         description = embed.description
         needs_global_save = False
+        title = str(embed.title) if embed.title else ""
 
-        if "Character Lookup" in embed.title:
-            print(f"\n--- [DEBUG] Single Character Lookup Scanned ---")
+        if "Character Lookup" in title:
+            print(f"\n🚀 [V5 SCANNER] Scanning Single Lookup...")
             char_name, series_name, wishlists = None, None, None
             for line in description.splitlines():
                 clean_line = line.replace('*', '').replace('_', '').strip()
@@ -134,32 +135,28 @@ class WishlistTestCog(commands.Cog):
             if char_name and series_name and wishlists is not None:
                 needs_global_save = self.update_db_entry(char_name, series_name, wishlists)
 
-        elif "Character Results" in embed.title:
-            print(f"\n--- [DEBUG] Character Results List Scanned ---")
+        elif "Character Results" in title:
+            print(f"\n🚀 [V5 SCANNER] Scanning Results List...")
             parsed_count = 0
             
             for line in description.splitlines():
                 clean_line = line.replace('*', '').replace('_', '').strip()
+                clean_line = re.sub(r'[•・‧|]', '·', clean_line)
                 
-                # Indestructible Regex: Ignores whatever weird heart emojis Karuta uses
-                match = re.search(r'\d+\s*\.\s*[^\d]*([\d,]+)\s*[·•・‧|:]\s*(.+?)\s*[·•・‧|:]\s*(.+)', clean_line)
-                
-                if match:
-                    wl_str = match.group(1).replace(',', '').strip()
-                    series_name = match.group(2).strip()
-                    char_name = match.group(3).strip()
+                if clean_line.count('·') >= 2:
+                    parts = clean_line.split('·')
                     
-                    if wl_str.isdigit():
-                        wishlists = int(wl_str)
+                    wl_match = re.search(r'([\d,]+)\s*$', parts[0].strip())
+                    if wl_match:
+                        wishlists = int(wl_match.group(1).replace(',', ''))
+                        series_name = parts[1].strip()
+                        char_name = '·'.join(parts[2:]).strip()
+                        
                         parsed_count += 1
                         if self.update_db_entry(char_name, series_name, wishlists):
                             needs_global_save = True
-                else:
-                    # Ignore empty lines or footer navigation text, but warn if a real line failed
-                    if clean_line and not clean_line.startswith("Page") and not clean_line.startswith("Use"):
-                        print(f"[DEBUG] Regex missed line: {repr(clean_line)}")
-                        
-            print(f"[DEBUG] Successfully extracted {parsed_count} characters from this page.")
+                            
+            print(f"🚀 [V5 SCANNER] Found {parsed_count} characters on this page.")
 
         if needs_global_save:
             self.save_database()
@@ -198,7 +195,7 @@ class WishlistTestCog(commands.Cog):
         except discord.errors.NotFound:
             pass 
         except Exception as e:
-            print(f"⚠️ [Wishlist DB] Error on raw edit fetch: {e}")
+            pass
 
     # --- COMMANDS ---
 
