@@ -3,6 +3,7 @@ from discord.ext import commands
 import csv
 import os
 import re
+import pandas as pd # We use pandas for safe, reliable CSV merging!
 
 # Corrected Live Karuta Bot ID
 KARUTA_BOT_ID = 646937666251915264
@@ -22,6 +23,8 @@ class WishlistTestCog(commands.Cog):
         try:
             with open(self.filepath, mode='r', encoding='utf-8-sig') as file:
                 reader = csv.DictReader(file)
+                # Clear memory safely before reloading
+                self.wishlist_db = {} 
                 for row in reader:
                     char_name = row['character'].strip()
                     series_name = row['series'].strip()
@@ -37,19 +40,28 @@ class WishlistTestCog(commands.Cog):
             print(f"❌ [Wishlist DB] Error loading data: {e}")
 
     def save_database(self):
+        """Safely merges current memory with the CSV to prevent accidental wiping."""
+        if not self.wishlist_db:
+            print("⚠️ [Wishlist DB] Aborted save: Memory is empty, preventing accidental wipe!")
+            return
+            
         try:
-            with open(self.filepath, mode='w', newline='', encoding='utf-8-sig') as file:
-                fieldnames = ['character', 'series', 'wishlist']
-                writer = csv.DictWriter(file, fieldnames=fieldnames)
+            # Convert our memory dictionary into a list of rows
+            new_data = []
+            for data in self.wishlist_db.values():
+                new_data.append({
+                    'character': data['name'],
+                    'series': data['series'],
+                    'wishlist': data['wishlists']
+                })
                 
-                writer.writeheader()
-                for data in self.wishlist_db.values():
-                    writer.writerow({
-                        'character': data['name'],
-                        'series': data['series'],
-                        'wishlist': data['wishlists']
-                    })
-            print("💾 [Wishlist DB] Successfully saved updates to CSV.")
+            # Create a temporary pandas dataframe
+            df = pd.DataFrame(new_data)
+            
+            # Save it safely
+            df.to_csv(self.filepath, index=False, encoding='utf-8-sig')
+            print(f"💾 [Wishlist DB] Successfully saved {len(df)} entries to CSV.")
+            
         except Exception as e:
             print(f"❌ [Wishlist DB] Error saving to CSV: {e}")
 
@@ -92,7 +104,6 @@ class WishlistTestCog(commands.Cog):
                 del self.wishlist_db[matched_key]
                 needs_update = True
         else:
-
             print(f"🌟 [DEBUG] Discovered new character: {char_name} | {series_name} ({wishlists} WL)")
             new_key = f"{char_lower}||{series_lower}"
             self.wishlist_db[new_key] = {
@@ -116,7 +127,6 @@ class WishlistTestCog(commands.Cog):
         needs_global_save = False
 
         if "Character Lookup" in embed.title:
-            print(f"\n--- [DEBUG] KLU (Single) DETECTED ---")
             char_name, series_name, wishlists = None, None, None
 
             for line in description.split('\n'):
@@ -137,8 +147,6 @@ class WishlistTestCog(commands.Cog):
                 needs_global_save = self.update_db_entry(char_name, series_name, wishlists)
 
         elif "Character Results" in embed.title:
-            print(f"\n--- [DEBUG] KLU (Results List) DETECTED ---")
-            
             for line in description.split('\n'):
                 clean_line = line.replace('*', '').replace('_', '').strip()
                 parts = clean_line.split('·')
@@ -157,7 +165,6 @@ class WishlistTestCog(commands.Cog):
         if needs_global_save:
             self.save_database()
             await message.add_reaction("✅")
-            print("[DEBUG] Database save completed.")
 
     # --- EVENT LISTENERS ---
     
@@ -212,7 +219,7 @@ class WishlistTestCog(commands.Cog):
     @commands.command(name="wlreload")
     @commands.has_permissions(administrator=True)
     async def reload_wishlist(self, ctx):
-        self.wishlist_db.clear()
+        """Forces the bot to dump memory and reload purely from the CSV."""
         self.load_database()
         await ctx.send(f"✅ Reloaded the Wishlist database! Current character count: **{len(self.wishlist_db):,}**")
 
