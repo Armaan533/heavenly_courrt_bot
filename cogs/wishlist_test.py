@@ -15,6 +15,7 @@ class WishlistTestCog(commands.Cog):
 
     def load_database(self):
         if not os.path.exists(self.filepath):
+            print(f"File '{self.filepath}' not found.")
             return
             
         try:
@@ -32,8 +33,9 @@ class WishlistTestCog(commands.Cog):
                         "wishlists": int(row['wishlist'].strip())
                     }
                 self.wishlist_db = temp_db
-        except Exception:
-            pass
+            print(f"Loaded {len(self.wishlist_db)} entries.")
+        except Exception as e:
+            print(f"Load error: {e}")
 
     def save_database(self):
         if not self.wishlist_db:
@@ -50,8 +52,8 @@ class WishlistTestCog(commands.Cog):
                         'series': data['series'],
                         'wishlist': data['wishlists']
                     })
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"Save error: {e}")
 
     def update_db_entry(self, char_name: str, series_name: str, wishlists: int) -> bool:
         char_lower = char_name.lower()
@@ -105,13 +107,8 @@ class WishlistTestCog(commands.Cog):
         if not embed.description:
             return
 
-        description = embed.description or ""
-
-        full_text = description + "\n"
-        for field in embed.fields:
-            full_text += field.value + "\n"
+        description = embed.description
         needs_global_save = False
-
         title = str(embed.title) if embed.title else ""
 
         if "Character Lookup" in title:
@@ -134,21 +131,25 @@ class WishlistTestCog(commands.Cog):
                 needs_global_save = self.update_db_entry(char_name, series_name, wishlists)
 
         elif "Character Results" in title:
-            for line in full_text.splitlines():
-                line = line.strip()
-
-                match = re.match(
-                    r'^\d+\.\s*[^\d]*([\d,]+)\s*·\s*(.*?)\s*·\s*(.+)$',
-                    line
-                )
-
+            print("\n" + "="*50)
+            print("RAW DESCRIPTION DUMP:")
+            print(repr(description))
+            print("-" * 50)
+            print("CHAR CODES DUMP (First 100 chars):")
+            print([hex(ord(c)) for c in description[:100]])
+            print("="*50 + "\n")
+            
+            chunks = re.split(r'(?=\d+\s*\.\s*[♡❤❤️♥️🤍💖])', description)
+            
+            for chunk in chunks:
+                chunk = chunk.replace('*', '').replace('_', '').replace('~', '').strip()
+                match = re.match(r'^\d+\s*\.\s*[♡❤❤️♥️🤍💖]?([\d,]+)\s*·\s*(.*?)\s*·\s*(.+)$', chunk)
+                
                 if match:
                     wishlists = int(match.group(1).replace(',', ''))
                     series_name = match.group(2).strip()
                     char_name = match.group(3).strip()
-
-                    print(f"FOUND: {char_name} | {series_name} | {wishlists}")
-
+                    
                     if self.update_db_entry(char_name, series_name, wishlists):
                         needs_global_save = True
 
