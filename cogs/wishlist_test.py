@@ -129,17 +129,19 @@ class WishlistTestCog(commands.Cog):
                 needs_global_save = self.update_db_entry(char_name, series_name, wishlists)
 
         elif "Character Results" in title:
-            chunks = re.split(r'(?=\d+\s*\.\s*[♡❤❤️♥️🤍💖])', description)
-            
-            for chunk in chunks:
-                chunk = chunk.replace('*', '').replace('_', '').replace('~', '').strip()
-                match = re.match(r'^\d+\s*\.\s*[♡❤❤️♥️🤍💖]?([\d,]+)\s*·\s*(.*?)\s*·\s*(.+)$', chunk)
-                
+            for line in description.splitlines():
+                line = line.strip()
+
+                match = re.match(
+                    r'^\d+\.\s*[♡❤❤️♥️🤍💖]?([\d,]+)\s*·\s*(.*?)\s*·\s*(.+)$',
+                    line
+                )
+
                 if match:
                     wishlists = int(match.group(1).replace(',', ''))
                     series_name = match.group(2).strip()
                     char_name = match.group(3).strip()
-                    
+
                     if self.update_db_entry(char_name, series_name, wishlists):
                         needs_global_save = True
 
