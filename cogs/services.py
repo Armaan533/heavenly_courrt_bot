@@ -71,7 +71,6 @@ class FeaturedDyeListener(discord.ui.View):
             karuta_msg = await self.bot.wait_for('message', check=check, timeout=120.0)
             embed = karuta_msg.embeds[0]
             if embed.thumbnail and embed.thumbnail.url:
-                # Forcefully extract clean URL to prevent bad database entries
                 match = re.search(r'(https?://[^"\'\[\]<>\s]+)', embed.thumbnail.url)
                 if match:
                     dye_url = match.group(1)
@@ -178,7 +177,6 @@ class PortfolioListener(discord.ui.View):
             urls = re.findall(r'(https?://[^\s]+)', user_msg.content)
             
             if urls:
-                # Forcefully extract clean URL
                 match = re.search(r'(https?://[^"\'\[\]<>\s]+)', urls[0])
                 if match:
                     img_url = match.group(1)
@@ -350,7 +348,7 @@ class ServiceUpdateSelectionView(discord.ui.View):
     async def btn_dyer(self, interaction: discord.Interaction, button: discord.ui.Button):
         if interaction.user != self.user: 
             return await interaction.response.send_message("Not your menu!", ephemeral=True)
-        if interaction.user.id not in SERVICE_DB["dyers"]:
+        if str(interaction.user.id) not in [str(k) for k in SERVICE_DB["dyers"].keys()]:
             return await interaction.response.send_message("❌ You are not registered as a Dyer!", ephemeral=True)
             
         embed = discord.Embed(title="<:emoji_for_oddny:1517225564023554219> [ UPDATE DYE PROFILE ]", description="What would you like to update?", color=0x6b1614)
@@ -360,7 +358,7 @@ class ServiceUpdateSelectionView(discord.ui.View):
     async def btn_framer(self, interaction: discord.Interaction, button: discord.ui.Button):
         if interaction.user != self.user: 
             return await interaction.response.send_message("Not your menu!", ephemeral=True)
-        if interaction.user.id not in SERVICE_DB["frame_testers"]:
+        if str(interaction.user.id) not in [str(k) for k in SERVICE_DB["frame_testers"].keys()]:
             return await interaction.response.send_message("❌ You are not registered as a Frame Tester!", ephemeral=True)
             
         embed = discord.Embed(title="<:emoji_for_oddny:1517225564023554219> [ UPDATE FRAME PROFILE ]", description="What would you like to update?", color=0x6b1614)
@@ -370,7 +368,7 @@ class ServiceUpdateSelectionView(discord.ui.View):
     async def btn_sketcher(self, interaction: discord.Interaction, button: discord.ui.Button):
         if interaction.user != self.user: 
             return await interaction.response.send_message("Not your menu!", ephemeral=True)
-        if interaction.user.id not in SERVICE_DB["sketchers"]:
+        if str(interaction.user.id) not in [str(k) for k in SERVICE_DB["sketchers"].keys()]:
             return await interaction.response.send_message("❌ You are not registered as a Sketcher!", ephemeral=True)
             
         embed = discord.Embed(title="<:emoji_for_oddny:1517225564023554219> [ UPDATE SKETCHER PROFILE ]", description="What would you like to update?", color=0x6b1614)
@@ -452,7 +450,15 @@ class ProviderProfileView(discord.ui.View):
             
         pricing_text = data.get('pricing', 'N/A')
         
-        invisible_stretcher = "```              ✦ 𝒟𝓎𝑒 𝒢𝒶𝓁𝓁𝑒𝓇𝓎　✦　　　　　　　　　```"
+        # Dynamic stretcher text based on the category[cite: 5]
+        if self.category_name == "dyers":
+            stretcher_text = "✦ 𝒟𝓎𝑒 𝒢𝒶𝓁𝓁𝑒𝓇𝓎 ✦"
+        elif self.category_name == "sketchers":
+            stretcher_text = "✦ 𝒮𝓀𝑒𝓉𝒸𝒽 𝒢𝒶𝓁𝓁𝑒𝓇𝓎 ✦"
+        else:
+            stretcher_text = "✦ 𝐹𝓇𝒶𝓂𝑒 𝒯𝑒𝓈𝓉𝒾𝓃𝑔 ✦"
+            
+        invisible_stretcher = f"``````              {stretcher_text}　　　　　　　　　``````"
         
         main_embed.add_field(
             name="<:two_flowers:1516684386546880614> Pricing", 
