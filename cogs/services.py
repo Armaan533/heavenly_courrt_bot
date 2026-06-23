@@ -101,16 +101,17 @@ class FeaturedDyeListener(discord.ui.View):
             await self.channel.send("⏱️ Dye listening timed out. Process closed.")
 
 class DyerRegistrationModal(discord.ui.Modal, title="Dye Service Registration"):
-    def __init__(self, bot, existing_data=None):
+    def __init__(self, bot, target_user, existing_data=None):
         super().__init__()
         self.bot = bot
+        self.target_user = target_user
         self.is_update = bool(existing_data)
         
-        self.ad_desc = discord.ui.TextInput(label="Service Advertisement", style=discord.TextStyle.paragraph, max_length=1000, default=existing_data.get("ad") if existing_data else None)
+        self.ad_desc = discord.ui.TextInput(label="Service Advertisement", style=discord.TextStyle.paragraph, max_length=4000, default=existing_data.get("ad") if existing_data else None)
         self.timezone = discord.ui.TextInput(label="Available Time & Timezone", style=discord.TextStyle.short, max_length=100, default=existing_data.get("timezone") if existing_data else None)
         self.normal_dyes = discord.ui.TextInput(label="Normal Dyes in Stock", style=discord.TextStyle.short, max_length=10, default=existing_data.get("normal") if existing_data else None)
         self.mystic_dyes = discord.ui.TextInput(label="Mystic Dyes in Stock", style=discord.TextStyle.short, max_length=10, default=existing_data.get("mystic") if existing_data else None)
-        self.pricing = discord.ui.TextInput(label="Pricing Options", style=discord.TextStyle.paragraph, placeholder="E.g. Normal: 1 tix, Mystic: 10 tix", max_length=300, default=existing_data.get("pricing") if existing_data else None)
+        self.pricing = discord.ui.TextInput(label="Pricing Options", style=discord.TextStyle.paragraph, placeholder="E.g. Normal: 1 tix, Mystic: 10 tix", max_length=1000, default=existing_data.get("pricing") if existing_data else None)
 
         self.add_item(self.ad_desc)
         self.add_item(self.timezone)
@@ -120,7 +121,7 @@ class DyerRegistrationModal(discord.ui.Modal, title="Dye Service Registration"):
 
     async def on_submit(self, interaction: discord.Interaction):
         if self.is_update:
-            SERVICE_DB["dyers"][interaction.user.id].update({
+            SERVICE_DB["dyers"][self.target_user.id].update({
                 "ad": self.ad_desc.value,
                 "timezone": self.timezone.value,
                 "normal": self.normal_dyes.value,
@@ -130,7 +131,7 @@ class DyerRegistrationModal(discord.ui.Modal, title="Dye Service Registration"):
             save_data()
             await interaction.response.send_message("<:emoji_for_oddny:1517225564023554219> Profile text successfully updated!", ephemeral=True)
         else:
-            SERVICE_DB["dyers"][interaction.user.id] = {
+            SERVICE_DB["dyers"][self.target_user.id] = {
                 "ad": self.ad_desc.value,
                 "timezone": self.timezone.value,
                 "normal": self.normal_dyes.value,
@@ -141,7 +142,7 @@ class DyerRegistrationModal(discord.ui.Modal, title="Dye Service Registration"):
             save_data()
             desc = "Your primary information has been recorded!\n\n**Want to add Featured Dyes?**\nType `kv <dye code>` here to automatically add the image to your profile! *(Max 12)*\n*(Click Finish if you are done)*"
             embed = discord.Embed(title="<:eight_side_sparkle:1516681364806570105> [ DYER PROFILE INITIALIZED ] <:eight_side_sparkle:1516681364806570105>", description=desc, color=0x6b1614)
-            view = FeaturedDyeListener(interaction.user, self.bot, interaction.channel)
+            view = FeaturedDyeListener(self.target_user, self.bot, interaction.channel)
             await interaction.response.send_message(embed=embed, view=view)
             self.bot.loop.create_task(view.listen_for_dyes(await interaction.original_response()))
 
@@ -207,14 +208,15 @@ class PortfolioListener(discord.ui.View):
             await self.channel.send("⏱️ Listening timed out. Process closed.")
 
 class SketcherRegistrationModal(discord.ui.Modal, title="Sketcher Registration"):
-    def __init__(self, bot, existing_data=None):
+    def __init__(self, bot, target_user, existing_data=None):
         super().__init__()
         self.bot = bot
+        self.target_user = target_user
         self.is_update = bool(existing_data)
         
-        self.ad_desc = discord.ui.TextInput(label="Service Advertisement", style=discord.TextStyle.paragraph, max_length=1000, default=existing_data.get("ad") if existing_data else None)
+        self.ad_desc = discord.ui.TextInput(label="Service Advertisement", style=discord.TextStyle.paragraph, max_length=4000, default=existing_data.get("ad") if existing_data else None)
         self.timezone = discord.ui.TextInput(label="Available Time & Timezone", style=discord.TextStyle.short, max_length=100, default=existing_data.get("timezone") if existing_data else None)
-        self.pricing = discord.ui.TextInput(label="Pricing Options", style=discord.TextStyle.paragraph, placeholder="E.g. Full body: 50 tix", max_length=300, default=existing_data.get("pricing") if existing_data else None)
+        self.pricing = discord.ui.TextInput(label="Pricing Options", style=discord.TextStyle.paragraph, placeholder="E.g. Full body: 50 tix", max_length=1000, default=existing_data.get("pricing") if existing_data else None)
 
         self.add_item(self.ad_desc)
         self.add_item(self.timezone)
@@ -222,7 +224,7 @@ class SketcherRegistrationModal(discord.ui.Modal, title="Sketcher Registration")
 
     async def on_submit(self, interaction: discord.Interaction):
         if self.is_update:
-            SERVICE_DB["sketchers"][interaction.user.id].update({
+            SERVICE_DB["sketchers"][self.target_user.id].update({
                 "ad": self.ad_desc.value,
                 "timezone": self.timezone.value,
                 "pricing": self.pricing.value
@@ -230,7 +232,7 @@ class SketcherRegistrationModal(discord.ui.Modal, title="Sketcher Registration")
             save_data()
             await interaction.response.send_message("<:emoji_for_oddny:1517225564023554219> Profile text successfully updated!", ephemeral=True)
         else:
-            SERVICE_DB["sketchers"][interaction.user.id] = {
+            SERVICE_DB["sketchers"][self.target_user.id] = {
                 "ad": self.ad_desc.value,
                 "timezone": self.timezone.value,
                 "pricing": self.pricing.value,
@@ -239,26 +241,27 @@ class SketcherRegistrationModal(discord.ui.Modal, title="Sketcher Registration")
             save_data()
             desc = "Your primary information has been recorded!\n\n**Let's build your Portfolio!**\nPlease paste image links (Imgur, Pinterest, etc.) in this channel one by one. *(Max 12)*\n*(Click Finish if you are done)*"
             embed = discord.Embed(title="<:book_ig:1516683126066253844> [ SKETCHER PROFILE INITIALIZED ] <:book_ig:1516683126066253844>", description=desc, color=0x6b1614)
-            view = PortfolioListener(interaction.user, self.bot, interaction.channel)
+            view = PortfolioListener(self.target_user, self.bot, interaction.channel)
             await interaction.response.send_message(embed=embed, view=view)
             self.bot.loop.create_task(view.listen_for_links(await interaction.original_response()))
 
 class FrameRegistrationModal(discord.ui.Modal, title="Frame Tester Registration"):
-    def __init__(self, bot, existing_data=None):
+    def __init__(self, bot, target_user, existing_data=None):
         super().__init__()
         self.bot = bot
+        self.target_user = target_user
         self.is_update = bool(existing_data)
         
-        self.ad_desc = discord.ui.TextInput(label="Service Advertisement", style=discord.TextStyle.paragraph, max_length=1000, default=existing_data.get("ad") if existing_data else None)
+        self.ad_desc = discord.ui.TextInput(label="Service Advertisement", style=discord.TextStyle.paragraph, max_length=4000, default=existing_data.get("ad") if existing_data else None)
         self.timezone = discord.ui.TextInput(label="Available Time & Timezone", style=discord.TextStyle.short, max_length=100, default=existing_data.get("timezone") if existing_data else None)
-        self.pricing = discord.ui.TextInput(label="Pricing Options", style=discord.TextStyle.paragraph, max_length=300, default=existing_data.get("pricing") if existing_data else None)
+        self.pricing = discord.ui.TextInput(label="Pricing Options", style=discord.TextStyle.paragraph, max_length=1000, default=existing_data.get("pricing") if existing_data else None)
 
         self.add_item(self.ad_desc)
         self.add_item(self.timezone)
         self.add_item(self.pricing)
 
     async def on_submit(self, interaction: discord.Interaction):
-        SERVICE_DB["frame_testers"][interaction.user.id] = {
+        SERVICE_DB["frame_testers"][self.target_user.id] = {
             "ad": self.ad_desc.value,
             "timezone": self.timezone.value,
             "pricing": self.pricing.value,
@@ -278,14 +281,14 @@ class ServiceUpdateActionView(discord.ui.View):
         if interaction.user != self.user: 
             return await interaction.response.send_message("Not your menu!", ephemeral=True)
         
-        data = SERVICE_DB[self.category].get(interaction.user.id, {})
+        data = SERVICE_DB[self.category].get(self.user.id, {})
         
         if self.category == "dyers":
-            await interaction.response.send_modal(DyerRegistrationModal(self.bot, existing_data=data))
+            await interaction.response.send_modal(DyerRegistrationModal(self.bot, self.user, existing_data=data))
         elif self.category == "frame_testers":
-            await interaction.response.send_modal(FrameRegistrationModal(self.bot, existing_data=data))
+            await interaction.response.send_modal(FrameRegistrationModal(self.bot, self.user, existing_data=data))
         elif self.category == "sketchers":
-            await interaction.response.send_modal(SketcherRegistrationModal(self.bot, existing_data=data))
+            await interaction.response.send_modal(SketcherRegistrationModal(self.bot, self.user, existing_data=data))
             
         self.stop()
 
@@ -298,24 +301,24 @@ class ServiceUpdateActionView(discord.ui.View):
             return await interaction.response.send_message("Frame Testers do not use image galleries!", ephemeral=True)
             
         if self.category == "dyers":
-            current_count = len(SERVICE_DB["dyers"][interaction.user.id].get("featured_dyes", []))
+            current_count = len(SERVICE_DB["dyers"][self.user.id].get("featured_dyes", []))
             if current_count >= 12:
                 return await interaction.response.send_message("❌ Your gallery is full (12/12)! Clear it first.", ephemeral=True)
                 
             desc = f"**Let's add more Featured Dyes!**\nYou currently have {current_count}/12 slots filled.\nType `kv <dye code>` here to add more to your profile!\n*(Click Finish if you are done)*"
             embed = discord.Embed(title="<:eight_side_sparkle:1516681364806570105> [ UPDATING DYE GALLERY ] <:eight_side_sparkle:1516681364806570105>", description=desc, color=0x6b1614)
-            view = FeaturedDyeListener(interaction.user, self.bot, interaction.channel, starting_count=current_count)
+            view = FeaturedDyeListener(self.user, self.bot, interaction.channel, starting_count=current_count)
             await interaction.response.edit_message(embed=embed, view=view)
             self.bot.loop.create_task(view.listen_for_dyes(interaction.message))
             
         elif self.category == "sketchers":
-            current_count = len(SERVICE_DB["sketchers"][interaction.user.id].get("portfolio", []))
+            current_count = len(SERVICE_DB["sketchers"][self.user.id].get("portfolio", []))
             if current_count >= 12:
                 return await interaction.response.send_message("❌ Your portfolio is full (12/12)! Clear it first.", ephemeral=True)
                 
             desc = f"**Let's add more Portfolio Images!**\nYou currently have {current_count}/12 slots filled.\nPlease paste image links in this channel one by one.\n*(Click Finish if you are done)*"
             embed = discord.Embed(title="<:book_ig:1516683126066253844> [ UPDATING SKETCH GALLERY ] <:book_ig:1516683126066253844>", description=desc, color=0x6b1614)
-            view = PortfolioListener(interaction.user, self.bot, interaction.channel, starting_count=current_count)
+            view = PortfolioListener(self.user, self.bot, interaction.channel, starting_count=current_count)
             await interaction.response.edit_message(embed=embed, view=view)
             self.bot.loop.create_task(view.listen_for_links(interaction.message))
             
@@ -330,9 +333,9 @@ class ServiceUpdateActionView(discord.ui.View):
             return await interaction.response.send_message("Frame Testers do not use image galleries!", ephemeral=True)
             
         if self.category == "dyers":
-            SERVICE_DB["dyers"][interaction.user.id]["featured_dyes"] = []
+            SERVICE_DB["dyers"][self.user.id]["featured_dyes"] = []
         elif self.category == "sketchers":
-            SERVICE_DB["sketchers"][interaction.user.id]["portfolio"] = []
+            SERVICE_DB["sketchers"][self.user.id]["portfolio"] = []
             
         save_data()
         await interaction.response.edit_message(content="🗑️ **Your image gallery has been successfully cleared!**", embed=None, view=None)
@@ -384,21 +387,21 @@ class ServiceSelectionView(discord.ui.View):
     async def btn_dyer(self, interaction: discord.Interaction, button: discord.ui.Button):
         if interaction.user != self.user: 
             return await interaction.response.send_message("Not your menu!", ephemeral=True)
-        await interaction.response.send_modal(DyerRegistrationModal(self.bot))
+        await interaction.response.send_modal(DyerRegistrationModal(self.bot, self.user))
         self.stop()
 
     @discord.ui.button(label="Frame Tester", style=discord.ButtonStyle.secondary, emoji="🖼️")
     async def btn_framer(self, interaction: discord.Interaction, button: discord.ui.Button):
         if interaction.user != self.user: 
             return await interaction.response.send_message("Not your menu!", ephemeral=True)
-        await interaction.response.send_modal(FrameRegistrationModal(self.bot))
+        await interaction.response.send_modal(FrameRegistrationModal(self.bot, self.user))
         self.stop()
 
     @discord.ui.button(label="Sketcher", style=discord.ButtonStyle.secondary, emoji="🖌️")
     async def btn_sketcher(self, interaction: discord.Interaction, button: discord.ui.Button):
         if interaction.user != self.user: 
             return await interaction.response.send_message("Not your menu!", ephemeral=True)
-        await interaction.response.send_modal(SketcherRegistrationModal(self.bot))
+        await interaction.response.send_modal(SketcherRegistrationModal(self.bot, self.user))
         self.stop()
 
 class ProviderProfileView(discord.ui.View):
@@ -450,7 +453,6 @@ class ProviderProfileView(discord.ui.View):
             
         pricing_text = data.get('pricing', 'N/A')
         
-        # Dynamic stretcher text based on the category[cite: 5]
         if self.category_name == "dyers":
             stretcher_text = "✦ 𝒟𝓎𝑒 𝒢𝒶𝓁𝓁𝑒𝓇𝓎 ✦"
         elif self.category_name == "sketchers":
@@ -458,7 +460,7 @@ class ProviderProfileView(discord.ui.View):
         else:
             stretcher_text = "✦ 𝐹𝓇𝒶𝓂𝑒 𝒯𝑒𝓈𝓉𝒾𝓃𝑔 ✦"
             
-        invisible_stretcher = f"``````              {stretcher_text}　　　　　　　　　``````"
+        invisible_stretcher = f"```              {stretcher_text}　　　　　　　　　```"
         
         main_embed.add_field(
             name="<:two_flowers:1516684386546880614> Pricing", 
@@ -666,6 +668,27 @@ class ServicesCog(commands.Cog):
             await interaction.response.send_message("✅ Your service profile has been deleted.", ephemeral=True)
         else:
             await interaction.response.send_message("❌ You do not have a registered profile.", ephemeral=True)
+            
+    @services.command(name="force_update", description="[ADMIN] Edit another user's service profile")
+    @app_commands.default_permissions(administrator=True)
+    @app_commands.describe(category="The service category to edit")
+    @app_commands.choices(category=[
+        app_commands.Choice(name="Dye Jobs", value="dyers"),
+        app_commands.Choice(name="Frame Testers", value="frame_testers"),
+        app_commands.Choice(name="Sketchers", value="sketchers"),
+    ])
+    async def force_update(self, interaction: discord.Interaction, target: discord.Member, category: app_commands.Choice[str]):
+        cat = category.value
+        data = SERVICE_DB[cat].get(target.id, {})
+        if not data:
+            return await interaction.response.send_message(f"❌ {target.display_name} is not registered in the {category.name} category.", ephemeral=True)
+
+        if cat == "dyers":
+            await interaction.response.send_modal(DyerRegistrationModal(self.bot, target, existing_data=data))
+        elif cat == "frame_testers":
+            await interaction.response.send_modal(FrameRegistrationModal(self.bot, target, existing_data=data))
+        elif cat == "sketchers":
+            await interaction.response.send_modal(SketcherRegistrationModal(self.bot, target, existing_data=data))
 
 async def setup(bot):
     await bot.add_cog(ServicesCog(bot))
