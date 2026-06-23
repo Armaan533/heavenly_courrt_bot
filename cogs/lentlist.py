@@ -7,6 +7,46 @@ import asyncio
 
 DATA_FILE = "lent_data.json"
 
+class BorrowerSelect(discord.ui.Select):
+    def __init__(self, grouped_data, target_name):
+        self.grouped_data = grouped_data
+        self.target_name = target_name
+        options = []
+        
+        for borrower_id, data in list(grouped_data.items())[:25]:
+            options.append(discord.SelectOption(
+                label=data['name'][:100],
+                description=f"{len(data['cards'])} cards lent",
+                value=borrower_id,
+                emoji="👤"
+            ))
+            
+        super().__init__(placeholder="Select a borrower to view cards...", min_values=1, max_values=1, options=options)
+
+    async def callback(self, interaction: discord.Interaction):
+        borrower_id = self.values[0]
+        data = self.grouped_data[borrower_id]
+        
+        desc = "━━━━━━━━━━━━━━━━━━━━━━\n"
+        for i, (code, char) in enumerate(data['cards'], 1):
+            desc += f"**{i}.** `{code}` - **{char}**\n"
+        desc += "━━━━━━━━━━━━━━━━━━━━━━"
+        
+        embed = discord.Embed(
+            title=f"[ {self.target_name.upper()}'S LENT LIST ]",
+            description=desc,
+            color=0x6B1614
+        )
+        embed.set_author(name=f"📦 Lent to: {data['name']}")
+        embed.set_footer(text=f"Node: Fang Yuan // Heavenly Court ✦")
+        
+        await interaction.response.edit_message(embed=embed, view=self.view)
+
+class LentListView(discord.ui.View):
+    def __init__(self, grouped_data, target_name):
+        super().__init__(timeout=180)
+        self.add_item(BorrowerSelect(grouped_data, target_name))
+
 class LentRemoveSelect(discord.ui.Select):
     def __init__(self, lent_cards, callback_func):
         self.callback_func = callback_func
@@ -25,12 +65,10 @@ class LentRemoveSelect(discord.ui.Select):
     async def callback(self, interaction: discord.Interaction):
         await self.callback_func(interaction, self.values[0])
 
-
 class LentRemoveView(discord.ui.View):
     def __init__(self, lent_cards, callback_func):
         super().__init__(timeout=120)
         self.add_item(LentRemoveSelect(lent_cards, callback_func))
-
 
 class LentListCog(commands.Cog):
     def __init__(self, bot):
@@ -39,14 +77,20 @@ class LentListCog(commands.Cog):
 
     def load_data(self):
         if os.path.exists(DATA_FILE):
-            with open(DATA_FILE, "r") as f:
-                self.data = json.load(f)
+            try:
+                with open(DATA_FILE, "r") as f:
+                    self.data = json.load(f)
+            except Exception:
+                self.data = {}
         else:
             self.data = {}
 
     def save_data(self):
-        with open(DATA_FILE, "w") as f:
-            json.dump(self.data, f, indent=4)
+        try:
+            with open(DATA_FILE, "w") as f:
+                json.dump(self.data, f, indent=4)
+        except Exception:
+            pass
 
     @commands.group(invoke_without_command=True, aliases=['lentlist'])
     async def lent(self, ctx, target: discord.Member = None):
@@ -66,9 +110,30 @@ class LentListCog(commands.Cog):
             await ctx.send(embed=embed)
             return
 
+        # Group the cards by the person they were lent to
+        grouped = {}
+        for code, info in user_data.items():
+            b_id = info.get('lent_to')
+            if not b_id:
+                continue
+            if b_id not in grouped:
+                grouped[b_id] = {
+                    "name": info.get('lent_to_name', 'Unknown User'), 
+                    "cards": []
+                }
+            grouped[b_id]["cards"].append((code, info['character']))
+            
+        if not grouped:
+            await ctx.send("No valid lent data found.")
+            return
+
+        # Load the very first borrower in the dictionary by default
+        first_borrower_id = list(grouped.keys())[0]
+        first_data = grouped[first_borrower_id]
+        
         desc = "━━━━━━━━━━━━━━━━━━━━━━\n"
-        for i, (code, info) in enumerate(user_data.items(), 1):
-            desc += f"**{i}.** `{code}` - **{info['character']}** \n> 📦 Lent to: <@{info['lent_to']}>\n\n"
+        for i, (code, char) in enumerate(first_data['cards'], 1):
+            desc += f"**{i}.** `{code}` - **{char}**\n"
         desc += "━━━━━━━━━━━━━━━━━━━━━━"
 
         embed = discord.Embed(
@@ -76,8 +141,15 @@ class LentListCog(commands.Cog):
             description=desc,
             color=0x6B1614
         )
+        embed.set_author(name=f"📦 Lent to: {first_data['name']}")
         embed.set_footer(text=f"Node: Fang Yuan // Heavenly Court ✦")
-        await ctx.send(embed=embed)
+
+        # Only display the dropdown UI if they've lent cards to more than 1 person
+        if len(grouped) > 1:
+            view = LentListView(grouped, target.display_name)
+            await ctx.send(embed=embed, view=view)
+        else:
+            await ctx.send(embed=embed)
 
     @lent.command(name="borrowed", aliases=["borrow", "held"])
     async def borrowed(self, ctx, target: discord.Member = None):
