@@ -123,11 +123,9 @@ class KarutaPricingCog(commands.Cog):
             if wl > cfg["spike_threshold"]:
                 rate_modifier += cfg["spike_val"]
 
-            # Calculate final Rate (WL per Ticket divisor)
             final_rate_min = rate_min + rate_modifier
             final_rate_max = rate_max + rate_modifier
 
-            # Calculate ACTUAL ticket value (WL divided by Rate)
             base_min = wl / final_rate_max if final_rate_max > 0 else 0
             base_max = wl / final_rate_min if final_rate_min > 0 else 0
 
@@ -180,7 +178,6 @@ class KarutaPricingCog(commands.Cog):
 
         cosmetic_total += frame_cost
 
-        # --- WORKER BONUS ---
         worker_bonus = 0.0
         if worker_stats.get("has_stats"):
             s_count = worker_stats.get("s_grades", 0)
@@ -189,6 +186,16 @@ class KarutaPricingCog(commands.Cog):
             
         total_min = max(1, round(base_min + cosmetic_total + worker_bonus))
         total_max = max(1, round(base_max + cosmetic_total + worker_bonus))
+
+        has_cosmetics = (
+            cosmetics.get("has_dye") or
+            cosmetics.get("inkwell", 0) > 0 or
+            cosmetics.get("has_alias") or
+            bool(cosmetics.get("frame")) or
+            worker_stats.get("has_stats")
+        )
+        
+        is_burn = (base_max < 0.35) and not has_cosmetics
         
         return {
             "base_min": base_min,
@@ -199,7 +206,8 @@ class KarutaPricingCog(commands.Cog):
             "sketch_cost": round(sketch_cost, 1),
             "alias_cost": alias_cost,
             "frame_status": frame_status,
-            "worker_bonus": round(worker_bonus, 1)
+            "worker_bonus": round(worker_bonus, 1),
+            "is_burn": is_burn
         }
 
     def parse_kci_message(self, embed):
@@ -323,14 +331,20 @@ class KarutaPricingCog(commands.Cog):
         if extras_text:
             embed.add_field(name="<:two_flowers:1516684386546880614> Extras", value=extras_text.strip(), inline=False)
             
-        min_gems = calcs['min_tix'] * GEM_RATE
-        max_gems = calcs['max_tix'] * GEM_RATE
-        
-        embed.add_field(
-            name="<:for_booster:1517226639438778503> Total Price", 
-            value=f"**🎟️ {calcs['min_tix']:,} - {calcs['max_tix']:,}**\n**💎 {min_gems:,} - {max_gems:,}**", 
-            inline=False
-        )
+        if calcs['is_burn']:
+            embed.add_field(
+                name="<:for_booster:1517226639438778503> Total Price", 
+                value="**🔥 Burn Price**", 
+                inline=False
+            )
+        else:
+            min_gems = calcs['min_tix'] * GEM_RATE
+            max_gems = calcs['max_tix'] * GEM_RATE
+            embed.add_field(
+                name="<:for_booster:1517226639438778503> Total Price", 
+                value=f"**🎟️ {calcs['min_tix']:,} - {calcs['max_tix']:,}**\n**💎 {min_gems:,} - {max_gems:,}**", 
+                inline=False
+            )
 
         if print_num <= 9:
             embed.set_footer(text="⚠️ Single Print detected. Prices are estimates—always take offers!")
