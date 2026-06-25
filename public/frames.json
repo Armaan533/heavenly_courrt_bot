@@ -1,0 +1,20 @@
+[
+    {
+        "id": "mirrored-energy",
+        "name": "Mirrored Energy",
+        "price": 100,
+        "image": "mirrored_energy.png"
+    },
+    {
+        "id": "voidspawn",
+        "name": "Voidspawn",
+        "price": 40,
+        "image": "voidspawn.png"
+    },
+    {
+        "id": "polaroid",
+        "name": "Polaroid",
+        "price": 100,
+        "image": "polaroid.png"
+    }
+]

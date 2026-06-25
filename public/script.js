@@ -24,12 +24,35 @@ function applyFrame(frameImageUrl) {
     }
 }
 
-document.getElementById('mirrored-energy-btn').addEventListener('click', () => {
-    applyFrame('frame.png'); 
-});
+async function loadFrames() {
+    try {
+        const response = await fetch('frames.json');
+        const frames = await response.json();
+        
+        const controlsArea = document.getElementById('frame-grid');
+        controlsArea.innerHTML = ''; 
+        
+        frames.forEach(frame => {
+            const btn = document.createElement('button');
+            btn.className = 'frame-btn';
+            btn.innerHTML = `${frame.name} <br><small>(${frame.price} 🎟️)</small>`;
+            
+            btn.addEventListener('click', () => {
+                applyFrame(frame.image);
+            });
+            
+            controlsArea.appendChild(btn);
+        });
+        
+    } catch (error) {
+        console.error("Error loading frames:", error);
+        document.getElementById('frame-grid').innerHTML = "<p>Failed to load frame database.</p>";
+    }
+}
 
 document.getElementById('remove-frame-btn').addEventListener('click', () => {
     applyFrame(null);
 });
 
 initializeApp();
+loadFrames();

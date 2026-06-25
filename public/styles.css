@@ -50,43 +50,71 @@ h1 {
     pointer-events: none; 
 }
 
-.controls-area {
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-    justify-content: center;
-    align-items: center;
-    margin-top: 20px;
+.hidden {
+    display: none !important;
+}
+
+
+.shop-section {
+    margin-top: 30px;
+    padding-top: 20px;
+    border-top: 1px solid #4e5058;
+}
+
+.grid-container {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 15px;
+    margin-bottom: 20px;
+    max-height: 250px;
+    overflow-y: auto;
+    padding-right: 10px;
+}
+
+.grid-container::-webkit-scrollbar {
+    width: 8px;
+}
+.grid-container::-webkit-scrollbar-track {
+    background: #1e1f22; 
+}
+.grid-container::-webkit-scrollbar-thumb {
+    background: #4e5058; 
+    border-radius: 4px;
+}
+.grid-container::-webkit-scrollbar-thumb:hover {
+    background: #6b1614; 
 }
 
 .frame-btn {
     background: #2b2d31;
     color: white;
     border: 1px solid #4e5058;
-    padding: 10px 20px;
-    border-radius: 4px;
+    padding: 15px 10px;
+    border-radius: 6px;
     cursor: pointer;
     transition: 0.2s;
-    width: 250px;
     font-weight: bold;
 }
 
 .frame-btn:hover {
     background: #6b1614;
     border-color: #f2f3f5;
+    transform: translateY(-2px); 
 }
 
-.hidden {
-    display: none !important;
-}
-
-#frame-overlay {
-    position: absolute;
-    top: 0;
-    left: 0;
+.clear-btn {
+    background: transparent;
+    color: #ff4a4a;
+    border: 1px solid #ff4a4a;
+    padding: 10px 20px;
+    border-radius: 4px;
+    cursor: pointer;
     width: 100%;
-    height: 100%;
-    object-fit: contain; 
-    pointer-events: none; 
-    mix-blend-mode: screen; 
+    font-weight: bold;
+    transition: 0.2s;
+}
+
+.clear-btn:hover {
+    background: #ff4a4a;
+    color: white;
 }
