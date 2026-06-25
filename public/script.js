@@ -25,7 +25,7 @@ function applyFrame(frameImageUrl) {
 }
 
 document.getElementById('mirrored-energy-btn').addEventListener('click', () => {
-    applyFrame('https://d2l56h9h5tj8ue.cloudfront.net/images/frames/frame-mirroredenergy.jpg');
+    applyFrame('frame.jpg'); 
 });
 
 document.getElementById('remove-frame-btn').addEventListener('click', () => {
