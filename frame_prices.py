@@ -455,6 +455,12 @@ FRAME_DB = {
         "type": "Special",
         "image": "http://d2l56h9h5tj8ue.cloudfront.net/images/frames/frame-seatemple.jpg"
     },
+    "polaroid frame": {
+        "market": 100,
+        "liquid cost": 85,
+        "type": "Special",
+        "image": "http://d2l56h9h5tj8ue.cloudfront.net/images/frames/frame-polaroid.jpg"
+    },
     "mermaid frame": {
         "market": 35,
         "liquid cost": 25,
