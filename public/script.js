@@ -1,13 +1,12 @@
 async function initializeApp() {
     if (typeof discordSdk !== 'undefined') {
-        const discord = new discordSdk.DiscordSDK("1469329087431446578");
+        const discord = new discordSdk.DiscordSDK(1469329087431446578);
         await discord.ready();
         document.getElementById("welcome-text").innerText = `Connected as ${discord.user.username}!`;
     } else {
         document.getElementById("welcome-text").innerText = "Running outside of Discord Client mode.";
     }
 }
-
 
 document.querySelectorAll('.frame-btn').forEach(button => {
     button.addEventListener('click', () => {
