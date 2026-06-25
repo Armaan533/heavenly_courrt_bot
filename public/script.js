@@ -25,7 +25,7 @@ function applyFrame(frameImageUrl) {
 }
 
 document.getElementById('mirrored-energy-btn').addEventListener('click', () => {
-    applyFrame('frame.jpg'); 
+    applyFrame('frame.png'); 
 });
 
 document.getElementById('remove-frame-btn').addEventListener('click', () => {
