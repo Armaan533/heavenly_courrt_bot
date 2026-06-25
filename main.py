@@ -73,7 +73,7 @@ class Bot(commands.Bot):
         from cogs.colors import ColorView
         self.add_view(ColorView())
 
-        await self.tree.sync()
+        # await self.tree.sync()
 
 bot = Bot()
 
