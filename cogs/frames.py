@@ -15,6 +15,38 @@ async def frame_autocomplete(interaction: discord.Interaction, current: str) -> 
         for match in matches[:25]
     ]
 
+class FrameCodeModal(discord.ui.Modal, title="Generate Frame Code"):
+    frame_name = discord.ui.TextInput(label="Frame Name", placeholder="e.g. Voidspawn")
+    market_price = discord.ui.TextInput(label="Market Price (Tickets)", placeholder="e.g. 40")
+    liquid_cost = discord.ui.TextInput(label="Liquid Cost (Tickets)", placeholder="e.g. 35")
+    frame_type = discord.ui.TextInput(label="Frame Type", placeholder="e.g. Darkness, Event, Bit")
+    image_url = discord.ui.TextInput(label="Image URL", placeholder="http://...", required=False)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        name = self.frame_name.value.strip().lower()
+        if not name.endswith(" frame"):
+            name += " frame"
+            
+        market = self.market_price.value.strip() or "0"
+        liquid = self.liquid_cost.value.strip() or "0"
+        f_type = self.frame_type.value.strip().title()
+        img = self.image_url.value.strip()
+
+        snippet = f'    "{name}": {{\n'
+        snippet += f'        "market": {market},\n'
+        snippet += f'        "liquid cost": {liquid},\n'
+        snippet += f'        "type": "{f_type}",\n'
+        if img:
+            snippet += f'        "image": "{img}"\n'
+        else:
+            snippet += f'        "image": ""\n'
+        snippet += '    },'
+
+        await interaction.response.send_message(
+            content=f"**✅ Code Generated!**\nCopy the block below and paste it directly into your `frame_prices.py` file:\n\n```python\n{snippet}\n```",
+            ephemeral=True
+        )
+
 class FrameCategorySelect(discord.ui.Select):
     def __init__(self, bot):
         self.bot = bot
@@ -236,6 +268,12 @@ class FramesCog(commands.Cog):
             embed.set_image(url=image_url)
 
         await interaction.response.send_message(embed=embed)
+
+    @frame_group.command(name="generate", description="[ADMIN] Generate Python code to manually add a new frame")
+    @app_commands.default_permissions(administrator=True)
+    async def frame_generate(self, interaction: discord.Interaction):
+        await interaction.response.send_modal(FrameCodeModal())
+
 
 async def setup(bot):
     await bot.add_cog(FramesCog(bot))

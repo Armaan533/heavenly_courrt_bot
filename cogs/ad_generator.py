@@ -2,6 +2,7 @@ import discord
 from discord.ext import commands
 from discord import app_commands
 import asyncio
+from frame_prices import FRAME_DB
 
 class AdSession:
     def __init__(self, user_id):
@@ -96,16 +97,33 @@ class ItemPriceModal(discord.ui.Modal, title="Set Item Details"):
     price = discord.ui.TextInput(label="Price in Tickets", placeholder="e.g. 2 or 2.5")
     stock = discord.ui.TextInput(label="Stock Available", placeholder="e.g. 10")
 
-    def __init__(self, session, item_name, max_stock, view_to_restore):
+    def __init__(self, session, emoji, name, max_stock, view_to_restore):
         super().__init__()
         self.session = session
-        self.item_name = item_name
+        self.emoji = emoji
+        self.item_name = name
         self.view_to_restore = view_to_restore
         self.stock.default = str(max_stock)
 
+        clean_name = name.strip().lower()
+        search_keys = [clean_name, f"{clean_name} frame"]
+        suggested_price = ""
+        
+        for sk in search_keys:
+            if sk in FRAME_DB:
+                val = FRAME_DB[sk].get("market", 0)
+                if val > 0:
+                    suggested_price = str(val)
+                break
+                
+        if suggested_price:
+            self.price.default = suggested_price
+            self.price.label = f"Price (Avg Market: {suggested_price} 🎟️)"
+
     async def on_submit(self, interaction: discord.Interaction):
-        self.session.selling_items.append((self.item_name, self.price.value.strip(), self.stock.value.strip()))
-        await interaction.response.edit_message(content=f"✅ Added {self.item_name} to ad!", view=self.view_to_restore)
+        display = f"{self.emoji} {self.item_name}" if self.emoji else self.item_name
+        self.session.selling_items.append((display, self.price.value.strip(), self.stock.value.strip()))
+        await interaction.response.edit_message(content=f"✅ Added {display} to ad!", view=self.view_to_restore)
 
 class BitStockModal(discord.ui.Modal, title="List Bits"):
     amount = discord.ui.TextInput(label="Amount to list", placeholder="e.g. 5000")
@@ -153,6 +171,7 @@ class KarutaSelectorView(discord.ui.View):
                 code = parts[0].split()[-1] if parts[0].split() else parts[0]
                 name = parts[-1]
                 options.append(discord.SelectOption(label=f"{code} - {name}"[:100], value=f"{code}||{name}"))
+                
             else:
                 first_part = parts[0].split()
                 if len(first_part) > 1:
@@ -165,7 +184,24 @@ class KarutaSelectorView(discord.ui.View):
                 name = parts[-1]
                 val_string = f"{emoji}||{name}||{stock}"
                 display_label = f"{emoji} {name} (x{stock})" if emoji else f"{name} (x{stock})"
-                options.append(discord.SelectOption(label=display_label[:100], value=val_string[:100]))
+                
+                # Check against FRAME_DB for intelligent description tracking
+                option_desc = None
+                if self.mode == "items":
+                    clean_name = name.strip().lower()
+                    search_keys = [clean_name, f"{clean_name} frame"]
+                    for sk in search_keys:
+                        if sk in FRAME_DB:
+                            f_type = FRAME_DB[sk].get("type", "Unknown")
+                            f_price = FRAME_DB[sk].get("market", 0)
+                            option_desc = f"Type: {f_type} | Avg Value: {f_price} 🎟️"
+                            break
+
+                options.append(discord.SelectOption(
+                    label=display_label[:100], 
+                    value=val_string[:100],
+                    description=option_desc[:100] if option_desc else None
+                ))
                 
         if not options:
             self.add_item(discord.ui.Button(label="No valid items found on this page.", disabled=True))
@@ -183,8 +219,7 @@ class KarutaSelectorView(discord.ui.View):
                 await interaction.response.send_modal(BitStockModal(self.session, name, stock, self))
             else:
                 emoji, name, stock = val.split("||")
-                display_name = f"{emoji} {name}" if emoji else name
-                await interaction.response.send_modal(ItemPriceModal(self.session, display_name, stock, self))
+                await interaction.response.send_modal(ItemPriceModal(self.session, emoji, name, stock, self))
                 
         select.callback = select_callback
         self.add_item(select)
