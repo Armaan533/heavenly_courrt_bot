@@ -18,13 +18,13 @@ class AdSession:
 
     def format_price(self, price_str: str):
         try:
-            val = float(price_str.split()[0])
+            ticket_val = int(round(float(price_str.split()[0])))
             if self.currency_mode == "Tickets" or self.gem_rate == 0:
-                return f"{price_str} 🎟️"
+                return f"{ticket_val} 🎟️"
             elif self.currency_mode == "Gems":
-                return f"{val * self.gem_rate:g} 💎"
+                return f"{ticket_val * self.gem_rate} 💎"
             else:
-                return f"{price_str} 🎟️ | {val * self.gem_rate:g} 💎"
+                return f"{ticket_val} 🎟️ | {ticket_val * self.gem_rate} 💎"
         except:
             return f"{price_str} 🎟️"
 
@@ -94,8 +94,8 @@ class CardPriceModal(discord.ui.Modal, title="Set Card Details"):
         await interaction.response.edit_message(content=f"✅ Added `{self.card_code}` to ad!", view=self.view_to_restore)
 
 class ItemPriceModal(discord.ui.Modal, title="Set Item Details"):
-    price = discord.ui.TextInput(label="Price in Tickets", placeholder="e.g. 2 or 2.5")
-    stock = discord.ui.TextInput(label="Stock Available", placeholder="e.g. 10")
+    price = discord.ui.TextInput(label="Price in Tickets", placeholder="e.g. 40")
+    stock = discord.ui.TextInput(label="Stock Available", placeholder="e.g. 1")
 
     def __init__(self, session, emoji, name, max_stock, view_to_restore):
         super().__init__()
@@ -105,7 +105,8 @@ class ItemPriceModal(discord.ui.Modal, title="Set Item Details"):
         self.view_to_restore = view_to_restore
         self.stock.default = str(max_stock)
 
-        clean_name = name.strip().lower()
+        # Strip "Frame: " out of the string so it matches the DB perfectly
+        clean_name = name.lower().replace("frame:", "").strip()
         search_keys = [clean_name, f"{clean_name} frame"]
         suggested_price = ""
         
@@ -113,7 +114,7 @@ class ItemPriceModal(discord.ui.Modal, title="Set Item Details"):
             if sk in FRAME_DB:
                 val = FRAME_DB[sk].get("market", 0)
                 if val > 0:
-                    suggested_price = str(val)
+                    suggested_price = str(int(val))
                 break
                 
         if suggested_price:
@@ -188,12 +189,12 @@ class KarutaSelectorView(discord.ui.View):
                 # Check against FRAME_DB for intelligent description tracking
                 option_desc = None
                 if self.mode == "items":
-                    clean_name = name.strip().lower()
+                    clean_name = name.lower().replace("frame:", "").strip()
                     search_keys = [clean_name, f"{clean_name} frame"]
                     for sk in search_keys:
                         if sk in FRAME_DB:
                             f_type = FRAME_DB[sk].get("type", "Unknown")
-                            f_price = FRAME_DB[sk].get("market", 0)
+                            f_price = int(FRAME_DB[sk].get("market", 0))
                             option_desc = f"Type: {f_type} | Avg Value: {f_price} 🎟️"
                             break
 

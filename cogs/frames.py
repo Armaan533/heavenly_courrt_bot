@@ -30,7 +30,16 @@ class FrameCodeModal(discord.ui.Modal, title="Generate Frame Code"):
         market = self.market_price.value.strip() or "0"
         liquid = self.liquid_cost.value.strip() or "0"
         f_type = self.frame_type.value.strip().title()
+        
         img = self.image_url.value.strip()
+        if "discordapp.net/external" in img or "discordapp.com/external" in img:
+            if "/https/" in img:
+                img = "https://" + img.split("/https/", 1)[1]
+            elif "/http/" in img:
+                img = "http://" + img.split("/http/", 1)[1]
+                
+        if "?" in img:
+            img = img.split("?")[0]
 
         snippet = f'    "{name}": {{\n'
         snippet += f'        "market": {market},\n'
