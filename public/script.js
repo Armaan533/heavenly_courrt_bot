@@ -1,26 +1,35 @@
 async function initializeApp() {
     if (typeof discordSdk !== 'undefined') {
-        const discord = new discordSdk.DiscordSDK(1469329087431446578);
-        await discord.ready();
-        document.getElementById("welcome-text").innerText = `Connected as ${discord.user.username}!`;
+        try {
+            const discord = new discordSdk.DiscordSDK("1469329087431446578");
+            await discord.ready();
+            document.getElementById("welcome-text").innerText = `Connected as ${discord.user.username}!`;
+        } catch (error) {
+            document.getElementById("welcome-text").innerText = "Running outside of Discord Client mode.";
+        }
     } else {
         document.getElementById("welcome-text").innerText = "Running outside of Discord Client mode.";
     }
 }
 
-document.querySelectorAll('.frame-btn').forEach(button => {
-    button.addEventListener('click', () => {
-        const frame = button.getAttribute('data-frame');
-        const overlay = document.getElementById('frame-overlay');
-        
-        if (frame === 'voidspawn') {
-            overlay.style.border = "10px solid #4a00e0"; 
-        } else if (frame === 'polaroid') {
-            overlay.style.border = "14px solid #fff";
-        } else {
-            overlay.style.border = "none";
-        }
-    });
+const frameOverlay = document.getElementById('frame-overlay');
+
+function applyFrame(frameImageUrl) {
+    if (!frameImageUrl) {
+        frameOverlay.classList.add('hidden');
+        frameOverlay.src = "";
+    } else {
+        frameOverlay.src = frameImageUrl;
+        frameOverlay.classList.remove('hidden');
+    }
+}
+
+document.getElementById('mirrored-energy-btn').addEventListener('click', () => {
+    applyFrame('https://d2l56h9h5tj8ue.cloudfront.net/images/frames/frame-mirroredenergy.jpg');
+});
+
+document.getElementById('remove-frame-btn').addEventListener('click', () => {
+    applyFrame(null);
 });
 
 initializeApp();
