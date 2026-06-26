@@ -3,6 +3,7 @@ from discord.ext import commands
 from discord import app_commands
 import asyncio
 from datetime import timedelta
+from typing import Literal 
 
 from utils.database import (
     get_points, remove_points, add_points, 
@@ -10,7 +11,7 @@ from utils.database import (
 )
 from constants import *
 
-# --- THEME OVERRIDES ---
+
 CRIMSON_RED = 0x8b0000 
 CUSTOM_EMOJI_UI = "<:eight_side_sparkle:1516681364806570105>"
 CUSTOM_EMOJI_TITLE = "<:red_lotus:1516679367743377448>"
@@ -55,7 +56,9 @@ class AuctionCog(commands.Cog):
         self.bid_lock = asyncio.Lock()
         self.state = {
             "active":          False,
+            "type":            None, 
             "item":            None,
+            "kci":             None,
             "current_bid":     0,
             "current_bidder":  None,
             "bid_interval":    10,
@@ -63,17 +66,25 @@ class AuctionCog(commands.Cog):
             "end_time":        None,
             "message":         None,
             "channel":         None,
-            "image_url":       None,
+            "thumbnail_url":   None,
+            "bottom_image_url":None,
         }
         self.timer_task = None
 
     def make_embed(self) -> discord.Embed:
         s = self.state
-        embed = discord.Embed(title=f"{CUSTOM_EMOJI_TITLE} Heavenly Court Live Auction {CUSTOM_EMOJI_TITLE}", color=CRIMSON_RED)
-        embed.description = f"### 🎁 {s['item']}"
         
-        if s.get("image_url"):
-            embed.set_image(url=s["image_url"])
+        if s.get("type") == "Card":
+            embed = discord.Embed(title=f"{CUSTOM_EMOJI_TITLE} Heavenly Court Card Auction {CUSTOM_EMOJI_TITLE}", color=CRIMSON_RED)
+            embed.description = f"### 🃏 {s['item']}\n**KCI:** `{s['kci']}`"
+        else:
+            embed = discord.Embed(title=f"{CUSTOM_EMOJI_TITLE} Heavenly Court Item Auction {CUSTOM_EMOJI_TITLE}", color=CRIMSON_RED)
+            embed.description = f"### 🎁 {s['item']}"
+        
+        if s.get("thumbnail_url"):
+            embed.set_thumbnail(url=s["thumbnail_url"])
+        if s.get("bottom_image_url"):
+            embed.set_image(url=s["bottom_image_url"])
         
         bid_text = f"**{s['current_bid']}** pts" if s["current_bid"] > 0 else "No bids yet!"
         embed.add_field(name="💰 Current Highest Bid", value=bid_text, inline=False)
@@ -122,14 +133,18 @@ class AuctionCog(commands.Cog):
                 await add_points(winner.id, -bid)
                 
             await add_auction_winner(winner.id)
-                
+            
+            desc = f"### 🃏 {item}\n**KCI:** `{s['kci']}`\n🎉 Won by {winner.mention} for **{bid}** pts!" if s.get("type") == "Card" else f"### 🎁 {item}\n🎉 Won by {winner.mention} for **{bid}** pts!"
+            
             end_embed = discord.Embed(
                 title=f"{CUSTOM_EMOJI_TITLE} Auction Ended!",
-                description=f"### 🎁 {item}\n🎉 Won by {winner.mention} for **{bid}** pts!",
+                description=desc,
                 color=CRIMSON_RED
             )
-            if s.get("image_url"):
-                end_embed.set_thumbnail(url=s["image_url"])
+            if s.get("thumbnail_url"):
+                end_embed.set_thumbnail(url=s["thumbnail_url"])
+            if s.get("bottom_image_url"):
+                end_embed.set_image(url=s["bottom_image_url"])
 
             if s["message"]:
                 await s["message"].edit(embed=end_embed, view=disabled_view)
@@ -139,21 +154,27 @@ class AuctionCog(commands.Cog):
                 f"Please open a ticket to claim your prize. {CUSTOM_EMOJI_TITLE}"
             )
         else:
+            desc = f"### 🃏 {item}\n**KCI:** `{s['kci']}`\nReceived no bids." if s.get("type") == "Card" else f"### 🎁 {item}\nReceived no bids."
             end_embed = discord.Embed(
                 title=f"{CUSTOM_EMOJI_TITLE} Auction Ended — No Bids",
-                description=f"### 🎁 {item}\nReceived no bids.",
+                description=desc,
                 color=0x36393f
             )
-            if s.get("image_url"):
-                end_embed.set_thumbnail(url=s["image_url"])
+            if s.get("thumbnail_url"):
+                end_embed.set_thumbnail(url=s["thumbnail_url"])
+            if s.get("bottom_image_url"):
+                end_embed.set_image(url=s["bottom_image_url"])
 
             if s["message"]:
                 await s["message"].edit(embed=end_embed, view=disabled_view)
             await channel.send(f"The auction for **{item}** ended with no bids.")
 
+        self.state["type"] = None
         self.state["item"] = None
+        self.state["kci"] = None
         self.state["message"] = None
-        self.state["image_url"] = None
+        self.state["thumbnail_url"] = None
+        self.state["bottom_image_url"] = None
 
     async def process_bid(self, interaction: discord.Interaction, bid_str: str):
         async with self.bid_lock:
@@ -203,6 +224,7 @@ class AuctionCog(commands.Cog):
                     )
                     warn_msg = await s["channel"].send(embed=snipe_embed)
                     await warn_msg.delete(delay=10) 
+            # -------------------------------
 
             if s["message"]:
                 await s["message"].edit(embed=self.make_embed())
@@ -227,30 +249,39 @@ class AuctionCog(commands.Cog):
 
     auction_group = app_commands.Group(name="auction", description="Manage the item auction system")
 
-    @auction_group.command(name="start", description="Start a new item auction")
+    @auction_group.command(name="start", description="Start a new item or card auction")
     @app_commands.describe(
-        item="The name of the item being auctioned",
+        auction_type="Is this a Card or an Item?",
+        item="The name of the item or card character",
         min_bid="Starting minimum bid",
         interval="Minimum interval to raise bids",
         channel="Optional: Select the channel to post the auction in",
         hours="Optional: How many hours the auction lasts",
         minutes="Optional: How many minutes the auction lasts",
-        image="Optional: Upload an image file to show on the auction embed"
+        kci="Required if Card: The card's KCI code",
+        thumbnail="Optional: Upload an image for the top right corner",
+        bottom_image="Optional: Upload a large image for the bottom (perfect for quotes)"
     )
     @app_commands.default_permissions(administrator=True)
     async def auction_start(
         self, 
         interaction: discord.Interaction, 
+        auction_type: Literal["Card", "Item"],
         item: str, 
         min_bid: int, 
         interval: int, 
         channel: discord.TextChannel = None,
         hours: int = 0, 
         minutes: int = 0, 
-        image: discord.Attachment = None
+        kci: str = None,
+        thumbnail: discord.Attachment = None,
+        bottom_image: discord.Attachment = None
     ):
         if self.state["active"]:
             return await interaction.response.send_message(f"{CUSTOM_EMOJI_TITLE} An auction is already running. Cancel it or let it finish first.", ephemeral=True)
+
+        if auction_type == "Card" and not kci:
+            return await interaction.response.send_message(f"{CUSTOM_EMOJI_TITLE} You selected **Card** but didn't provide a **KCI**. Please rerun the command and fill in the KCI!", ephemeral=True)
 
         total_minutes = (hours * 60) + minutes
         if total_minutes <= 0:
@@ -264,14 +295,17 @@ class AuctionCog(commands.Cog):
 
         self.state.update({
             "active":         True,
+            "type":           auction_type,
             "item":           item,
+            "kci":            kci,
             "current_bid":    0,
             "current_bidder": None,
             "bid_interval":   interval,
             "min_bid":        min_bid,
             "end_time":       end_time,
             "channel":        target_channel,
-            "image_url":      image.url if image else None, 
+            "thumbnail_url":  thumbnail.url if thumbnail else None,
+            "bottom_image_url": bottom_image.url if bottom_image else None, 
         })
 
         view = AuctionView(self)
@@ -310,9 +344,12 @@ class AuctionCog(commands.Cog):
             
             await self.state["message"].edit(embed=embed, view=disabled_view)
 
+        self.state["type"] = None
         self.state["item"] = None
+        self.state["kci"] = None
         self.state["message"] = None
-        self.state["image_url"] = None
+        self.state["thumbnail_url"] = None
+        self.state["bottom_image_url"] = None
 
         await interaction.response.send_message(f"{CUSTOM_EMOJI_TITLE} Auction cancelled successfully.", ephemeral=True)
 
