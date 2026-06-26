@@ -10,6 +10,7 @@ from utils.database import (
 )
 from constants import *
 
+# --- THEME OVERRIDES ---
 CRIMSON_RED = 0x8b0000 
 CUSTOM_EMOJI_UI = "<:eight_side_sparkle:1516681364806570105>"
 CUSTOM_EMOJI_TITLE = "<:red_lotus:1516679367743377448>"
@@ -202,7 +203,6 @@ class AuctionCog(commands.Cog):
                     )
                     warn_msg = await s["channel"].send(embed=snipe_embed)
                     await warn_msg.delete(delay=10) 
-            # -------------------------------
 
             if s["message"]:
                 await s["message"].edit(embed=self.make_embed())
@@ -230,21 +230,37 @@ class AuctionCog(commands.Cog):
     @auction_group.command(name="start", description="Start a new item auction")
     @app_commands.describe(
         item="The name of the item being auctioned",
-        duration="How many minutes the auction lasts",
         min_bid="Starting minimum bid",
         interval="Minimum interval to raise bids",
-        image_url="Optional: A direct link to an image (png/jpg) to show on the auction"
+        channel="Optional: Select the channel to post the auction in",
+        hours="Optional: How many hours the auction lasts",
+        minutes="Optional: How many minutes the auction lasts",
+        image="Optional: Upload an image file to show on the auction embed"
     )
     @app_commands.default_permissions(administrator=True)
-    async def auction_start(self, interaction: discord.Interaction, item: str, duration: int, min_bid: int, interval: int, image_url: str = None):
+    async def auction_start(
+        self, 
+        interaction: discord.Interaction, 
+        item: str, 
+        min_bid: int, 
+        interval: int, 
+        channel: discord.TextChannel = None,
+        hours: int = 0, 
+        minutes: int = 0, 
+        image: discord.Attachment = None
+    ):
         if self.state["active"]:
             return await interaction.response.send_message(f"{CUSTOM_EMOJI_TITLE} An auction is already running. Cancel it or let it finish first.", ephemeral=True)
 
-        channel = interaction.guild.get_channel(AUCTION_CHANNEL_ID)
-        if not channel:
-            return await interaction.response.send_message(f"{CUSTOM_EMOJI_TITLE} Auction channel not found in constants.", ephemeral=True)
+        total_minutes = (hours * 60) + minutes
+        if total_minutes <= 0:
+            return await interaction.response.send_message(f"{CUSTOM_EMOJI_TITLE} Please set a valid duration (hours or minutes must be greater than 0).", ephemeral=True)
 
-        end_time = discord.utils.utcnow() + timedelta(minutes=duration)
+        target_channel = channel or interaction.guild.get_channel(AUCTION_CHANNEL_ID)
+        if not target_channel:
+            return await interaction.response.send_message(f"{CUSTOM_EMOJI_TITLE} Auction channel not found. Please select a valid text channel.", ephemeral=True)
+
+        end_time = discord.utils.utcnow() + timedelta(minutes=total_minutes)
 
         self.state.update({
             "active":         True,
@@ -254,21 +270,22 @@ class AuctionCog(commands.Cog):
             "bid_interval":   interval,
             "min_bid":        min_bid,
             "end_time":       end_time,
-            "channel":        channel,
-            "image_url":      image_url,
+            "channel":        target_channel,
+            "image_url":      image.url if image else None, 
         })
 
         view = AuctionView(self)
         embed = self.make_embed()
         
-        msg = await channel.send(embed=embed, view=view)
+        msg = await target_channel.send(embed=embed, view=view)
         self.state["message"] = msg
 
         if self.timer_task:
             self.timer_task.cancel()
-        self.timer_task = asyncio.create_task(self.auction_timer(duration * 60))
+        
+        self.timer_task = asyncio.create_task(self.auction_timer(total_minutes * 60))
 
-        await interaction.response.send_message(f"{CUSTOM_EMOJI_TITLE} Auction for **{item}** started in {channel.mention}!", ephemeral=True)
+        await interaction.response.send_message(f"{CUSTOM_EMOJI_TITLE} Auction for **{item}** started in {target_channel.mention}!", ephemeral=True)
 
     @auction_group.command(name="cancel", description="Cancel the active auction")
     @app_commands.default_permissions(administrator=True)
