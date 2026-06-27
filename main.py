@@ -59,7 +59,6 @@ class Bot(commands.Bot):
         await self.load_extension("cogs.quote")
         await self.load_extension("cogs.roles")
         await self.load_extension("cogs.autorole") 
-        await self.load_extension("cogs.security")
         await self.load_extension("cogs.status")
         await self.load_extension("cogs.effort")
         await self.load_extension("cogs.help")

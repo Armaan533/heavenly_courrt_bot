@@ -86,12 +86,15 @@ class KarutaPricingCog(commands.Cog):
     def calculate_card_value(self, edition: int, print_num: int, wl: int, cosmetics: dict, worker_stats: dict):
         base_min, base_max = 0.0, 0.0
 
-        # --- SINGLE PRINTS ---
         if 1 <= print_num <= 9:
-            sp_rates = {1: (1.5, 2.2), 2: (1.8, 2.3), 3: (1.5, 1.8), 4: (2.0, 2.3), 5: (2.1, 2.4), 6: (1.8, 2.8), 7: (2.0, 2.4)}
-            rate_min, rate_max = sp_rates.get(edition, (2.0, 2.4))
-            base_min = wl / rate_max
-            base_max = wl / rate_min
+            base_tix = 40.0
+            wl_scale = wl * 0.12
+            
+            ed_mults = {1: 0.85, 2: 0.95, 3: 1.00, 4: 1.20, 5: 1.35, 6: 1.50, 7: 1.50}
+            ed_mult = ed_mults.get(edition, 1.0)
+            
+            base_min = (base_tix + wl_scale) * ed_mult
+            base_max = base_min * 1.25
 
         # --- LOW PRINTS ---
         elif 10 <= print_num <= 99:
