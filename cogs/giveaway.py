@@ -69,13 +69,14 @@ class ItemSetupModal(discord.ui.Modal, title="Setup Item Giveaway"):
     description = discord.ui.TextInput(label="Description", style=discord.TextStyle.paragraph)
     duration = discord.ui.TextInput(label="Duration (e.g., 10m, 2h, 1d)", placeholder="10m, 2h, 1d")
 
-    def __init__(self, cog, clan_bonus: int, booster_bonus: int, winners: int, req_role_id: int):
+    def __init__(self, cog, clan_bonus: int, booster_bonus: int, winners: int, req_role_id: int, target_channel: discord.TextChannel):
         super().__init__()
         self.cog = cog
         self.clan_bonus = clan_bonus
         self.booster_bonus = booster_bonus
         self.winners = winners
         self.req_role_id = req_role_id
+        self.target_channel = target_channel
 
     async def on_submit(self, interaction: discord.Interaction):
         try:
@@ -105,12 +106,12 @@ class ItemSetupModal(discord.ui.Modal, title="Setup Item Giveaway"):
         embed.set_footer(text=f"Hosted by {interaction.user.display_name}")
 
         view = GiveawayEntryView()
-        await interaction.response.send_message(f"{E_SUCCESS} Giveaway started!", ephemeral=True)
-        msg = await interaction.channel.send(embed=embed, view=view)
+        await interaction.response.send_message(f"{E_SUCCESS} Giveaway started in {self.target_channel.mention}!", ephemeral=True)
+        msg = await self.target_channel.send(embed=embed, view=view)
 
         data = await get_all_giveaways()
         data["active"][str(msg.id)] = {
-            "channel_id": interaction.channel.id,
+            "channel_id": self.target_channel.id,
             "prize": self.item_name.value,
             "end_time": end_time,
             "tickets": [],
@@ -122,19 +123,20 @@ class ItemSetupModal(discord.ui.Modal, title="Setup Item Giveaway"):
         }
         await save_giveaways_data(data)
 
-        task = asyncio.create_task(self.cog.manage_giveaway_timer(seconds, msg.id, interaction.channel.id, self.item_name.value))
+        task = asyncio.create_task(self.cog.manage_giveaway_timer(seconds, msg.id, self.target_channel.id, self.item_name.value))
         self.cog.active_tasks[msg.id] = task
 
 class CardConfigModal(discord.ui.Modal, title="Configure Card Giveaway"):
     duration = discord.ui.TextInput(label="Duration (e.g., 10m, 2h, 1d)", placeholder="10m, 2h, 1d")
 
-    def __init__(self, cog, clan_bonus: int, booster_bonus: int, winners: int, req_role_id: int):
+    def __init__(self, cog, clan_bonus: int, booster_bonus: int, winners: int, req_role_id: int, target_channel: discord.TextChannel):
         super().__init__()
         self.cog = cog
         self.clan_bonus = clan_bonus
         self.booster_bonus = booster_bonus
         self.winners = winners
         self.req_role_id = req_role_id
+        self.target_channel = target_channel
 
     async def on_submit(self, interaction: discord.Interaction):
         try:
@@ -143,10 +145,10 @@ class CardConfigModal(discord.ui.Modal, title="Configure Card Giveaway"):
             return await interaction.response.send_message(f"{E_ERROR} Invalid duration.", ephemeral=True)
 
         await interaction.response.send_message(f"{E_SUCCESS} Configuration saved! **{interaction.user.mention}, please run `kci <card_code>` in this channel now.**", ephemeral=False)
-        await self.cog.wait_for_kci(interaction, seconds, self.clan_bonus, self.booster_bonus, self.winners, self.req_role_id)
+        await self.cog.wait_for_kci(interaction, seconds, self.clan_bonus, self.booster_bonus, self.winners, self.req_role_id, self.target_channel)
 
 class GiveawayTypeSelect(discord.ui.View):
-    def __init__(self, cog, author, clan_bonus, booster_bonus, winners, req_role_id):
+    def __init__(self, cog, author, clan_bonus, booster_bonus, winners, req_role_id, target_channel):
         super().__init__(timeout=60)
         self.cog = cog
         self.author = author
@@ -154,19 +156,20 @@ class GiveawayTypeSelect(discord.ui.View):
         self.booster_bonus = booster_bonus
         self.winners = winners
         self.req_role_id = req_role_id
+        self.target_channel = target_channel
 
     @discord.ui.button(label="Karuta Card", style=discord.ButtonStyle.primary)
     async def card_choice(self, interaction: discord.Interaction, button: discord.ui.Button):
         if interaction.user.id != self.author.id:
             return await interaction.response.send_message(f"{E_ERROR} This belongs to someone else.", ephemeral=True)
-        await interaction.response.send_modal(CardConfigModal(self.cog, self.clan_bonus, self.booster_bonus, self.winners, self.req_role_id))
+        await interaction.response.send_modal(CardConfigModal(self.cog, self.clan_bonus, self.booster_bonus, self.winners, self.req_role_id, self.target_channel))
         self.stop()
 
     @discord.ui.button(label="Item", style=discord.ButtonStyle.secondary)
     async def item_choice(self, interaction: discord.Interaction, button: discord.ui.Button):
         if interaction.user.id != self.author.id:
             return await interaction.response.send_message(f"{E_ERROR} This belongs to someone else.", ephemeral=True)
-        await interaction.response.send_modal(ItemSetupModal(self.cog, self.clan_bonus, self.booster_bonus, self.winners, self.req_role_id))
+        await interaction.response.send_modal(ItemSetupModal(self.cog, self.clan_bonus, self.booster_bonus, self.winners, self.req_role_id, self.target_channel))
         self.stop()
 
 class GiveawayCog(commands.Cog):
@@ -251,21 +254,21 @@ class GiveawayCog(commands.Cog):
         
         await channel.send(f"🎊 The heavens have chosen! {winners_str} won **{prize_name}**! Open a ticket to claim in <#1509258805777666180>")
 
-    async def wait_for_kci(self, interaction, seconds, clan_bonus, booster_bonus, winners, req_role_id):
-        channel = interaction.channel
+    async def wait_for_kci(self, interaction, seconds, clan_bonus, booster_bonus, winners, req_role_id, target_channel):
+        setup_channel = interaction.channel
         author = interaction.user
 
         def karuta_check(m):
-            return (m.author.id == 646937666251915264 and m.channel.id == channel.id and len(m.embeds) > 0 and "Card Details" in (m.embeds[0].title or ""))
+            return (m.author.id == 646937666251915264 and m.channel.id == setup_channel.id and len(m.embeds) > 0 and "Card Details" in (m.embeds[0].title or ""))
 
         try:
             karuta_msg = await self.bot.wait_for('message', timeout=120.0, check=karuta_check)
         except asyncio.TimeoutError:
-            return await channel.send(f"{E_ERROR} Setup timed out.")
+            return await setup_channel.send(f"{E_ERROR} Setup timed out.")
 
         embed_data = karuta_msg.embeds[0]
         lines = [l.strip() for l in (embed_data.description or "").split("\n") if l.strip()]
-        if not lines: return await channel.send(f"{E_ERROR} Could not read card metadata.")
+        if not lines: return await setup_channel.send(f"{E_ERROR} Could not read card metadata.")
 
         stats_line = lines[0]
         for line in lines:
@@ -317,17 +320,20 @@ class GiveawayCog(commands.Cog):
         except: pass
 
         try:
-            async for hist_msg in channel.history(limit=10):
+            async for hist_msg in setup_channel.history(limit=10):
                 if hist_msg.author.id == author.id and hist_msg.content.lower().startswith("kci"):
                     await hist_msg.delete()
                     break
         except: pass
 
-        msg = await channel.send(embed=giveaway_embed, view=GiveawayEntryView())
+        msg = await target_channel.send(embed=giveaway_embed, view=GiveawayEntryView())
+        
+        if setup_channel.id != target_channel.id:
+            await setup_channel.send(f"{E_SUCCESS} Giveaway successfully posted in {target_channel.mention}!")
 
         data = await get_all_giveaways()
         data["active"][str(msg.id)] = {
-            "channel_id": channel.id,
+            "channel_id": target_channel.id,
             "prize": character_name,
             "end_time": end_time,
             "tickets": [],
@@ -339,34 +345,30 @@ class GiveawayCog(commands.Cog):
         }
         await save_giveaways_data(data)
 
-        task = asyncio.create_task(self.manage_giveaway_timer(seconds, msg.id, channel.id, character_name))
+        task = asyncio.create_task(self.manage_giveaway_timer(seconds, msg.id, target_channel.id, character_name))
         self.active_tasks[msg.id] = task
+        
 
-        async def delayed_karuta_delete():
-            await asyncio.sleep(10)
-            try:
-                await karuta_msg.delete()
-            except: pass
-
-        self.bot.loop.create_task(delayed_karuta_delete())
 
     @giveaway_group.command(name="start", description="Starts a giveaway")
     @app_commands.describe(
+        channel="Optional: Select the channel to post the giveaway in (Defaults to current channel)",
         clan_bonus="Bonus entries for clan members",
         booster_bonus="Bonus entries for boosters",
         winners="Number of winners (default 1)",
         required_role="Specific role required to enter (optional)"
     )
-    async def start_wizard(self, interaction: discord.Interaction, clan_bonus: int = 0, booster_bonus: int = 0, winners: int = 1, required_role: discord.Role = None):
+    async def start_wizard(self, interaction: discord.Interaction, channel: discord.TextChannel = None, clan_bonus: int = 0, booster_bonus: int = 0, winners: int = 1, required_role: discord.Role = None):
         EVENT_MANAGER_ROLE_ID = 1508333073668898996
         if not (interaction.user.guild_permissions.administrator or any(role.id == EVENT_MANAGER_ROLE_ID for role in interaction.user.roles)):
             return await interaction.response.send_message(f"{E_ERROR} You do not have permission.", ephemeral=True)
             
         req_role_id = required_role.id if required_role else None
+        target_channel = channel or interaction.channel
         
         await interaction.response.send_message(
-            embed=discord.Embed(title="Giveaway Setup", description="Select the type:", color=0x6b1614), 
-            view=GiveawayTypeSelect(self, interaction.user, clan_bonus, booster_bonus, winners, req_role_id), 
+            embed=discord.Embed(title="Giveaway Setup", description=f"Select the type to post in {target_channel.mention}:", color=0x6b1614), 
+            view=GiveawayTypeSelect(self, interaction.user, clan_bonus, booster_bonus, winners, req_role_id, target_channel), 
             ephemeral=True
         )
 
