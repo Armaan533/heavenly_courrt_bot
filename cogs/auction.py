@@ -331,16 +331,7 @@ class AuctionCog(commands.Cog):
         if self.timer_task: self.timer_task.cancel()
         self.timer_task = asyncio.create_task(self.auction_timer(hours * 3600))
 
-        # Delete Karuta response after 10s
-        async def delayed_karuta_delete():
-            await asyncio.sleep(10)
-            try:
-                await karuta_msg.delete()
-            except: pass
-        self.bot.loop.create_task(delayed_karuta_delete())
 
-
-    # 2. COMMAND: AUCTION ITEM 
     @auction_group.command(name="item", description="Start a new custom Item auction")
     @app_commands.describe(
         item_name="The name of the item being auctioned",
