@@ -12,7 +12,6 @@ from utils.database import (
 )
 from constants import *
 
-# --- THEME OVERRIDES ---
 CRIMSON_RED = 0x8b0000 
 E_SPARKLE = "<:eight_side_sparkle:1516681364806570105>"    
 E_ITEM    = "<:red_lotus:1516679367743377448>"   
@@ -48,7 +47,6 @@ class AuctionView(discord.ui.View):
         super().__init__(timeout=None)
         self.cog = cog
 
-    # custom_id makes this button persist across bot reboots!
     @discord.ui.button(label="Place Bid", style=discord.ButtonStyle.danger, emoji=discord.PartialEmoji.from_str(E_SPARKLE), custom_id="auction_bid")
     async def place_bid(self, interaction: discord.Interaction, button: discord.ui.Button):
         if not self.cog.state.get("active"):
@@ -65,7 +63,7 @@ class AuctionCog(commands.Cog):
         self.bid_lock = asyncio.Lock()
         self.timer_task = None
         self.load_state()
-        self.bot.add_view(AuctionView(self)) # Reconnects the button listener on boot!
+        self.bot.add_view(AuctionView(self)) 
 
     async def cog_load(self):
         """Automatically resumes the timer if the bot restarts during an active auction."""
@@ -74,16 +72,13 @@ class AuctionCog(commands.Cog):
             if time_remaining > 0:
                 self.timer_task = asyncio.create_task(self.auction_timer(time_remaining))
             else:
-                # If the timer ran out while the bot was offline, end it immediately.
                 self.timer_task = asyncio.create_task(self.end_auction())
 
-    # --- PERSISTENT MEMORY FUNCTIONS ---
     def load_state(self):
         if os.path.exists(AUCTION_FILE):
             try:
                 with open(AUCTION_FILE, "r") as f:
                     self.state = json.load(f)
-                    # Safety check: Prevent hardlocks if bot crashed mid-setup
                     self.state["setup_phase"] = False 
                     return
             except Exception:
