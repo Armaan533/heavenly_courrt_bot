@@ -2,8 +2,9 @@ import discord
 from discord.ext import commands
 from discord import app_commands
 import asyncio
-import re
-from datetime import timedelta
+import time
+import json
+import os
 
 from utils.database import (
     get_points, remove_points, add_points, 
@@ -17,17 +18,19 @@ E_SPARKLE = "<:eight_side_sparkle:1516681364806570105>"
 E_ITEM    = "<:red_lotus:1516679367743377448>"   
 E_CHAR    = "<:red_lotus:1516679367743377448>"   
 E_SERIES  = "<:book_ig:1516683126066253844>"    
-E_CARD    = "<:red_lotus:1516679367743377448>"    
+E_CARD    = "<:two_flowers:1516684386546880614>"    
 E_TIME    = "<:celestial_hourglass:1516684938509029396>"   
 E_SUCCESS = "✅"    
 E_ERROR   = "❌" 
 
+AUCTION_FILE = "auction_data.json"
+
 class BidModal(discord.ui.Modal, title="Place Your Bid"):
     def __init__(self, cog):
         super().__init__()
-        state = cog.state
-        min_next = state["current_bid"] + state["bid_interval"] if state["current_bid"] > 0 else state["min_bid"]
         self.cog = cog
+        s = self.cog.state
+        min_next = s["current_bid"] + s["bid_interval"] if s["current_bid"] > 0 else s["min_bid"]
         
         self.bid_input = discord.ui.TextInput(
             label=f"Your bid (minimum: {min_next} pts)",
@@ -45,9 +48,10 @@ class AuctionView(discord.ui.View):
         super().__init__(timeout=None)
         self.cog = cog
 
+    # custom_id makes this button persist across bot reboots!
     @discord.ui.button(label="Place Bid", style=discord.ButtonStyle.danger, emoji=discord.PartialEmoji.from_str(E_SPARKLE), custom_id="auction_bid")
     async def place_bid(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if not self.cog.state["active"]:
+        if not self.cog.state.get("active"):
             return await interaction.response.send_message("No active auction right now.", ephemeral=True)
             
         if await is_auction_winner(interaction.user.id):
@@ -59,25 +63,53 @@ class AuctionCog(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.bid_lock = asyncio.Lock()
-        self.state = {}
-        self.reset_state() 
         self.timer_task = None
+        self.load_state()
+        self.bot.add_view(AuctionView(self)) # Reconnects the button listener on boot!
+
+    async def cog_load(self):
+        """Automatically resumes the timer if the bot restarts during an active auction."""
+        if self.state.get("active") and self.state.get("end_time"):
+            time_remaining = self.state["end_time"] - int(time.time())
+            if time_remaining > 0:
+                self.timer_task = asyncio.create_task(self.auction_timer(time_remaining))
+            else:
+                # If the timer ran out while the bot was offline, end it immediately.
+                self.timer_task = asyncio.create_task(self.end_auction())
+
+    # --- PERSISTENT MEMORY FUNCTIONS ---
+    def load_state(self):
+        if os.path.exists(AUCTION_FILE):
+            try:
+                with open(AUCTION_FILE, "r") as f:
+                    self.state = json.load(f)
+                    # Safety check: Prevent hardlocks if bot crashed mid-setup
+                    self.state["setup_phase"] = False 
+                    return
+            except Exception:
+                pass
+        self.reset_state()
+
+    def save_state(self):
+        with open(AUCTION_FILE, "w") as f:
+            json.dump(self.state, f, indent=4)
 
     def reset_state(self):
         self.state = {
+            "setup_phase":      False,
             "active":           False,
             "type":             None, 
             "item":             None, 
             "current_bid":      0,
-            "current_bidder":   None,
+            "current_bidder_id":None, 
             "bid_interval":     10,
             "min_bid":          50,
-            "end_time":         None,
-            "message":          None,
-            "channel":          None,
+            "end_time":         None, 
+            "message_id":       None,
+            "channel_id":       None,
             "thumbnail_url":    None,
             "bottom_image_url": None,
-            "host":             None,
+            "host_id":          None,
             "card_image_url":   None, 
             "character":        None,
             "series":           None,
@@ -85,6 +117,23 @@ class AuctionCog(commands.Cog):
             "print":            None,
             "edition":          None,
         }
+        self.save_state()
+
+    async def get_auction_message(self):
+        if not self.state.get("channel_id") or not self.state.get("message_id"): 
+            return None
+        channel = self.bot.get_channel(self.state["channel_id"])
+        if not channel: 
+            return None
+        try:
+            return await channel.fetch_message(self.state["message_id"])
+        except discord.NotFound:
+            return None
+
+    async def delete_after(self, msg, delay):
+        await asyncio.sleep(delay)
+        try: await msg.delete()
+        except: pass
 
     def make_embed(self) -> discord.Embed:
         s = self.state
@@ -108,36 +157,31 @@ class AuctionCog(commands.Cog):
             desc += f"{E_CARD} **Card Details:**\n"
             desc += f"| **Code:** `{kci}` | **Print:** `{prnt}` | **Edition:** `{ed}` |\n\n"
             
-            if s.get("card_image_url"):
-                embed.set_thumbnail(url=s["card_image_url"])
-            if s.get("bottom_image_url"):
-                embed.set_image(url=s["bottom_image_url"])
+            if s.get("card_image_url"): embed.set_thumbnail(url=s["card_image_url"])
+            if s.get("bottom_image_url"): embed.set_image(url=s["bottom_image_url"])
                 
         else:
-            desc += f"{E_ITEM} **Item:** {s['item']}\n\n"
-            if s.get("thumbnail_url"):
-                embed.set_thumbnail(url=s["thumbnail_url"])
-            if s.get("bottom_image_url"):
-                embed.set_image(url=s["bottom_image_url"])
+            desc += f"{E_ITEM} **Item:** {s.get('item')}\n\n"
+            if s.get("thumbnail_url"): embed.set_thumbnail(url=s["thumbnail_url"])
+            if s.get("bottom_image_url"): embed.set_image(url=s["bottom_image_url"])
         
         desc += f"{E_SPARKLE} **Auction Details:**\n"
         desc += f"✦ Starting Bid: `{s['min_bid']}` pts\n"
         desc += f"✦ Minimum Raise: `+{s['bid_interval']}` pts\n\n"
         
         bid_text = f"**{s['current_bid']}** pts" if s["current_bid"] > 0 else "No bids yet!"
-        bidder = s["current_bidder"].mention if s["current_bidder"] else "—"
+        bidder = f"<@{s['current_bidder_id']}>" if s.get("current_bidder_id") else "—"
         
         desc += f"💰 **Current Bid:** {bid_text}\n"
         desc += f"👑 **Highest Bidder:** {bidder}\n"
         desc += "━━━━━━━━━━━━━━━━━━━━━━\n"
         
         if s.get("end_time"):
-            unix_time = int(s["end_time"].timestamp())
-            desc += f"{E_TIME} **Ends:** <t:{unix_time}:R>\n"
+            desc += f"{E_TIME} **Ends:** <t:{s['end_time']}:R>\n"
             
-        host = s.get("host")
-        if host:
-            desc += f"**Hosted by {host.display_name}**"
+        host_id = s.get("host_id")
+        if host_id:
+            desc += f"**Hosted by <@{host_id}>**"
             
         embed.description = desc
         return embed
@@ -145,7 +189,7 @@ class AuctionCog(commands.Cog):
     async def auction_timer(self, duration_seconds: int):
         try:
             await asyncio.sleep(duration_seconds)
-            if self.state["active"]:
+            if self.state.get("active"):
                 await self.end_auction()
         except asyncio.CancelledError:
             pass
@@ -153,47 +197,51 @@ class AuctionCog(commands.Cog):
     async def end_auction(self):
         s = self.state
         s["active"] = False
-        channel = s["channel"]
+        channel_id = s.get("channel_id")
+        channel = self.bot.get_channel(channel_id) if channel_id else None
         
         disabled_view = discord.ui.View()
         disabled_view.add_item(discord.ui.Button(label="Auction Ended", style=discord.ButtonStyle.secondary, emoji="🔒", disabled=True))
         
-        if s["current_bidder"]:
-            winner = s["current_bidder"]
-            bid = s["current_bid"]
-            
-            try: remove_points(winner.id, bid)
-            except ValueError: add_points(winner.id, -bid)
+        winner_id = s.get("current_bidder_id")
+        bid = s.get("current_bid", 0)
+        msg = await self.get_auction_message()
+
+        if winner_id:
+            try: remove_points(winner_id, bid)
+            except ValueError: add_points(winner_id, -bid)
                 
-            await add_auction_winner(winner.id)
+            await add_auction_winner(winner_id)
             
-            if s["message"]:
+            if msg:
                 end_embed = self.make_embed()
                 end_embed.title = "✦ . AUCTION ENDED . ✦"
                 end_embed.color = 0x36393f 
-                await s["message"].edit(embed=end_embed, view=disabled_view)
+                await msg.edit(embed=end_embed, view=disabled_view)
                 
-            display_name = s.get("character") if s.get("type") == "Card" else s["item"]
-            await channel.send(
-                f"🎉 {winner.mention} won **{display_name}** for **{bid}** pts!\n"
-                f"Please open a ticket to claim your prize. {E_CHAR}"
-            )
+            display_name = s.get("character") if s.get("type") == "Card" else s.get("item")
+            if channel:
+                await channel.send(
+                    f"🎉 <@{winner_id}> won **{display_name}** for **{bid}** pts!\n"
+                    f"Please open a ticket to claim your prize. {E_CHAR}"
+                )
         else:
-            if s["message"]:
+            if msg:
                 end_embed = self.make_embed()
                 end_embed.title = "✦ . AUCTION FAILED — NO BIDS . ✦"
                 end_embed.color = 0x36393f
-                await s["message"].edit(embed=end_embed, view=disabled_view)
+                await msg.edit(embed=end_embed, view=disabled_view)
             
-            display_name = s.get("character") if s.get("type") == "Card" else s["item"]
-            await channel.send(f"The auction for **{display_name}** ended with no bids.")
+            display_name = s.get("character") if s.get("type") == "Card" else s.get("item")
+            if channel:
+                await channel.send(f"The auction for **{display_name}** ended with no bids.")
 
         self.reset_state()
 
     async def process_bid(self, interaction: discord.Interaction, bid_str: str):
         async with self.bid_lock:
             s = self.state
-            if not s["active"]:
+            if not s.get("active"):
                 return await interaction.response.send_message("No active auction right now.", ephemeral=True)
                 
             if await is_auction_winner(interaction.user.id):
@@ -210,37 +258,43 @@ class AuctionCog(commands.Cog):
             if user_pts < bid:
                 return await interaction.response.send_message(f"{E_CHAR} Not enough points. You have **{user_pts}** pts.", ephemeral=True)
                 
-            previous_bidder = s["current_bidder"]
+            previous_bidder_id = s.get("current_bidder_id")
             s["current_bid"] = bid
-            s["current_bidder"] = interaction.user
+            s["current_bidder_id"] = interaction.user.id
             
-            # --- ⏱️ ANTI-SNIPE MECHANIC ---
-            time_remaining = (s["end_time"] - discord.utils.utcnow()).total_seconds()
+            time_remaining = s["end_time"] - int(time.time())
             if time_remaining < 60:
-                s["end_time"] = discord.utils.utcnow() + timedelta(seconds=60)
+                s["end_time"] = int(time.time()) + 60
                 if self.timer_task: self.timer_task.cancel()
                 self.timer_task = asyncio.create_task(self.auction_timer(60))
                 
-                if s["channel"]:
+                channel = self.bot.get_channel(s.get("channel_id"))
+                if channel:
                     snipe_embed = discord.Embed(description=f"{E_TIME} **Anti-Snipe Triggered!** Timer extended by 60 seconds.", color=CRIMSON_RED)
-                    warn_msg = await s["channel"].send(embed=snipe_embed)
-                    await warn_msg.delete(delay=10) 
+                    warn_msg = await channel.send(embed=snipe_embed)
+                    self.bot.loop.create_task(self.delete_after(warn_msg, 10))
 
-            if s["message"]: await s["message"].edit(embed=self.make_embed())
+            self.save_state() 
+
+            msg = await self.get_auction_message()
+            if msg: await msg.edit(embed=self.make_embed())
+            
             await interaction.response.send_message(f"{E_SUCCESS} Bid of **{bid}** pts placed successfully!", ephemeral=True)
             
-            if previous_bidder and previous_bidder.id != interaction.user.id:
-                display_name = s.get("character") if s.get("type") == "Card" else s["item"]
+            if previous_bidder_id and previous_bidder_id != interaction.user.id:
+                display_name = s.get("character") if s.get("type") == "Card" else s.get("item")
                 outbid_embed = discord.Embed(title="⚠️ You've been outbid!", description=f"You were outbid on **{display_name}**! New highest bid is **{bid} pts**.", color=CRIMSON_RED)
-                try: await previous_bidder.send(embed=outbid_embed)
+                try: 
+                    prev_user = await self.bot.fetch_user(previous_bidder_id)
+                    await prev_user.send(embed=outbid_embed)
                 except discord.Forbidden:
-                    if s["channel"]:
-                        warn_msg = await s["channel"].send(f"⚠️ {previous_bidder.mention}, you were just outbid on **{display_name}**!")
-                        await warn_msg.delete(delay=10)
+                    channel = self.bot.get_channel(s.get("channel_id"))
+                    if channel:
+                        warn_msg = await channel.send(f"⚠️ <@{previous_bidder_id}>, you were just outbid on **{display_name}**!")
+                        self.bot.loop.create_task(self.delete_after(warn_msg, 10))
 
     auction_group = app_commands.Group(name="auction", description="Manage the item auction system")
 
-    # 1. COMMAND: AUCTION CARD 
     @auction_group.command(name="card", description="Start a new Karuta Card auction")
     @app_commands.describe(
         min_bid="Starting minimum bid",
@@ -251,18 +305,19 @@ class AuctionCog(commands.Cog):
     )
     @app_commands.default_permissions(administrator=True)
     async def auction_card(self, interaction: discord.Interaction, min_bid: int, interval: int, hours: int = 24, channel: discord.TextChannel = None, bottom_image: discord.Attachment = None):
-        if self.state.get("active"):
-            return await interaction.response.send_message(f"{E_ERROR} An auction is already running.", ephemeral=True)
+        if self.state.get("active") or self.state.get("setup_phase"):
+            return await interaction.response.send_message(f"{E_ERROR} An auction is already running or being setup.", ephemeral=True)
 
         if hours <= 0: return await interaction.response.send_message(f"{E_ERROR} Hours must be > 0.", ephemeral=True)
 
         target_channel = channel or interaction.guild.get_channel(AUCTION_CHANNEL_ID)
         if not target_channel: return await interaction.response.send_message(f"{E_ERROR} Channel not found.", ephemeral=True)
 
+        self.state["setup_phase"] = True
+        self.save_state()
         await interaction.response.send_message(f"{E_SUCCESS} Configuration saved! **{interaction.user.mention}, please run `kci <card_code>` in this channel now.**", ephemeral=False)
 
         def karuta_check(m):
-            # Same ID check as your giveaway script
             return (m.author.id == 646937666251915264 and m.channel.id == target_channel.id and len(m.embeds) > 0 and "Card Details" in (m.embeds[0].title or ""))
 
         try:
@@ -271,10 +326,14 @@ class AuctionCog(commands.Cog):
             self.reset_state()
             return await target_channel.send(f"{E_ERROR} Auction setup timed out. Please run the command again.")
 
-        # Parse Karuta exactly like giveaway.py
+        if not self.state.get("setup_phase"):
+            return
+
         embed_data = karuta_msg.embeds[0]
         lines = [l.strip() for l in (embed_data.description or "").split("\n") if l.strip()]
-        if not lines: return await target_channel.send(f"{E_ERROR} Could not read card metadata.")
+        if not lines: 
+            self.reset_state()
+            return await target_channel.send(f"{E_ERROR} Could not read card metadata.")
 
         stats_line = lines[0]
         for line in lines:
@@ -293,40 +352,34 @@ class AuctionCog(commands.Cog):
         card_image_url = embed_data.thumbnail.url if embed_data.thumbnail else None
 
         self.state.update({
-            "active": True, 
-            "type": "Card", 
-            "item": character_name, 
-            "current_bid": 0, 
-            "current_bidder": None, 
-            "bid_interval": interval, 
-            "min_bid": min_bid,
-            "end_time": discord.utils.utcnow() + timedelta(hours=hours), 
-            "channel": target_channel,
+            "setup_phase":      False,
+            "active":           True, 
+            "type":             "Card", 
+            "item":             character_name, 
+            "current_bid":      0, 
+            "current_bidder_id":None, 
+            "bid_interval":     interval, 
+            "min_bid":          min_bid,
+            "end_time":         int(time.time()) + (hours * 3600), 
+            "channel_id":       target_channel.id,
             "bottom_image_url": bottom_image.url if bottom_image else None, 
-            "host": interaction.user,
-            "card_image_url": card_image_url, 
-            "character": character_name, 
-            "series": series, 
-            "kci": code, 
-            "print": print_num, 
-            "edition": edition,
+            "host_id":          interaction.user.id,
+            "card_image_url":   card_image_url, 
+            "character":        character_name, 
+            "series":           series, 
+            "kci":              code, 
+            "print":            print_num, 
+            "edition":          edition,
         })
 
-        # Cleanup the kci prompt
         try:
             setup_msg = await interaction.original_response()
             await setup_msg.delete()
         except: pass
 
-        try:
-            async for hist_msg in target_channel.history(limit=10):
-                if hist_msg.author.id == interaction.user.id and hist_msg.content.lower().startswith("kci"):
-                    await hist_msg.delete()
-                    break
-        except: pass
-
         msg = await target_channel.send(embed=self.make_embed(), view=AuctionView(self))
-        self.state["message"] = msg
+        self.state["message_id"] = msg.id
+        self.save_state() 
         
         if self.timer_task: self.timer_task.cancel()
         self.timer_task = asyncio.create_task(self.auction_timer(hours * 3600))
@@ -344,7 +397,7 @@ class AuctionCog(commands.Cog):
     )
     @app_commands.default_permissions(administrator=True)
     async def auction_item(self, interaction: discord.Interaction, item_name: str, min_bid: int, interval: int, hours: int = 24, channel: discord.TextChannel = None, thumbnail: discord.Attachment = None, bottom_image: discord.Attachment = None):
-        if self.state.get("active"):
+        if self.state.get("active") or self.state.get("setup_phase"):
             return await interaction.response.send_message(f"{E_ERROR} An auction is already running.", ephemeral=True)
 
         if hours <= 0: return await interaction.response.send_message(f"{E_ERROR} Hours must be > 0.", ephemeral=True)
@@ -353,22 +406,23 @@ class AuctionCog(commands.Cog):
         if not target_channel: return await interaction.response.send_message(f"{E_ERROR} Channel not found.", ephemeral=True)
 
         self.state.update({
-            "active": True, 
-            "type": "Item", 
-            "item": item_name, 
-            "current_bid": 0, 
-            "current_bidder": None, 
-            "bid_interval": interval, 
-            "min_bid": min_bid,
-            "end_time": discord.utils.utcnow() + timedelta(hours=hours), 
-            "channel": target_channel,
-            "thumbnail_url": thumbnail.url if thumbnail else None, 
+            "active":           True, 
+            "type":             "Item", 
+            "item":             item_name, 
+            "current_bid":      0, 
+            "current_bidder_id":None, 
+            "bid_interval":     interval, 
+            "min_bid":          min_bid,
+            "end_time":         int(time.time()) + (hours * 3600), 
+            "channel_id":       target_channel.id,
+            "thumbnail_url":    thumbnail.url if thumbnail else None, 
             "bottom_image_url": bottom_image.url if bottom_image else None, 
-            "host": interaction.user,
+            "host_id":          interaction.user.id,
         })
 
         msg = await target_channel.send(embed=self.make_embed(), view=AuctionView(self))
-        self.state["message"] = msg
+        self.state["message_id"] = msg.id
+        self.save_state() 
         
         if self.timer_task: self.timer_task.cancel()
         self.timer_task = asyncio.create_task(self.auction_timer(hours * 3600))
@@ -379,23 +433,28 @@ class AuctionCog(commands.Cog):
     @auction_group.command(name="cancel", description="Cancel the active auction")
     @app_commands.default_permissions(administrator=True)
     async def auction_cancel(self, interaction: discord.Interaction):
-        if not self.state.get("active"): 
+        if not self.state.get("active") and not self.state.get("setup_phase"): 
             return await interaction.response.send_message(f"{E_ERROR} No active auction to cancel.", ephemeral=True)
             
         if self.timer_task: 
             self.timer_task.cancel()
 
-        if self.state["message"]:
+        msg = await self.get_auction_message()
+        self.reset_state()
+
+        if msg:
             try:
                 embed = discord.Embed(title="✦ . AUCTION CANCELLED . ✦", description=f"The auction was cancelled by an admin.", color=0x36393f)
                 disabled_view = discord.ui.View()
                 disabled_view.add_item(discord.ui.Button(label="Cancelled", style=discord.ButtonStyle.secondary, disabled=True))
-                await self.state["message"].edit(embed=embed, view=disabled_view)
+                await msg.edit(embed=embed, view=disabled_view)
             except Exception:
-                pass # Safety catch if the message was already deleted
+                pass 
 
-        self.reset_state() # Hard reset guaranteed!
-        await interaction.response.send_message(f"{E_SUCCESS} Auction cancelled.", ephemeral=True)
+        try:
+            await interaction.response.send_message(f"{E_SUCCESS} Auction cancelled.", ephemeral=True)
+        except discord.InteractionResponded:
+            await interaction.followup.send(f"{E_SUCCESS} Auction cancelled.", ephemeral=True)
 
 
     winner_group = app_commands.Group(name="auction_winners", description="Manage the auction winner lock out list")
