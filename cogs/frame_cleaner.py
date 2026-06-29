@@ -70,16 +70,17 @@ class FrameTestModal(discord.ui.Modal, title="Frame Rendering Matrix"):
             pixels = frame_img.load()
             
             
-            bg_r, bg_g, bg_b = frame_img.getpixel((0, 0))[:3]
             
+            PAD_X = 25
+            PAD_Y = 38
             
-            dist_to_discord = ((bg_r - 49)**2 + (bg_g - 51)**2 + (bg_b - 56)**2) ** 0.5
-            if dist_to_discord > 30:
-                bg_r, bg_g, bg_b = 49, 51, 56
+            inner_left = PAD_X
+            inner_right = fw - PAD_X
+            inner_top = PAD_Y
+            inner_bottom = fh - PAD_Y
             
+            bg_r, bg_g, bg_b = 49, 51, 56
             
-            T_MIN = 2.0
-            T_MAX = 18.0  
             
             for y in range(fh):
                 for x in range(fw):
@@ -88,42 +89,65 @@ class FrameTestModal(discord.ui.Modal, title="Frame Rendering Matrix"):
                     
                     dist = ((r - bg_r)**2 + (g - bg_g)**2 + (b - bg_b)**2) ** 0.5
                     
-                    if dist <= T_MIN:
-                        pixels[x, y] = (0, 0, 0, 0)
-                    elif dist >= T_MAX:
-                        pass  
+                    
+                    if inner_left <= x <= inner_right and inner_top <= y <= inner_bottom:
+                        T_MIN = 8.0
+                        T_MAX = 80.0
+                        if dist <= T_MIN:
+                            pixels[x, y] = (0, 0, 0, 0)
+                        elif dist >= T_MAX:
+                            pass 
+                        else:
+                            ratio = (dist - T_MIN) / (T_MAX - T_MIN)
+                            factor = ratio ** 0.5  
+                            pixels[x, y] = (r, g, b, int(a * factor))
+                            
+                    
                     else:
-                        ratio = (dist - T_MIN) / (T_MAX - T_MIN)
-                        pixels[x, y] = (r, g, b, int(a * (ratio ** 1.5)))
+                        T_MIN = 2.0
+                        T_MAX = 12.0
+                        if dist <= T_MIN:
+                            pixels[x, y] = (0, 0, 0, 0) 
+                        elif dist >= T_MAX:
+                            pass 
+                        else:
+                            ratio = (dist - T_MIN) / (T_MAX - T_MIN)
+                            factor = ratio ** 2.0
+                            pixels[x, y] = (r, g, b, int(a * factor))
             
             
-            
-            canvas = Image.new("RGBA", (fw, fh), (0, 0, 0, 0))
+            canvas = Image.new("RGBA", (fw, fh), (0, 0, 0, 0)) 
             
             try: resample_method = Image.Resampling.LANCZOS
             except AttributeError: resample_method = Image.ANTIALIAS
             
             
-            
-            PAD_X = int(fw * 0.055)
-            PAD_Y = int(fh * 0.055)
-            
-            inner_w = fw - (PAD_X * 2)
-            inner_h = fh - (PAD_Y * 2)
-            
-            card_resized = ImageOps.fit(card_img, (inner_w, inner_h), method=resample_method).convert("RGBA")
+            card_resized = ImageOps.fit(card_img, (inner_right - inner_left, inner_bottom - inner_top), method=resample_method).convert("RGBA")
             
             
-            mask = Image.new("L", (inner_w, inner_h), 0)
-            draw_mask = ImageDraw.Draw(mask)
-            draw_mask.rounded_rectangle((0, 0, inner_w, inner_h), radius=15, fill=255)
-            card_resized.putalpha(mask)
+            art_mask = Image.new("L", (inner_right - inner_left, inner_bottom - inner_top), 0)
+            draw_mask = ImageDraw.Draw(art_mask)
+            draw_mask.rounded_rectangle((0, 0, inner_right - inner_left, inner_bottom - inner_top), radius=15, fill=255)
+            card_resized.putalpha(art_mask)
             
             
             canvas.paste(card_resized, (PAD_X, PAD_Y), card_resized)
             
             
             final_composite = Image.alpha_composite(canvas, frame_img)
+            
+            
+            
+            final_mask = Image.new("L", (fw, fh), 0)
+            draw_final = ImageDraw.Draw(final_mask)
+            draw_final.rounded_rectangle((0, 0, fw, fh), radius=20, fill=255)
+            
+            comp_data = final_composite.getdata()
+            mask_data = final_mask.getdata()
+            new_comp = []
+            for (r, g, b, a), m in zip(comp_data, mask_data):
+                new_comp.append((r, g, b, min(a, m)))
+            final_composite.putdata(new_comp)
             
             output = BytesIO()
             final_composite.save(output, format="PNG")
