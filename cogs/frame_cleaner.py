@@ -81,7 +81,7 @@ class FrameTestModal(discord.ui.Modal, title="Frame Rendering Matrix"):
                     dist = ((r - 49)**2 + (g - 51)**2 + (b - 56)**2) ** 0.5
                     
                     if dist <= tolerance:
-                        pixels[cx, cy] = (0, 0, 0, 0) 
+                        pixels[cx, cy] = (0, 0, 0, 0)
                         
                         for dx, dy in [(-1,0), (1,0), (0,-1), (0,1)]:
                             nx, ny = cx + dx, cy + dy
@@ -133,6 +133,37 @@ class FrameTesterCog(commands.Cog):
         self.bot = bot
 
     @commands.Cog.listener()
+    async def on_message(self, message: discord.Message):
+        if message.author.id != KARUTA_BOT_ID or not message.embeds:
+            return
+        
+        embed = message.embeds[0]
+        title = str(embed.title) if embed.title else ""
+        
+        if "Character Lookup" in title:
+            try:
+                await message.add_reaction("⚠️")
+            except:
+                pass
+
+    @commands.Cog.listener()
+    async def on_message_edit(self, before: discord.Message, after: discord.Message):
+        if after.author.id != KARUTA_BOT_ID or not after.embeds:
+            return
+            
+        embed = after.embeds[0]
+        title = str(embed.title) if embed.title else ""
+        
+        if "Character Lookup" in title:
+            has_reaction = any(str(r.emoji) == "⚠️" and r.me for r in after.reactions)
+            if not has_reaction:
+                try:
+                    await after.add_reaction("⚠️")
+                except:
+                    pass
+    # -----------------------------------------------
+
+    @commands.Cog.listener()
     async def on_raw_reaction_add(self, payload: discord.RawReactionActionEvent):
         if str(payload.emoji) != "⚠️" or payload.user_id == self.bot.user.id:
             return
@@ -158,7 +189,7 @@ class FrameTesterCog(commands.Cog):
 
             if not card_url:
                 return
-            
+
             char_name = "Unknown"
             if embed.description:
                 for line in embed.description.splitlines():
