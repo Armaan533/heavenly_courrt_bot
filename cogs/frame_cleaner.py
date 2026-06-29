@@ -9,55 +9,31 @@ from frame_prices import FRAME_DB
 
 KARUTA_BOT_ID = 646937666251915264
 
-
-
-
-
-
-
 BG_RGB = np.array([49.0, 51.0, 56.0], dtype=np.float32)
 BG_LUM = float(BG_RGB[0] * 0.299 + BG_RGB[1] * 0.587 + BG_RGB[2] * 0.114)  
-
-
 
 PAD_X = 26
 PAD_Y = 38
 
-
 FADE = 20.0
-
-
-
 
 T_LOW_CENTER  = 5.0
 T_HIGH_CENTER = 80.0   
 
-
-
 T_LOW_EDGE  = 2.0
 T_HIGH_EDGE = 18.0
 
-
-
 SAT_THRESHOLD = 0.10
 
-
-
 SAT_WEIGHT = 0.9
-
-
 
 DARK_BORDER_SLACK = 8.0   
 DARK_BORDER_RANGE = 40.0  
 
-
-
 UNMAT_COLORS = True
 UNMAT_MIN_ALPHA = 0.15   
 
-
 ALPHA_GAMMA = 1.25
-
 
 CORNER_RADIUS = 20
 
