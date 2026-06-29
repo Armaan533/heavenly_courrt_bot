@@ -2,7 +2,7 @@ import discord
 from discord.ext import commands
 import aiohttp
 from io import BytesIO
-from PIL import Image, ImageOps
+from PIL import Image, ImageOps, ImageDraw
 import asyncio
 from frame_prices import FRAME_DB
 
@@ -104,10 +104,25 @@ class FrameTestModal(discord.ui.Modal, title="Frame Rendering Matrix"):
             except AttributeError: resample_method = Image.ANTIALIAS
             
             
-            card_resized = ImageOps.fit(card_img, (fw, fh), method=resample_method).convert("RGBA")
+            
+            PAD_X = int(fw * 0.055)
+            PAD_Y = int(fh * 0.055)
+            
+            inner_w = fw - (PAD_X * 2)
+            inner_h = fh - (PAD_Y * 2)
+            
+            card_resized = ImageOps.fit(card_img, (inner_w, inner_h), method=resample_method).convert("RGBA")
             
             
-            canvas.paste(card_resized, (0, 0))
+            mask = Image.new("L", (inner_w, inner_h), 0)
+            draw_mask = ImageDraw.Draw(mask)
+            draw_mask.rounded_rectangle((0, 0, inner_w, inner_h), radius=15, fill=255)
+            card_resized.putalpha(mask)
+            
+            
+            canvas.paste(card_resized, (PAD_X, PAD_Y), card_resized)
+            
+            
             final_composite = Image.alpha_composite(canvas, frame_img)
             
             output = BytesIO()
@@ -158,7 +173,6 @@ class FrameTesterCog(commands.Cog):
                 try: await after.add_reaction("⚠️")
                 except: pass
 
-    
     @commands.Cog.listener()
     async def on_raw_reaction_add(self, payload: discord.RawReactionActionEvent):
         if str(payload.emoji) != "⚠️" or payload.user_id == self.bot.user.id:
