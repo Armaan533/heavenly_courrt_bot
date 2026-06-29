@@ -127,7 +127,6 @@ class FrameTestModal(discord.ui.Modal, title="Frame Rendering Matrix"):
             PAD_X, PAD_Y = 25, 38
             FADE = 20.0
 
-            
             rgb = np.stack([r, g, b], axis=-1)
             bg = BG_RGB[np.newaxis, np.newaxis, :]
 
@@ -152,25 +151,26 @@ class FrameTestModal(discord.ui.Modal, title="Frame Rendering Matrix"):
 
             sat_conf = _smoothstep(0.08, 0.32, sat)
             bright_conf = _smoothstep(BG_LUM + 10.0, BG_LUM + 95.0, lum)
-            dark_conf = _smoothstep(0.0, 45.0, BG_LUM - 4.0 - lum)
+            
+            
+            dark_conf = _smoothstep(12.0, 45.0, BG_LUM - lum)
 
             y_norm = y_idx / max(fh - 1, 1)
             top_band = 1.0 - _smoothstep(0.17, 0.34, y_norm)
             bottom_band = _smoothstep(0.66, 0.83, y_norm)
             effect_band = np.maximum(top_band, bottom_band)
 
-            
             slot_search = (
                 (x_idx >= 18) &
                 (x_idx <= fw - 18) &
                 ((y_idx <= PAD_Y + 32) | (y_idx >= fh - PAD_Y - 42))
             )
 
+            
             slot_core = (
                 slot_search &
-                (lum < BG_LUM - 22.0) &
-                (dist > 20.0) &
-                (physical_alpha > 0.28)
+                (dist > 15.0) &
+                (physical_alpha > 0.20)
             )
 
             slot_core = _wide_component_mask(slot_core)
@@ -179,7 +179,6 @@ class FrameTestModal(discord.ui.Modal, title="Frame Rendering Matrix"):
             slot_img = slot_img.filter(ImageFilter.MaxFilter(5))
             ui_slot = np.asarray(slot_img.filter(ImageFilter.GaussianBlur(0.7)), dtype=np.float32) / 255.0
             ui_slot_hard = ui_slot > 0.08
-            
 
             protect = np.maximum(edge_keep, effect_band * 0.82)
             protect = np.maximum(protect, ui_slot * 0.96)
