@@ -70,65 +70,56 @@ class FrameTestModal(discord.ui.Modal, title="Frame Rendering Matrix"):
             fw, fh = frame_img.size
             
             
+            try: resample_method = Image.Resampling.LANCZOS
+            except AttributeError: resample_method = Image.ANTIALIAS
+            
+            
+            card_resized = ImageOps.fit(card_img, (fw, fh), method=resample_method).convert("RGBA")
+            
             
             frame_arr = np.array(frame_img, dtype=np.float32)
-            
-            
             r = frame_arr[:, :, 0]
             g = frame_arr[:, :, 1]
             b = frame_arr[:, :, 2]
             a = frame_arr[:, :, 3]
             
             
-            bg_r, bg_g, bg_b = 49.0, 51.0, 56.0
+            dist = np.sqrt((r - 49.0)**2 + (g - 51.0)**2 + (b - 56.0)**2)
             
             
-            dist = np.sqrt((r - bg_r)**2 + (g - bg_g)**2 + (b - bg_b)**2)
+            y, x = np.ogrid[:fh, :fw]
             
             
-            T_MIN = 8.0   
-            T_MAX = 50.0  
+            PAD_X, PAD_Y = 22, 32 
+            FADE = 15.0 
             
             
-            mask = np.clip((dist - T_MIN) / (T_MAX - T_MIN), 0.0, 1.0)
+            mask_x = np.clip(np.minimum(x - PAD_X, (fw - PAD_X) - x) / FADE, 0.0, 1.0)
+            mask_y = np.clip(np.minimum(y - PAD_Y, (fh - PAD_Y) - y) / FADE, 0.0, 1.0)
+            spatial_blend = np.minimum(mask_x, mask_y)
             
             
-            mask = np.power(mask, 1.8)
+            T_MAX_MAP = 12.0 + (55.0 - 12.0) * spatial_blend  
+            T_MIN_MAP = 2.0 + (8.0 - 2.0) * spatial_blend     
             
             
-            frame_arr[:, :, 3] = a * mask
+            alpha_mask = np.clip((dist - T_MIN_MAP) / (T_MAX_MAP - T_MIN_MAP), 0.0, 1.0)
+            alpha_mask = np.power(alpha_mask, 1.5) 
             
-            
+            frame_arr[:, :, 3] = a * alpha_mask
             clean_frame = Image.fromarray(frame_arr.astype(np.uint8), 'RGBA')
             
             
             
-            PAD_X = 25
-            PAD_Y = 38
-            inner_w = fw - (PAD_X * 2)
-            inner_h = fh - (PAD_Y * 2)
-            
-            try: resample_method = Image.Resampling.LANCZOS
-            except AttributeError: resample_method = Image.ANTIALIAS
-            
-            
-            card_resized = ImageOps.fit(card_img, (inner_w, inner_h), method=resample_method).convert("RGBA")
-            
-            
-            art_mask = Image.new("L", (inner_w, inner_h), 0)
-            draw_mask = ImageDraw.Draw(art_mask)
-            draw_mask.rounded_rectangle((0, 0, inner_w, inner_h), radius=15, fill=255)
-            card_resized.putalpha(art_mask)
+            final_composite = Image.alpha_composite(card_resized, clean_frame)
             
             
             
-            canvas = Image.new("RGBA", (fw, fh), (0, 0, 0, 0))
+            mask = Image.new("L", (fw, fh), 0)
+            draw = ImageDraw.Draw(mask)
+            draw.rounded_rectangle((0, 0, fw, fh), radius=20, fill=255)
             
-            
-            canvas.paste(card_resized, (PAD_X, PAD_Y), card_resized)
-            
-            
-            final_composite = Image.alpha_composite(canvas, clean_frame)
+            final_composite.putalpha(mask)
             
             output = BytesIO()
             final_composite.save(output, format="PNG")
