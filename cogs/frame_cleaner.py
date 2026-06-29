@@ -70,17 +70,11 @@ class FrameTestModal(discord.ui.Modal, title="Frame Rendering Matrix"):
             pixels = frame_img.load()
             
             
-            
-            PAD_X = 25
-            PAD_Y = 38
-            
-            inner_left = PAD_X
-            inner_right = fw - PAD_X
-            inner_top = PAD_Y
-            inner_bottom = fh - PAD_Y
-            
             bg_r, bg_g, bg_b = 49, 51, 56
             
+            
+            T_MIN = 8.0
+            T_MAX = 70.0
             
             for y in range(fh):
                 for x in range(fw):
@@ -89,31 +83,16 @@ class FrameTestModal(discord.ui.Modal, title="Frame Rendering Matrix"):
                     
                     dist = ((r - bg_r)**2 + (g - bg_g)**2 + (b - bg_b)**2) ** 0.5
                     
-                    
-                    if inner_left <= x <= inner_right and inner_top <= y <= inner_bottom:
-                        T_MIN = 8.0
-                        T_MAX = 80.0
-                        if dist <= T_MIN:
-                            pixels[x, y] = (0, 0, 0, 0)
-                        elif dist >= T_MAX:
-                            pass 
-                        else:
-                            ratio = (dist - T_MIN) / (T_MAX - T_MIN)
-                            factor = ratio ** 0.5  
-                            pixels[x, y] = (r, g, b, int(a * factor))
-                            
-                    
+                    if dist <= T_MIN:
+                        pixels[x, y] = (0, 0, 0, 0) 
+                    elif dist >= T_MAX:
+                        pass 
                     else:
-                        T_MIN = 2.0
-                        T_MAX = 12.0
-                        if dist <= T_MIN:
-                            pixels[x, y] = (0, 0, 0, 0) 
-                        elif dist >= T_MAX:
-                            pass 
-                        else:
-                            ratio = (dist - T_MIN) / (T_MAX - T_MIN)
-                            factor = ratio ** 2.0
-                            pixels[x, y] = (r, g, b, int(a * factor))
+                        ratio = (dist - T_MIN) / (T_MAX - T_MIN)
+                        
+                        
+                        factor = ratio ** 2.5 
+                        pixels[x, y] = (r, g, b, int(a * factor))
             
             
             canvas = Image.new("RGBA", (fw, fh), (0, 0, 0, 0)) 
@@ -122,16 +101,17 @@ class FrameTestModal(discord.ui.Modal, title="Frame Rendering Matrix"):
             except AttributeError: resample_method = Image.ANTIALIAS
             
             
-            card_resized = ImageOps.fit(card_img, (inner_right - inner_left, inner_bottom - inner_top), method=resample_method).convert("RGBA")
+            PAD_X = 25
+            PAD_Y = 38
+            inner_w = fw - (PAD_X * 2)
+            inner_h = fh - (PAD_Y * 2)
             
             
-            art_mask = Image.new("L", (inner_right - inner_left, inner_bottom - inner_top), 0)
-            draw_mask = ImageDraw.Draw(art_mask)
-            draw_mask.rounded_rectangle((0, 0, inner_right - inner_left, inner_bottom - inner_top), radius=15, fill=255)
-            card_resized.putalpha(art_mask)
+            
+            card_resized = card_img.resize((inner_w, inner_h), resample=resample_method).convert("RGBA")
             
             
-            canvas.paste(card_resized, (PAD_X, PAD_Y), card_resized)
+            canvas.paste(card_resized, (PAD_X, PAD_Y))
             
             
             final_composite = Image.alpha_composite(canvas, frame_img)
@@ -223,6 +203,10 @@ class FrameTesterCog(commands.Cog):
 
             if not card_url:
                 return
+
+            
+            if "?" in card_url:
+                card_url = card_url.split("?")[0]
 
             char_name = "Unknown"
             if embed.description:
