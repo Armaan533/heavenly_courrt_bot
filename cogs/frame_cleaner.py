@@ -158,7 +158,7 @@ class FrameTesterCog(commands.Cog):
                 try: await after.add_reaction("⚠️")
                 except: pass
 
-    @commands.RawReactionActionEvent
+    
     @commands.Cog.listener()
     async def on_raw_reaction_add(self, payload: discord.RawReactionActionEvent):
         if str(payload.emoji) != "⚠️" or payload.user_id == self.bot.user.id:
