@@ -4,9 +4,11 @@ import aiohttp
 from io import BytesIO
 from PIL import Image, ImageOps, ImageDraw, ImageFont
 import asyncio
+from collections import deque
 from frame_prices import FRAME_DB
 
 KARUTA_BOT_ID = 646937666251915264
+BASE_CARD_PATH = "assets/base_card.jpg"
 
 class FrameTestModal(discord.ui.Modal, title="Frame Rendering Matrix"):
     frame_name = discord.ui.TextInput(
@@ -29,7 +31,6 @@ class FrameTestModal(discord.ui.Modal, title="Frame Rendering Matrix"):
         except:
             pass
 
-        
         match = next((n for n in FRAME_DB if f_name in n.lower()), None)
         if not match:
             return await interaction.response.send_message(f"❌ Frame `{f_name}` not found in the database.", ephemeral=True)
@@ -66,77 +67,147 @@ class FrameTestModal(discord.ui.Modal, title="Frame Rendering Matrix"):
             await interaction.followup.send(f"❌ **Render Error:** {e}")
 
     def process_frame(self, card_bytes, frame_bytes):
-        """Applies seamless full-frame overlay math and stamps typography directly on the top layer."""
+        """Executes Two-Pass Connected Mask Isolation and multi-layer layout generation."""
         with Image.open(BytesIO(card_bytes)).convert("RGBA") as card_img, \
              Image.open(BytesIO(frame_bytes)).convert("RGBA") as frame_img:
              
             fw, fh = frame_img.size
+            pixels = frame_img.load()
             
             
-            frame_data = frame_img.getdata()
-            new_frame_data = []
+            bg_mask = Image.new("L", (fw, fh), 0)
+            mask_pixels = bg_mask.load()
             bg_r, bg_g, bg_b = 49, 51, 56
             
+            def map_background_zone(start_xy, tolerance=25.0):
+                if start_xy[0] < 0 or start_xy[0] >= fw or start_xy[1] < 0 or start_xy[1] >= fh:
+                    return
+                q = deque([start_xy])
+                visited = {start_xy}
+                while q:
+                    cx, cy = q.popleft()
+                    mask_pixels[cx, cy] = 255
+                    for dx, dy in [(-1,0), (1,0), (0,-1), (0,1)]:
+                        nx, ny = cx + dx, cy + dy
+                        if 0 <= nx < fw and 0 <= ny < fh:
+                            if (nx, ny) not in visited:
+                                r, g, b, a = pixels[nx, ny]
+                                dist = ((r - bg_r)**2 + (g - bg_g)**2 + (b - bg_b)**2) ** 0.5
+                                if dist <= tolerance:
+                                    visited.add((nx, ny))
+                                    q.append((nx, ny))
+            
+            
+            map_background_zone((0, 0))
+            map_background_zone((fw - 1, 0))
+            map_background_zone((0, fh - 1))
+            map_background_zone((fw - 1, fh - 1))
+            map_background_zone((fw // 2, fh // 2))
+            
+            
             T_MIN = 2.0   
-            T_MAX = 25.0  
+            T_MAX = 35.0  
             
-            for item in frame_data:
-                r, g, b, a = item
-                dist = ((r - bg_r)**2 + (g - bg_g)**2 + (b - bg_b)**2) ** 0.5
-                
-                if dist <= T_MIN:
-                    new_frame_data.append((0, 0, 0, 0))
-                elif dist >= T_MAX:
-                    new_frame_data.append(item)
-                else:
-                    ratio = (dist - T_MIN) / (T_MAX - T_MIN)
-                    factor = ratio * ratio * (3.0 - 2.0 * ratio)
-                    new_frame_data.append((r, g, b, int(a * factor)))
+            for y in range(fh):
+                for x in range(fw):
+                    r, g, b, a = pixels[x, y]
+                    dist = ((r - bg_r)**2 + (g - bg_g)**2 + (b - bg_b)**2) ** 0.5
                     
-            frame_img.putdata(new_frame_data)
+                    if mask_pixels[x, y] == 255:
+                        if dist <= T_MIN:
+                            pixels[x, y] = (0, 0, 0, 0)
+                        elif dist >= T_MAX:
+                            pass 
+                        else:
+                            ratio = (dist - T_MIN) / (T_MAX - T_MIN)
+                            factor = ratio * ratio * (3.0 - 2.0 * ratio)
+                            pixels[x, y] = (r, g, b, int(a * factor))
+                    else:
+                        
+                        if dist <= 3.0:
+                            pixels[x, y] = (0, 0, 0, 0)
+
             
             
+            try:
+                base_card = Image.open(BASE_CARD_PATH).convert("RGBA")
+                base_card = ImageOps.fit(base_card, (fw, fh), method=Image.Resampling.LANCZOS)
+            except IOError:
+                base_card = Image.new("RGBA", (fw, fh), (239, 236, 230, 255)) 
             
-            card_resized = ImageOps.fit(card_img, (fw, fh), method=Image.Resampling.LANCZOS).convert("RGBA")
+            
+            PAD_X = int(fw * 0.035)
+            PAD_Y = int(fh * 0.025)
+            inner_w = fw - (PAD_X * 2)
+            inner_h = fh - (PAD_Y * 2)
+            
+            card_resized = ImageOps.fit(card_img, (inner_w, inner_h), method=Image.Resampling.LANCZOS).convert("RGBA")
             
             
-            final_composite = Image.alpha_composite(card_resized, frame_img)
+            art_mask = Image.new("L", (inner_w, inner_h), 0)
+            draw_mask = ImageDraw.Draw(art_mask)
+            draw_mask.rounded_rectangle((0, 0, inner_w, inner_h), radius=15, fill=255)
+            card_resized.putalpha(art_mask)
+            
+            
+            base_card.paste(card_resized, (PAD_X, PAD_Y), card_resized)
+            final_composite = Image.alpha_composite(base_card, frame_img)
             
             
             draw_text = ImageDraw.Draw(final_composite)
             
-            font_paths = ["arialbd.ttf", "Helvetica-Bold.ttf", "Arial Bold.ttf", "arial.ttf"]
-            font_top, font_bottom = None, None
+            font_paths = [
+                "arialbd.ttf", "Arial Bold.ttf", "Helvetica-Bold.ttf", "tahoma.ttf",
+                "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+                "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
+                "/usr/share/fonts/truetype/ubuntu/Ubuntu-B.ttf",
+                "/System/Library/Fonts/Supplemental/Arial Bold.ttf"
+            ]
             
+            font_top, font_bottom = None, None
+            size_top = int(fh * 0.072)
+            size_bot = int(fh * 0.048)
             
             for path in font_paths:
                 try:
-                    font_top = ImageFont.truetype(path, int(fh * 0.075))   
-                    font_bottom = ImageFont.truetype(path, int(fh * 0.052))
+                    font_top = ImageFont.truetype(path, size_top)   
+                    font_bottom = ImageFont.truetype(path, size_bot)
                     break
                 except IOError:
                     continue
             
+            
             if not font_top:
-                font_top = ImageFont.load_default()
-                font_bottom = ImageFont.load_default()
+                font_top = ImageFont.load_default(size=size_top)
+                font_bottom = ImageFont.load_default(size=size_bot)
             
-            
-            COLOR_TOP = (15, 15, 15, 255)       
-            COLOR_BOTTOM = (245, 245, 245, 255) 
+            COLOR_TOP = (20, 20, 20, 255)        
+            COLOR_BOTTOM = (255, 255, 255, 255)  
             
             
             top_text = self.char_name
-            tw = draw_text.textlength(top_text, font=font_top)
+            try:
+                left, top, right, bottom = draw_text.textbbox((0, 0), top_text, font=font_top)
+                tw = right - left
+                th = bottom - top
+            except AttributeError:
+                tw, th = draw_text.textsize(top_text, font=font_top)
+            
             top_x = (fw - tw) // 2
-            top_y = int(fh * 0.105) 
+            top_y = int(fh * 0.088) - (th // 2)
             draw_text.text((top_x, top_y), top_text, font=font_top, fill=COLOR_TOP)
             
             
             bottom_text = "Fang Yuan"
-            bw = draw_text.textlength(bottom_text, font=font_bottom)
+            try:
+                left, top, right, bottom = draw_text.textbbox((0, 0), bottom_text, font=font_bottom)
+                bw = right - left
+                bh = bottom - top
+            except AttributeError:
+                bw, bh = draw_text.textsize(bottom_text, font=font_bottom)
+                
             bot_x = (fw - bw) // 2
-            bot_y = int(fh * 0.832) 
+            bot_y = int(fh * 0.842) - (bh // 2)
             draw_text.text((bot_x, bot_y), bottom_text, font=font_bottom, fill=COLOR_BOTTOM)
             
             output = BytesIO()
@@ -154,9 +225,6 @@ class FrameTestPromptView(discord.ui.View):
 
     @discord.ui.button(label="Test Frame", style=discord.ButtonStyle.danger, emoji="⚙️")
     async def open_test_modal(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if not interaction.user.guild_permissions.administrator:
-            return await interaction.response.send_message("❌ Access Denied: Administrator configuration required.", ephemeral=True)
-            
         await interaction.response.send_modal(FrameTestModal(self.bot, self.card_url, self.char_name, interaction.message))
 
 
@@ -193,9 +261,6 @@ class FrameTesterCog(commands.Cog):
     @commands.Cog.listener()
     async def on_raw_reaction_add(self, payload: discord.RawReactionActionEvent):
         if str(payload.emoji) != "⚠️" or payload.user_id == self.bot.user.id:
-            return
-            
-        if not payload.member or not payload.member.guild_permissions.administrator:
             return
             
         try:
