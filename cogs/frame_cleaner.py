@@ -2,7 +2,7 @@ import discord
 from discord.ext import commands
 import aiohttp
 from io import BytesIO
-from PIL import Image, ImageOps, ImageDraw
+from PIL import Image, ImageOps
 import asyncio
 from frame_prices import FRAME_DB
 
@@ -78,8 +78,8 @@ class FrameTestModal(discord.ui.Modal, title="Frame Rendering Matrix"):
                 bg_r, bg_g, bg_b = 49, 51, 56
             
             
-            T_MIN = 6.0   
-            T_MAX = 55.0  
+            T_MIN = 2.0
+            T_MAX = 18.0  
             
             for y in range(fh):
                 for x in range(fw):
@@ -91,34 +91,23 @@ class FrameTestModal(discord.ui.Modal, title="Frame Rendering Matrix"):
                     if dist <= T_MIN:
                         pixels[x, y] = (0, 0, 0, 0)
                     elif dist >= T_MAX:
-                        pass 
+                        pass  
                     else:
                         ratio = (dist - T_MIN) / (T_MAX - T_MIN)
-                        factor = ratio ** 1.8 
-                        pixels[x, y] = (r, g, b, int(a * factor))
+                        pixels[x, y] = (r, g, b, int(a * (ratio ** 1.5)))
             
             
             
             canvas = Image.new("RGBA", (fw, fh), (0, 0, 0, 0))
             
-            
-            PAD = 14
-            inner_w = fw - (PAD * 2)
-            inner_h = fh - (PAD * 2)
-            
             try: resample_method = Image.Resampling.LANCZOS
             except AttributeError: resample_method = Image.ANTIALIAS
-                
-            card_resized = ImageOps.fit(card_img, (inner_w, inner_h), method=resample_method).convert("RGBA")
             
             
-            art_mask = Image.new("L", (inner_w, inner_h), 0)
-            draw_mask = ImageDraw.Draw(art_mask)
-            draw_mask.rounded_rectangle((0, 0, inner_w, inner_h), radius=15, fill=255)
-            card_resized.putalpha(art_mask)
+            card_resized = ImageOps.fit(card_img, (fw, fh), method=resample_method).convert("RGBA")
             
             
-            canvas.paste(card_resized, (PAD, PAD), card_resized)
+            canvas.paste(card_resized, (0, 0))
             final_composite = Image.alpha_composite(canvas, frame_img)
             
             output = BytesIO()
@@ -169,6 +158,7 @@ class FrameTesterCog(commands.Cog):
                 try: await after.add_reaction("⚠️")
                 except: pass
 
+    @commands.RawReactionActionEvent
     @commands.Cog.listener()
     async def on_raw_reaction_add(self, payload: discord.RawReactionActionEvent):
         if str(payload.emoji) != "⚠️" or payload.user_id == self.bot.user.id:
