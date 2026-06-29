@@ -4,7 +4,6 @@ import aiohttp
 from io import BytesIO
 from PIL import Image, ImageOps, ImageDraw
 import asyncio
-from collections import deque
 from frame_prices import FRAME_DB
 
 KARUTA_BOT_ID = 646937666251915264
@@ -15,15 +14,21 @@ class FrameTestModal(discord.ui.Modal, title="Frame Rendering Matrix"):
         placeholder="e.g. Voidspawn, Interface, Spring..."
     )
 
-    def __init__(self, bot, card_url, char_name):
+    def __init__(self, bot, card_url, char_name, prompt_message):
         super().__init__()
         self.bot = bot
         self.card_url = card_url
         self.char_name = char_name
+        self.prompt_message = prompt_message
 
     async def on_submit(self, interaction: discord.Interaction):
         f_name = self.frame_name.value.strip().lower()
         
+        try:
+            await self.prompt_message.delete()
+        except:
+            pass
+
         match = next((n for n in FRAME_DB if f_name in n.lower()), None)
         if not match:
             return await interaction.response.send_message(f"❌ Frame `{f_name}` not found in the database.", ephemeral=True)
@@ -32,69 +37,64 @@ class FrameTestModal(discord.ui.Modal, title="Frame Rendering Matrix"):
         if not frame_url:
             return await interaction.response.send_message(f"❌ No image mapped for {match.title()}.", ephemeral=True)
 
-        await interaction.response.send_message(f"⏳ **Rendering {match.title()} on {self.char_name}...**\n*Executing Dual-Zone Flood Fill...*", ephemeral=False)
-        msg = await interaction.original_response()
+        await interaction.response.defer(ephemeral=True)
 
         try:
             async with aiohttp.ClientSession() as session:
                 async with session.get(self.card_url) as card_resp, session.get(frame_url) as frame_resp:
                     if card_resp.status != 200 or frame_resp.status != 200:
-                        return await msg.edit(content="❌ Failed to fetch images from Discord servers.")
+                        return await interaction.followup.send("❌ Failed to fetch assets from Discord content servers.", ephemeral=True)
                     
                     card_bytes = await card_resp.read()
                     frame_bytes = await frame_resp.read()
 
                     output_buffer = await asyncio.to_thread(self.process_frame, card_bytes, frame_bytes)
 
-                    file = discord.File(fp=output_buffer, filename=f"preview_{match.replace(' ', '_')}.png")
+                    file = discord.File(fp=output_buffer, filename=f"private_preview_{match.replace(' ', '_')}.png")
                     
                     embed = discord.Embed(
-                        title="✦ . FRAME RENDER COMPLETE . ✦",
-                        description=f"**Character:** {self.char_name}\n**Frame:** {match.title()}",
+                        title="✦ . PRIVATE FRAME PREVIEW . ✦",
+                        description=f"**Character:** {self.char_name}\n**Frame:** {match.title()}\n\n*🛡️ This preview is invisible to public members.*",
                         color=0x2b2d31
                     )
                     embed.set_image(url=f"attachment://{file.filename}")
-                    embed.set_footer(text="Grey boundary isolated and erased via spatial flood-fill.")
+                    embed.set_footer(text="Mathematical spatial attenuation rendering complete.")
                     
-                    await msg.edit(content=None, embed=embed, attachments=[file])
+                    await interaction.followup.send(embed=embed, file=file, ephemeral=True)
 
         except Exception as e:
-            await msg.edit(content=f"❌ **Render Error:** {e}")
+            await interaction.followup.send(f"❌ **Render Error:** {e}", ephemeral=True)
 
     def process_frame(self, card_bytes, frame_bytes):
-        """Executes the dual-zone flood fill and compositing"""
+        """Applies advanced smooth-step color keys to preserve glows and gradients."""
         with Image.open(BytesIO(card_bytes)).convert("RGBA") as card_img, \
              Image.open(BytesIO(frame_bytes)).convert("RGBA") as frame_img:
              
             fw, fh = frame_img.size
             
-            def flood_fill(start_xy, tolerance=30):
-                pixels = frame_img.load()
-                q = deque([start_xy])
-                visited = set([start_xy])
+            frame_data = frame_img.getdata()
+            new_frame_data = []
+            
+            T_MIN = 5.0   
+            T_MAX = 42.0  
+            
+            for item in frame_data:
+                r, g, b, a = item
+                dist = ((r - 49)**2 + (g - 51)**2 + (b - 56)**2) ** 0.5
                 
-                while q:
-                    cx, cy = q.popleft()
-                    r, g, b, a = pixels[cx, cy]
-                    if a == 0: continue 
+                if dist <= T_MIN:
+                    new_frame_data.append((0, 0, 0, 0))
+                elif dist >= T_MAX:
+                    new_frame_data.append(item)
+                else:
+                    ratio = (dist - T_MIN) / (T_MAX - T_MIN)
+                    factor = ratio * ratio * (3.0 - 2.0 * ratio)
+                    new_frame_data.append((r, g, b, int(a * factor)))
                     
-                    dist = ((r - 49)**2 + (g - 51)**2 + (b - 56)**2) ** 0.5
-                    
-                    if dist <= tolerance:
-                        pixels[cx, cy] = (0, 0, 0, 0)
-                        
-                        for dx, dy in [(-1,0), (1,0), (0,-1), (0,1)]:
-                            nx, ny = cx + dx, cy + dy
-                            if 0 <= nx < fw and 0 <= ny < fh:
-                                if (nx, ny) not in visited:
-                                    visited.add((nx, ny))
-                                    q.append((nx, ny))
-
-            flood_fill((0, 0))
-            flood_fill((fw // 2, fh // 2))
+            frame_img.putdata(new_frame_data)
             
             PAD = 14
-            inner_w, inner_h = fw - (PAD*2), fh - (PAD*2)
+            inner_w, inner_h = fw - (PAD * 2), fh - (PAD * 2)
             
             try: resample_method = Image.Resampling.LANCZOS
             except AttributeError: resample_method = Image.ANTIALIAS
@@ -108,6 +108,7 @@ class FrameTestModal(discord.ui.Modal, title="Frame Rendering Matrix"):
             
             canvas = Image.new("RGBA", (fw, fh), (0, 0, 0, 0))
             canvas.paste(card_resized, (PAD, PAD), card_resized)
+            
             final_composite = Image.alpha_composite(canvas, frame_img)
             
             output = BytesIO()
@@ -118,14 +119,17 @@ class FrameTestModal(discord.ui.Modal, title="Frame Rendering Matrix"):
 
 class FrameTestPromptView(discord.ui.View):
     def __init__(self, bot, card_url, char_name):
-        super().__init__(timeout=120)
+        super().__init__(timeout=60)
         self.bot = bot
         self.card_url = card_url
         self.char_name = char_name
 
-    @discord.ui.button(label="Test Frame", style=discord.ButtonStyle.primary, emoji="🖼️")
+    @discord.ui.button(label="Test Frame", style=discord.ButtonStyle.danger, emoji="⚙️")
     async def open_test_modal(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await interaction.response.send_modal(FrameTestModal(self.bot, self.card_url, self.char_name))
+        if not interaction.user.guild_permissions.administrator:
+            return await interaction.response.send_message("❌ Access Denied: Administrator clearance required.", ephemeral=True)
+            
+        await interaction.response.send_modal(FrameTestModal(self.bot, self.card_url, self.char_name, interaction.message))
 
 
 class FrameTesterCog(commands.Cog):
@@ -141,10 +145,8 @@ class FrameTesterCog(commands.Cog):
         title = str(embed.title) if embed.title else ""
         
         if "Character Lookup" in title:
-            try:
-                await message.add_reaction("⚠️")
-            except:
-                pass
+            try: await message.add_reaction("⚠️")
+            except: pass
 
     @commands.Cog.listener()
     async def on_message_edit(self, before: discord.Message, after: discord.Message):
@@ -157,15 +159,15 @@ class FrameTesterCog(commands.Cog):
         if "Character Lookup" in title:
             has_reaction = any(str(r.emoji) == "⚠️" and r.me for r in after.reactions)
             if not has_reaction:
-                try:
-                    await after.add_reaction("⚠️")
-                except:
-                    pass
-    # -----------------------------------------------
+                try: await after.add_reaction("⚠️")
+                except: pass
 
     @commands.Cog.listener()
     async def on_raw_reaction_add(self, payload: discord.RawReactionActionEvent):
         if str(payload.emoji) != "⚠️" or payload.user_id == self.bot.user.id:
+            return
+
+        if not payload.member or not payload.member.guild_permissions.administrator:
             return
             
         try:
@@ -199,13 +201,13 @@ class FrameTesterCog(commands.Cog):
 
             user = await self.bot.fetch_user(payload.user_id)
             await channel.send(
-                f"🔧 {user.mention}, initialize frame rendering protocol for **{char_name}**?",
+                f"🔧 **Admin Session Initialized:** {user.mention}, render a private workspace for **{char_name}**?",
                 view=FrameTestPromptView(self.bot, card_url, char_name),
                 delete_after=60
             )
 
         except Exception as e:
-            print(f"Reaction Error: {e}")
+            print(f"Reaction Admin Error: {e}")
 
 async def setup(bot):
     await bot.add_cog(FrameTesterCog(bot))
