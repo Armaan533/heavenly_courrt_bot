@@ -4,7 +4,6 @@ import aiohttp
 from io import BytesIO
 from PIL import Image, ImageOps, ImageDraw, ImageFont
 import asyncio
-from collections import deque
 from frame_prices import FRAME_DB
 
 KARUTA_BOT_ID = 646937666251915264
@@ -45,7 +44,7 @@ class FrameTestModal(discord.ui.Modal, title="Frame Rendering Matrix"):
             async with aiohttp.ClientSession() as session:
                 async with session.get(self.card_url) as card_resp, session.get(frame_url) as frame_resp:
                     if card_resp.status != 200 or frame_resp.status != 200:
-                        return await interaction.followup.send("❌ Failed to fetch assets from Discord content servers.")
+                        return await interaction.followup.send("❌ Failed to fetch assets from Discord servers.")
                     
                     card_bytes = await card_resp.read()
                     frame_bytes = await frame_resp.read()
@@ -67,79 +66,41 @@ class FrameTestModal(discord.ui.Modal, title="Frame Rendering Matrix"):
             await interaction.followup.send(f"❌ **Render Error:** {e}")
 
     def process_frame(self, card_bytes, frame_bytes):
-        """Executes targeted background area flood fill maps and top-layer text stamping."""
+        """Applies seamless full-frame overlay math and stamps typography directly on the top layer."""
         with Image.open(BytesIO(card_bytes)).convert("RGBA") as card_img, \
              Image.open(BytesIO(frame_bytes)).convert("RGBA") as frame_img:
              
             fw, fh = frame_img.size
-            pixels = frame_img.load()
             
             
-            bg_mask = Image.new("L", (fw, fh), 0)
-            mask_pixels = bg_mask.load()
+            frame_data = frame_img.getdata()
+            new_frame_data = []
             bg_r, bg_g, bg_b = 49, 51, 56
             
-            def do_flood_fill(start_xy):
-                if start_xy[0] < 0 or start_xy[0] >= fw or start_xy[1] < 0 or start_xy[1] >= fh:
-                    return
-                q = deque([start_xy])
-                visited = {start_xy}
-                while q:
-                    cx, cy = q.popleft()
-                    mask_pixels[cx, cy] = 255
-                    
-                    for dx, dy in [(-1,0), (1,0), (0,-1), (0,1)]:
-                        nx, ny = cx + dx, cy + dy
-                        if 0 <= nx < fw and 0 <= ny < fh:
-                            if (nx, ny) not in visited:
-                                r, g, b, a = pixels[nx, ny]
-                                dist = ((r - bg_r)**2 + (g - bg_g)**2 + (b - bg_b)**2) ** 0.5
-                                
-                                if dist <= 50.0:
-                                    visited.add((nx, ny))
-                                    q.append((nx, ny))
+            T_MIN = 2.0   
+            T_MAX = 25.0  
             
-            do_flood_fill((0, 0))               
-            do_flood_fill((fw // 2, fh // 2))   
-            
-            
-            T_MIN = 3.0   
-            T_MAX = 45.0  
-            
-            for y in range(fh):
-                for x in range(fw):
-                    if mask_pixels[x, y] == 255:
-                        r, g, b, a = pixels[x, y]
-                        dist = ((r - bg_r)**2 + (g - bg_g)**2 + (b - bg_b)**2) ** 0.5
-                        
-                        if dist <= T_MIN:
-                            pixels[x, y] = (0, 0, 0, 0)
-                        elif dist >= T_MAX:
-                            pass 
-                        else:
-                            ratio = (dist - T_MIN) / (T_MAX - T_MIN)
-                            factor = ratio * ratio * (3.0 - 2.0 * ratio)
-                            pixels[x, y] = (r, g, b, int(a * factor))
-            
-            
-            PAD = 14
-            inner_w, inner_h = fw - (PAD * 2), fh - (PAD * 2)
-            
-            try: resample_method = Image.Resampling.LANCZOS
-            except AttributeError: resample_method = Image.ANTIALIAS
+            for item in frame_data:
+                r, g, b, a = item
+                dist = ((r - bg_r)**2 + (g - bg_g)**2 + (b - bg_b)**2) ** 0.5
                 
-            card_resized = ImageOps.fit(card_img, (inner_w, inner_h), method=resample_method).convert("RGBA")
+                if dist <= T_MIN:
+                    new_frame_data.append((0, 0, 0, 0))
+                elif dist >= T_MAX:
+                    new_frame_data.append(item)
+                else:
+                    ratio = (dist - T_MIN) / (T_MAX - T_MIN)
+                    factor = ratio * ratio * (3.0 - 2.0 * ratio)
+                    new_frame_data.append((r, g, b, int(a * factor)))
+                    
+            frame_img.putdata(new_frame_data)
             
-            mask = Image.new("L", (inner_w, inner_h), 0)
-            draw_mask = ImageDraw.Draw(mask)
-            draw_mask.rounded_rectangle((0, 0, inner_w, inner_h), radius=15, fill=255)
-            card_resized.putalpha(mask)
-            
-            canvas = Image.new("RGBA", (fw, fh), (0, 0, 0, 0))
-            canvas.paste(card_resized, (PAD, PAD), card_resized)
             
             
-            final_composite = Image.alpha_composite(canvas, frame_img)
+            card_resized = ImageOps.fit(card_img, (fw, fh), method=Image.Resampling.LANCZOS).convert("RGBA")
+            
+            
+            final_composite = Image.alpha_composite(card_resized, frame_img)
             
             
             draw_text = ImageDraw.Draw(final_composite)
@@ -147,10 +108,11 @@ class FrameTestModal(discord.ui.Modal, title="Frame Rendering Matrix"):
             font_paths = ["arialbd.ttf", "Helvetica-Bold.ttf", "Arial Bold.ttf", "arial.ttf"]
             font_top, font_bottom = None, None
             
+            
             for path in font_paths:
                 try:
-                    font_top = ImageFont.truetype(path, int(fh * 0.048))   
-                    font_bottom = ImageFont.truetype(path, int(fh * 0.042))
+                    font_top = ImageFont.truetype(path, int(fh * 0.075))   
+                    font_bottom = ImageFont.truetype(path, int(fh * 0.052))
                     break
                 except IOError:
                     continue
@@ -165,26 +127,16 @@ class FrameTestModal(discord.ui.Modal, title="Frame Rendering Matrix"):
             
             
             top_text = self.char_name
-            try:
-                left, top, right, bottom = draw_text.textbbox((0, 0), top_text, font=font_top)
-                tw = right - left
-            except AttributeError:
-                tw, _ = draw_text.textsize(top_text, font=font_top)
-            
+            tw = draw_text.textlength(top_text, font=font_top)
             top_x = (fw - tw) // 2
-            top_y = int(fh * 0.038) 
+            top_y = int(fh * 0.105) 
             draw_text.text((top_x, top_y), top_text, font=font_top, fill=COLOR_TOP)
             
             
             bottom_text = "Fang Yuan"
-            try:
-                left, top, right, bottom = draw_text.textbbox((0, 0), bottom_text, font=font_bottom)
-                bw = right - left
-            except AttributeError:
-                bw, _ = draw_text.textsize(bottom_text, font=font_bottom)
-                
+            bw = draw_text.textlength(bottom_text, font=font_bottom)
             bot_x = (fw - bw) // 2
-            bot_y = int(fh * 0.915) 
+            bot_y = int(fh * 0.832) 
             draw_text.text((bot_x, bot_y), bottom_text, font=font_bottom, fill=COLOR_BOTTOM)
             
             output = BytesIO()
