@@ -55,7 +55,7 @@ class FrameTestModal(discord.ui.Modal, title="Frame Rendering Matrix"):
                     file = discord.File(fp=output_buffer, filename=f"preview_{match.replace(' ', '_')}.png")
                     
                     embed = discord.Embed(
-                        title="✦ . KLU FRAME RENDER . ✦",
+                        title="✦ . FRAME RENDER . ✦",
                         description=f"**Character:** {self.char_name}\n**Frame:** {match.title()}",
                         color=0x2b2d31
                     )
