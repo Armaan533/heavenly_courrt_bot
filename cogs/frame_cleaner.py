@@ -72,6 +72,45 @@ class FrameTestModal(discord.ui.Modal, title="Frame Rendering Matrix"):
             img = Image.fromarray((np.clip(mask, 0.0, 1.0) * 255).astype(np.uint8), "L")
             return np.asarray(img.filter(ImageFilter.GaussianBlur(radius)), dtype=np.float32) / 255.0
 
+        def _wide_component_mask(mask, min_w=42, min_h=5, max_h=30):
+            h, w = mask.shape
+            seen = np.zeros_like(mask, dtype=bool)
+            keep = np.zeros_like(mask, dtype=bool)
+
+            points = np.argwhere(mask)
+            for sy, sx in points:
+                if seen[sy, sx]:
+                    continue
+
+                stack = [(sy, sx)]
+                seen[sy, sx] = True
+                comp = []
+
+                while stack:
+                    y, x = stack.pop()
+                    comp.append((y, x))
+
+                    for ny in (y - 1, y, y + 1):
+                        for nx in (x - 1, x, x + 1):
+                            if (
+                                0 <= ny < h and 0 <= nx < w
+                                and not seen[ny, nx]
+                                and mask[ny, nx]
+                            ):
+                                seen[ny, nx] = True
+                                stack.append((ny, nx))
+
+                ys = [p[0] for p in comp]
+                xs = [p[1] for p in comp]
+                bw = max(xs) - min(xs) + 1
+                bh = max(ys) - min(ys) + 1
+
+                if bw >= min_w and min_h <= bh <= max_h and bw / max(bh, 1) >= 2.4:
+                    for y, x in comp:
+                        keep[y, x] = True
+
+            return keep
+
         with Image.open(BytesIO(card_bytes)).convert("RGBA") as card_img, \
              Image.open(BytesIO(frame_bytes)).convert("RGBA") as frame_img:
              
@@ -120,14 +159,30 @@ class FrameTestModal(discord.ui.Modal, title="Frame Rendering Matrix"):
             bottom_band = _smoothstep(0.66, 0.83, y_norm)
             effect_band = np.maximum(top_band, bottom_band)
 
-            ui_slot = (
-                (x_idx >= PAD_X - 10) &
-                (x_idx <= fw - PAD_X + 10) &
-                ((y_idx <= PAD_Y + 24) | (y_idx >= fh - PAD_Y - 34))
+            
+            slot_search = (
+                (x_idx >= 18) &
+                (x_idx <= fw - 18) &
+                ((y_idx <= PAD_Y + 32) | (y_idx >= fh - PAD_Y - 42))
             )
 
+            slot_core = (
+                slot_search &
+                (lum < BG_LUM - 22.0) &
+                (dist > 20.0) &
+                (physical_alpha > 0.28)
+            )
+
+            slot_core = _wide_component_mask(slot_core)
+
+            slot_img = Image.fromarray((slot_core.astype(np.uint8) * 255), "L")
+            slot_img = slot_img.filter(ImageFilter.MaxFilter(5))
+            ui_slot = np.asarray(slot_img.filter(ImageFilter.GaussianBlur(0.7)), dtype=np.float32) / 255.0
+            ui_slot_hard = ui_slot > 0.08
+            
+
             protect = np.maximum(edge_keep, effect_band * 0.82)
-            protect = np.maximum(protect, ui_slot.astype(np.float32))
+            protect = np.maximum(protect, ui_slot * 0.96)
 
             color_alpha = _smoothstep(10.0, 72.0, dist) * 0.72
             sat_alpha = sat_conf * _smoothstep(6.0, 50.0, dist)
@@ -151,13 +206,13 @@ class FrameTestModal(discord.ui.Modal, title="Frame Rendering Matrix"):
                 0.86,
                 np.clip(physical_alpha * 1.25, 0.22, 1.0)
             )
-            raw_alpha = np.where(ui_slot, np.maximum(raw_alpha, ui_floor), raw_alpha)
+            raw_alpha = np.where(ui_slot_hard, np.maximum(raw_alpha, ui_floor), raw_alpha)
 
             raw_alpha = np.clip(raw_alpha * orig_a, 0.0, 1.0)
 
             alpha_soft = _blur01(raw_alpha, 0.65)
             final_alpha = raw_alpha * 0.74 + alpha_soft * 0.26
-            final_alpha = np.maximum(final_alpha, raw_alpha * protect)
+            final_alpha = np.maximum(final_alpha, raw_alpha * np.maximum(edge_keep, ui_slot))
             final_alpha = np.power(np.clip(final_alpha, 0.0, 1.0), 1.03)
 
             rgb_out = rgb
