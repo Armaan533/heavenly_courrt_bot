@@ -4,6 +4,7 @@ import aiohttp
 from io import BytesIO
 from PIL import Image, ImageOps, ImageDraw
 import asyncio
+import numpy as np
 from frame_prices import FRAME_DB
 
 KARUTA_BOT_ID = 646937666251915264
@@ -63,22 +64,53 @@ class FrameTestModal(discord.ui.Modal, title="Frame Rendering Matrix"):
             await interaction.followup.send(f"❌ **Render Error:** {e}")
 
     def process_frame(self, card_bytes, frame_bytes):
-        """Restores the original workflow: Layer Art -> Extract Frame -> Overlay Frame Over Art"""
         with Image.open(BytesIO(card_bytes)).convert("RGBA") as card_img, \
              Image.open(BytesIO(frame_bytes)).convert("RGBA") as frame_img:
              
             fw, fh = frame_img.size
             
             
-            canvas = Image.new("RGBA", (fw, fh), (0, 0, 0, 0))
             
-            PAD = 14
-            inner_w = fw - (PAD * 2)
-            inner_h = fh - (PAD * 2)
+            frame_arr = np.array(frame_img, dtype=np.float32)
+            
+            
+            r = frame_arr[:, :, 0]
+            g = frame_arr[:, :, 1]
+            b = frame_arr[:, :, 2]
+            a = frame_arr[:, :, 3]
+            
+            
+            bg_r, bg_g, bg_b = 49.0, 51.0, 56.0
+            
+            
+            dist = np.sqrt((r - bg_r)**2 + (g - bg_g)**2 + (b - bg_b)**2)
+            
+            
+            T_MIN = 8.0   
+            T_MAX = 50.0  
+            
+            
+            mask = np.clip((dist - T_MIN) / (T_MAX - T_MIN), 0.0, 1.0)
+            
+            
+            mask = np.power(mask, 1.8)
+            
+            
+            frame_arr[:, :, 3] = a * mask
+            
+            
+            clean_frame = Image.fromarray(frame_arr.astype(np.uint8), 'RGBA')
+            
+            
+            
+            PAD_X = 25
+            PAD_Y = 38
+            inner_w = fw - (PAD_X * 2)
+            inner_h = fh - (PAD_Y * 2)
             
             try: resample_method = Image.Resampling.LANCZOS
             except AttributeError: resample_method = Image.ANTIALIAS
-                
+            
             
             card_resized = ImageOps.fit(card_img, (inner_w, inner_h), method=resample_method).convert("RGBA")
             
@@ -89,50 +121,14 @@ class FrameTestModal(discord.ui.Modal, title="Frame Rendering Matrix"):
             card_resized.putalpha(art_mask)
             
             
-            canvas.paste(card_resized, (PAD, PAD), card_resized)
+            
+            canvas = Image.new("RGBA", (fw, fh), (0, 0, 0, 0))
             
             
-            bg_r, bg_g, bg_b = 49, 51, 56
-            
-            EXT_LEFT, EXT_TOP = 40, 32
-            EXT_RIGHT, EXT_BOTTOM = fw - 40, fh - 32
-            
-            IN_T_MIN, IN_T_MAX = 10.0, 45.0
-            OUT_T_MIN, OUT_T_MAX = 5.0, 15.0
-            
-            frame_datas = frame_img.getdata()
-            new_frame_data = []
-            
-            for idx, item in enumerate(frame_datas):
-                x = idx % fw
-                y = idx // fw
-                r, g, b, a = item
-                
-                dist = ((r - bg_r)**2 + (g - bg_g)**2 + (b - bg_b)**2) ** 0.5
-                
-                if EXT_LEFT <= x <= EXT_RIGHT and EXT_TOP <= y <= EXT_BOTTOM:
-                    if dist <= IN_T_MIN:
-                        new_frame_data.append((0, 0, 0, 0))
-                    elif dist >= IN_T_MAX:
-                        new_frame_data.append(item)
-                    else:
-                        ratio = (dist - IN_T_MIN) / (IN_T_MAX - IN_T_MIN)
-                        factor = (ratio ** 2) * (3.0 - 2.0 * ratio)
-                        new_frame_data.append((r, g, b, int(a * factor)))
-                else:
-                    if dist <= OUT_T_MIN:
-                        new_frame_data.append((0, 0, 0, 0))
-                    elif dist >= OUT_T_MAX:
-                        new_frame_data.append(item)
-                    else:
-                        ratio = (dist - OUT_T_MIN) / (OUT_T_MAX - OUT_T_MIN)
-                        factor = (ratio ** 2) * (3.0 - 2.0 * ratio)
-                        new_frame_data.append((r, g, b, int(a * factor)))
-                        
-            frame_img.putdata(new_frame_data)
+            canvas.paste(card_resized, (PAD_X, PAD_Y), card_resized)
             
             
-            final_composite = Image.alpha_composite(canvas, frame_img)
+            final_composite = Image.alpha_composite(canvas, clean_frame)
             
             output = BytesIO()
             final_composite.save(output, format="PNG")

@@ -4,3 +4,4 @@ pymongo
 psutil
 Pillow
 aiohttp
+numpy
