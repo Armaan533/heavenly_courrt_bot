@@ -87,6 +87,7 @@ class FrameTestModal(discord.ui.Modal, title="Frame Rendering Matrix"):
             T_LOW_EDGE, T_HIGH_EDGE = 2.0, 18.0
             DARK_BORDER_SLACK = 8.0
             DARK_BORDER_RANGE = 40.0
+            UNMAT_MIN_ALPHA = 0.12  
 
             rgb = np.stack([r, g, b], axis=-1)
             bg = BG_RGB[np.newaxis, np.newaxis, :]
@@ -114,7 +115,6 @@ class FrameTestModal(discord.ui.Modal, title="Frame Rendering Matrix"):
             c_min = np.minimum(np.minimum(r, g), b)
             sat = np.where(c_max > 1e-5, (c_max - c_min) / c_max, 0.0)
 
-            
             sat_conf = _smoothstep(0.10, 0.55, sat)
             bright_conf = _smoothstep(BG_LUM + 16.0, BG_LUM + 110.0, lum)
 
@@ -130,34 +130,31 @@ class FrameTestModal(discord.ui.Modal, title="Frame Rendering Matrix"):
                 0.0,
                 1.0
             )
-            
 
             
             dark_excess = BG_LUM - DARK_BORDER_SLACK - lum
             dark_signal = _smoothstep(0.0, DARK_BORDER_RANGE, dark_excess)
             dark_alpha = dark_signal * edge_keep
 
-            
             raw_alpha = np.maximum.reduce([color_alpha, sat_alpha, dark_alpha])
 
-            haze_zone = centre * (1.0 - interior_detail)
-            haze_cut = _smoothstep(0.20, 0.95, haze_zone)
-            raw_alpha *= (1.0 - haze_cut * 0.92)
+            
+            detail_protect = np.maximum(interior_detail, _smoothstep(42.0, 105.0, dist))
+            flat_haze = centre * (1.0 - detail_protect)
+            haze_cut = _smoothstep(0.55, 0.98, flat_haze)
+            raw_alpha *= (1.0 - haze_cut * 0.38)
 
             raw_alpha = np.clip(raw_alpha * orig_a, 0.0, 1.0)
-            
-
             final_alpha = np.power(raw_alpha, 1.08)
 
             
-            unmatte_a = np.clip(raw_alpha + 0.04, 0.08, 1.0)[:, :, np.newaxis]
-            apply_mask = (raw_alpha >= 0.025)[:, :, np.newaxis]
+            unmatte_a = np.clip(raw_alpha + 0.04, UNMAT_MIN_ALPHA, 1.0)[:, :, np.newaxis]
+            apply_mask = (raw_alpha >= UNMAT_MIN_ALPHA)[:, :, np.newaxis]
 
             unmatted = (rgb - bg * (1.0 - unmatte_a)) / unmatte_a
             unmatted = np.clip(unmatted, 0.0, 255.0)
 
             rgb_out = np.where(apply_mask, unmatted, rgb)
-            
 
             
             frame_arr[:, :, 0] = rgb_out[:, :, 0]
