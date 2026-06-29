@@ -73,29 +73,33 @@ class FrameTestModal(discord.ui.Modal, title="Frame Rendering Matrix"):
             bg_r, bg_g, bg_b = 49, 51, 56
             
             
-            T_MIN = 8.0
-            T_MAX = 70.0
             
             for y in range(fh):
                 for x in range(fw):
                     r, g, b, a = pixels[x, y]
                     if a == 0: continue
                     
-                    dist = ((r - bg_r)**2 + (g - bg_g)**2 + (b - bg_b)**2) ** 0.5
                     
-                    if dist <= T_MIN:
-                        pixels[x, y] = (0, 0, 0, 0) 
-                    elif dist >= T_MAX:
-                        pass 
+                    a_r = (r - bg_r) / (255.0 - bg_r) if r > bg_r else (bg_r - r) / float(bg_r) if r < bg_r else 0
+                    a_g = (g - bg_g) / (255.0 - bg_g) if g > bg_g else (bg_g - g) / float(bg_g) if g < bg_g else 0
+                    a_b = (b - bg_b) / (255.0 - bg_b) if b > bg_b else (bg_b - b) / float(bg_b) if b < bg_b else 0
+                    
+                    alpha_f = max(a_r, a_g, a_b)
+                    
+                    if alpha_f <= 0.015:  
+                        pixels[x, y] = (0, 0, 0, 0)
                     else:
-                        ratio = (dist - T_MIN) / (T_MAX - T_MIN)
                         
+                        new_r = int(max(0, min(255, ((r - bg_r) / alpha_f) + bg_r)))
+                        new_g = int(max(0, min(255, ((g - bg_g) / alpha_f) + bg_g)))
+                        new_b = int(max(0, min(255, ((b - bg_b) / alpha_f) + bg_b)))
+                        new_a = int(alpha_f * 255)
                         
-                        factor = ratio ** 2.5 
-                        pixels[x, y] = (r, g, b, int(a * factor))
+                        pixels[x, y] = (new_r, new_g, new_b, new_a)
             
             
-            canvas = Image.new("RGBA", (fw, fh), (0, 0, 0, 0)) 
+            
+            canvas = Image.new("RGBA", (fw, fh), (bg_r, bg_g, bg_b, 255))
             
             try: resample_method = Image.Resampling.LANCZOS
             except AttributeError: resample_method = Image.ANTIALIAS
@@ -103,19 +107,22 @@ class FrameTestModal(discord.ui.Modal, title="Frame Rendering Matrix"):
             
             PAD_X = 25
             PAD_Y = 38
-            inner_w = fw - (PAD_X * 2)
-            inner_h = fh - (PAD_Y * 2)
-            
-            
+            inner_w = fw - (PAD_X * 2)  
+            inner_h = fh - (PAD_Y * 2)  
             
             card_resized = card_img.resize((inner_w, inner_h), resample=resample_method).convert("RGBA")
             
             
-            canvas.paste(card_resized, (PAD_X, PAD_Y))
+            art_mask = Image.new("L", (inner_w, inner_h), 0)
+            draw_mask = ImageDraw.Draw(art_mask)
+            draw_mask.rounded_rectangle((0, 0, inner_w, inner_h), radius=15, fill=255)
+            card_resized.putalpha(art_mask)
+            
+            
+            canvas.paste(card_resized, (PAD_X, PAD_Y), card_resized)
             
             
             final_composite = Image.alpha_composite(canvas, frame_img)
-            
             
             
             final_mask = Image.new("L", (fw, fh), 0)
@@ -144,6 +151,10 @@ class FrameTestPromptView(discord.ui.View):
 
     @discord.ui.button(label="Test Frame", style=discord.ButtonStyle.danger, emoji="⚙️")
     async def open_test_modal(self, interaction: discord.Interaction, button: discord.ui.Button):
+        
+        if not interaction.user.guild_permissions.administrator:
+            return await interaction.response.send_message("❌ Access Denied. Administrator clearance required.", ephemeral=True)
+            
         await interaction.response.send_modal(FrameTestModal(self.bot, self.card_url, self.char_name, interaction.message))
 
 
@@ -182,6 +193,14 @@ class FrameTesterCog(commands.Cog):
         if str(payload.emoji) != "⚠️" or payload.user_id == self.bot.user.id:
             return
             
+        
+        guild = self.bot.get_guild(payload.guild_id)
+        if not guild: return
+        
+        member = guild.get_member(payload.user_id) or await guild.fetch_member(payload.user_id)
+        if not member or not member.guild_permissions.administrator:
+            return
+            
         try:
             channel = self.bot.get_channel(payload.channel_id) or await self.bot.fetch_channel(payload.channel_id)
             message = await channel.fetch_message(payload.message_id)
@@ -215,9 +234,8 @@ class FrameTesterCog(commands.Cog):
                         char_name = line.split("·")[-1].replace("*", "").strip()
                         break
 
-            user = await self.bot.fetch_user(payload.user_id)
             await channel.send(
-                f"🔧 **Session Initialized:** {user.mention}, render a custom workspace for **{char_name}**?",
+                f"🔧 **Session Initialized:** {member.mention}, render a custom workspace for **{char_name}**?",
                 view=FrameTestPromptView(self.bot, card_url, char_name),
                 delete_after=60
             )
