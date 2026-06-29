@@ -67,74 +67,59 @@ class FrameTestModal(discord.ui.Modal, title="Frame Rendering Matrix"):
              Image.open(BytesIO(frame_bytes)).convert("RGBA") as frame_img:
              
             fw, fh = frame_img.size
-            pixels = frame_img.load()
+            frame_data = frame_img.getdata()
+            new_frame_data = []
             
             
             bg_r, bg_g, bg_b = 49, 51, 56
             
             
             
-            for y in range(fh):
-                for x in range(fw):
-                    r, g, b, a = pixels[x, y]
-                    if a == 0: continue
-                    
-                    
-                    a_r = (r - bg_r) / (255.0 - bg_r) if r > bg_r else (bg_r - r) / float(bg_r) if r < bg_r else 0
-                    a_g = (g - bg_g) / (255.0 - bg_g) if g > bg_g else (bg_g - g) / float(bg_g) if g < bg_g else 0
-                    a_b = (b - bg_b) / (255.0 - bg_b) if b > bg_b else (bg_b - b) / float(bg_b) if b < bg_b else 0
-                    
-                    alpha_f = max(a_r, a_g, a_b)
-                    
-                    if alpha_f <= 0.015:  
-                        pixels[x, y] = (0, 0, 0, 0)
-                    else:
-                        
-                        new_r = int(max(0, min(255, ((r - bg_r) / alpha_f) + bg_r)))
-                        new_g = int(max(0, min(255, ((g - bg_g) / alpha_f) + bg_g)))
-                        new_b = int(max(0, min(255, ((b - bg_b) / alpha_f) + bg_b)))
-                        new_a = int(alpha_f * 255)
-                        
-                        pixels[x, y] = (new_r, new_g, new_b, new_a)
             
+            for r, g, b, a in frame_data:
+                if a == 0:
+                    new_frame_data.append((0, 0, 0, 0))
+                    continue
+                
+                
+                a_r = (r - bg_r) / (255.0 - bg_r) if r > bg_r else (bg_r - r) / float(bg_r) if r < bg_r else 0
+                a_g = (g - bg_g) / (255.0 - bg_g) if g > bg_g else (bg_g - g) / float(bg_g) if g < bg_g else 0
+                a_b = (b - bg_b) / (255.0 - bg_b) if b > bg_b else (bg_b - b) / float(bg_b) if b < bg_b else 0
+                
+                alpha_f = max(a_r, a_g, a_b)
+                
+                if alpha_f <= 0.015:  
+                    new_frame_data.append((0, 0, 0, 0))
+                else:
+                    
+                    new_r = int(max(0, min(255, ((r - bg_r) / alpha_f) + bg_r)))
+                    new_g = int(max(0, min(255, ((g - bg_g) / alpha_f) + bg_g)))
+                    new_b = int(max(0, min(255, ((b - bg_b) / alpha_f) + bg_b)))
+                    new_a = int(max(0, min(255, alpha_f * a)))
+                    
+                    new_frame_data.append((new_r, new_g, new_b, new_a))
+                    
+            frame_img.putdata(new_frame_data)
             
-            
-            canvas = Image.new("RGBA", (fw, fh), (bg_r, bg_g, bg_b, 255))
             
             try: resample_method = Image.Resampling.LANCZOS
             except AttributeError: resample_method = Image.ANTIALIAS
             
             
-            PAD_X = 25
-            PAD_Y = 38
-            inner_w = fw - (PAD_X * 2)  
-            inner_h = fh - (PAD_Y * 2)  
-            
-            card_resized = card_img.resize((inner_w, inner_h), resample=resample_method).convert("RGBA")
+            card_resized = ImageOps.fit(card_img, (fw, fh), method=resample_method).convert("RGBA")
             
             
-            art_mask = Image.new("L", (inner_w, inner_h), 0)
+            art_mask = Image.new("L", (fw, fh), 0)
             draw_mask = ImageDraw.Draw(art_mask)
-            draw_mask.rounded_rectangle((0, 0, inner_w, inner_h), radius=15, fill=255)
+            draw_mask.rounded_rectangle((0, 0, fw, fh), radius=20, fill=255)
             card_resized.putalpha(art_mask)
             
             
-            canvas.paste(card_resized, (PAD_X, PAD_Y), card_resized)
+            canvas = Image.new("RGBA", (fw, fh), (0, 0, 0, 0))
+            canvas = Image.alpha_composite(canvas, card_resized)
             
             
             final_composite = Image.alpha_composite(canvas, frame_img)
-            
-            
-            final_mask = Image.new("L", (fw, fh), 0)
-            draw_final = ImageDraw.Draw(final_mask)
-            draw_final.rounded_rectangle((0, 0, fw, fh), radius=20, fill=255)
-            
-            comp_data = final_composite.getdata()
-            mask_data = final_mask.getdata()
-            new_comp = []
-            for (r, g, b, a), m in zip(comp_data, mask_data):
-                new_comp.append((r, g, b, min(a, m)))
-            final_composite.putdata(new_comp)
             
             output = BytesIO()
             final_composite.save(output, format="PNG")
