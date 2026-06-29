@@ -63,60 +63,73 @@ class FrameTestModal(discord.ui.Modal, title="Frame Rendering Matrix"):
             await interaction.followup.send(f"❌ **Render Error:** {e}")
 
     def process_frame(self, card_bytes, frame_bytes):
+        """Restores the original workflow: Layer Art -> Extract Frame -> Overlay Frame Over Art"""
         with Image.open(BytesIO(card_bytes)).convert("RGBA") as card_img, \
              Image.open(BytesIO(frame_bytes)).convert("RGBA") as frame_img:
              
             fw, fh = frame_img.size
-            frame_data = frame_img.getdata()
-            new_frame_data = []
+            
+            
+            canvas = Image.new("RGBA", (fw, fh), (0, 0, 0, 0))
+            
+            PAD = 14
+            inner_w = fw - (PAD * 2)
+            inner_h = fh - (PAD * 2)
+            
+            try: resample_method = Image.Resampling.LANCZOS
+            except AttributeError: resample_method = Image.ANTIALIAS
+                
+            
+            card_resized = ImageOps.fit(card_img, (inner_w, inner_h), method=resample_method).convert("RGBA")
+            
+            
+            art_mask = Image.new("L", (inner_w, inner_h), 0)
+            draw_mask = ImageDraw.Draw(art_mask)
+            draw_mask.rounded_rectangle((0, 0, inner_w, inner_h), radius=15, fill=255)
+            card_resized.putalpha(art_mask)
+            
+            
+            canvas.paste(card_resized, (PAD, PAD), card_resized)
             
             
             bg_r, bg_g, bg_b = 49, 51, 56
             
+            EXT_LEFT, EXT_TOP = 40, 32
+            EXT_RIGHT, EXT_BOTTOM = fw - 40, fh - 32
             
+            IN_T_MIN, IN_T_MAX = 10.0, 45.0
+            OUT_T_MIN, OUT_T_MAX = 5.0, 15.0
             
+            frame_datas = frame_img.getdata()
+            new_frame_data = []
             
-            for r, g, b, a in frame_data:
-                if a == 0:
-                    new_frame_data.append((0, 0, 0, 0))
-                    continue
+            for idx, item in enumerate(frame_datas):
+                x = idx % fw
+                y = idx // fw
+                r, g, b, a = item
                 
+                dist = ((r - bg_r)**2 + (g - bg_g)**2 + (b - bg_b)**2) ** 0.5
                 
-                a_r = (r - bg_r) / (255.0 - bg_r) if r > bg_r else (bg_r - r) / float(bg_r) if r < bg_r else 0
-                a_g = (g - bg_g) / (255.0 - bg_g) if g > bg_g else (bg_g - g) / float(bg_g) if g < bg_g else 0
-                a_b = (b - bg_b) / (255.0 - bg_b) if b > bg_b else (bg_b - b) / float(bg_b) if b < bg_b else 0
-                
-                alpha_f = max(a_r, a_g, a_b)
-                
-                if alpha_f <= 0.015:  
-                    new_frame_data.append((0, 0, 0, 0))
+                if EXT_LEFT <= x <= EXT_RIGHT and EXT_TOP <= y <= EXT_BOTTOM:
+                    if dist <= IN_T_MIN:
+                        new_frame_data.append((0, 0, 0, 0))
+                    elif dist >= IN_T_MAX:
+                        new_frame_data.append(item)
+                    else:
+                        ratio = (dist - IN_T_MIN) / (IN_T_MAX - IN_T_MIN)
+                        factor = (ratio ** 2) * (3.0 - 2.0 * ratio)
+                        new_frame_data.append((r, g, b, int(a * factor)))
                 else:
-                    
-                    new_r = int(max(0, min(255, ((r - bg_r) / alpha_f) + bg_r)))
-                    new_g = int(max(0, min(255, ((g - bg_g) / alpha_f) + bg_g)))
-                    new_b = int(max(0, min(255, ((b - bg_b) / alpha_f) + bg_b)))
-                    new_a = int(max(0, min(255, alpha_f * a)))
-                    
-                    new_frame_data.append((new_r, new_g, new_b, new_a))
-                    
+                    if dist <= OUT_T_MIN:
+                        new_frame_data.append((0, 0, 0, 0))
+                    elif dist >= OUT_T_MAX:
+                        new_frame_data.append(item)
+                    else:
+                        ratio = (dist - OUT_T_MIN) / (OUT_T_MAX - OUT_T_MIN)
+                        factor = (ratio ** 2) * (3.0 - 2.0 * ratio)
+                        new_frame_data.append((r, g, b, int(a * factor)))
+                        
             frame_img.putdata(new_frame_data)
-            
-            
-            try: resample_method = Image.Resampling.LANCZOS
-            except AttributeError: resample_method = Image.ANTIALIAS
-            
-            
-            card_resized = ImageOps.fit(card_img, (fw, fh), method=resample_method).convert("RGBA")
-            
-            
-            art_mask = Image.new("L", (fw, fh), 0)
-            draw_mask = ImageDraw.Draw(art_mask)
-            draw_mask.rounded_rectangle((0, 0, fw, fh), radius=20, fill=255)
-            card_resized.putalpha(art_mask)
-            
-            
-            canvas = Image.new("RGBA", (fw, fh), (0, 0, 0, 0))
-            canvas = Image.alpha_composite(canvas, card_resized)
             
             
             final_composite = Image.alpha_composite(canvas, frame_img)
