@@ -137,13 +137,22 @@ class FrameTestModal(discord.ui.Modal, title="Frame Rendering Matrix"):
             dark_signal = _smoothstep(0.0, DARK_BORDER_RANGE, dark_excess)
             dark_alpha = dark_signal * edge_keep
 
+            
+            ui_band = (
+                (x_idx >= PAD_X - 8) &
+                (x_idx <= fw - PAD_X + 8) &
+                ((y_idx <= PAD_Y + 20) | (y_idx >= fh - PAD_Y - 28))
+            )
+            ui_protect = ui_band & ((dist > 6.0) | (physical_alpha > 0.08))
+
             raw_alpha = np.maximum.reduce([color_alpha, sat_alpha, dark_alpha])
 
             
             near_bg = (
                 (dist < 34.0) &
                 (sat < 0.18) &
-                (physical_alpha < 0.26)
+                (physical_alpha < 0.26) &
+                (~ui_protect)
             )
 
             hole = np.zeros((fh, fw), dtype=bool)
@@ -167,6 +176,14 @@ class FrameTestModal(discord.ui.Modal, title="Frame Rendering Matrix"):
             hole_strength = hole.astype(np.float32) * (1.0 - np.maximum(sat_conf, bright_conf))
             raw_alpha *= (1.0 - hole_strength * 0.96)
 
+            
+            ui_alpha_floor = np.where(
+                lum < BG_LUM + 8.0,
+                0.92,
+                np.clip(physical_alpha * 1.25, 0.28, 1.0)
+            )
+            raw_alpha = np.where(ui_protect, np.maximum(raw_alpha, ui_alpha_floor), raw_alpha)
+
             raw_alpha = np.clip(raw_alpha * orig_a, 0.0, 1.0)
             final_alpha = np.power(raw_alpha, 1.08)
 
@@ -178,6 +195,9 @@ class FrameTestModal(discord.ui.Modal, title="Frame Rendering Matrix"):
 
             unmat_strength = np.maximum(sat_conf, bright_conf)
             unmat_strength *= _smoothstep(0.10, 0.50, raw_alpha)
+            
+            
+            unmat_strength = np.where(ui_protect, 0.0, unmat_strength)
             unmat_strength = unmat_strength[:, :, np.newaxis]
 
             rgb_out = rgb * (1.0 - unmat_strength) + unmatted * unmat_strength
