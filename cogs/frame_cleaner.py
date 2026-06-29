@@ -87,11 +87,11 @@ class FrameTestModal(discord.ui.Modal, title="Frame Rendering Matrix"):
             T_LOW_EDGE, T_HIGH_EDGE = 2.0, 18.0
             DARK_BORDER_SLACK = 8.0
             DARK_BORDER_RANGE = 40.0
-            UNMAT_MIN_ALPHA = 0.15
 
             rgb = np.stack([r, g, b], axis=-1)
             bg = BG_RGB[np.newaxis, np.newaxis, :]
 
+            
             delta = rgb - bg
             above_bg = np.maximum(delta / (255.0 - bg + 1e-6), 0.0)
             below_bg = np.maximum(-delta / (bg + 1e-6), 0.0)
@@ -99,6 +99,7 @@ class FrameTestModal(discord.ui.Modal, title="Frame Rendering Matrix"):
 
             dist = np.sqrt(np.sum(delta * delta, axis=-1))
 
+            
             y_idx, x_idx = np.ogrid[:fh, :fw]
             edge_x = np.clip(np.minimum(x_idx - PAD_X, (fw - PAD_X) - x_idx) / FADE, 0.0, 1.0)
             edge_y = np.clip(np.minimum(y_idx - PAD_Y, (fh - PAD_Y) - y_idx) / FADE, 0.0, 1.0)
@@ -113,33 +114,52 @@ class FrameTestModal(discord.ui.Modal, title="Frame Rendering Matrix"):
             c_min = np.minimum(np.minimum(r, g), b)
             sat = np.where(c_max > 1e-5, (c_max - c_min) / c_max, 0.0)
 
-            sat_conf = _smoothstep(0.08, 0.65, sat)
-            bright_conf = _smoothstep(BG_LUM + 12.0, BG_LUM + 95.0, lum)
+            
+            sat_conf = _smoothstep(0.10, 0.55, sat)
+            bright_conf = _smoothstep(BG_LUM + 16.0, BG_LUM + 110.0, lum)
 
             noise_floor = 0.012 + (0.060 - 0.012) * centre
             phys_gate = _smoothstep(noise_floor, noise_floor + 0.075, physical_alpha)
 
-            art_gate = np.maximum.reduce([edge_keep, sat_conf, bright_conf * 0.65])
+            interior_detail = np.maximum(sat_conf, bright_conf * 0.60)
+            art_gate = np.maximum(edge_keep, interior_detail)
 
             color_alpha = _smoothstep(t_low, t_high, dist) * art_gate
-            sat_alpha = np.clip(physical_alpha * phys_gate * (1.0 + sat_conf * 1.35), 0.0, 1.0)
+            sat_alpha = np.clip(
+                physical_alpha * phys_gate * art_gate * (0.75 + sat_conf * 1.45),
+                0.0,
+                1.0
+            )
+            
 
+            
             dark_excess = BG_LUM - DARK_BORDER_SLACK - lum
             dark_signal = _smoothstep(0.0, DARK_BORDER_RANGE, dark_excess)
             dark_alpha = dark_signal * edge_keep
 
+            
             raw_alpha = np.maximum.reduce([color_alpha, sat_alpha, dark_alpha])
+
+            haze_zone = centre * (1.0 - interior_detail)
+            haze_cut = _smoothstep(0.20, 0.95, haze_zone)
+            raw_alpha *= (1.0 - haze_cut * 0.92)
+
             raw_alpha = np.clip(raw_alpha * orig_a, 0.0, 1.0)
+            
+
             final_alpha = np.power(raw_alpha, 1.08)
 
             
-            unmatte_a = np.clip(raw_alpha + 0.04, UNMAT_MIN_ALPHA, 1.0)[:, :, np.newaxis]
+            unmatte_a = np.clip(raw_alpha + 0.04, 0.08, 1.0)[:, :, np.newaxis]
+            apply_mask = (raw_alpha >= 0.025)[:, :, np.newaxis]
+
             unmatted = (rgb - bg * (1.0 - unmatte_a)) / unmatte_a
             unmatted = np.clip(unmatted, 0.0, 255.0)
 
-            apply_mask = (raw_alpha >= UNMAT_MIN_ALPHA)[:, :, np.newaxis]
             rgb_out = np.where(apply_mask, unmatted, rgb)
+            
 
+            
             frame_arr[:, :, 0] = rgb_out[:, :, 0]
             frame_arr[:, :, 1] = rgb_out[:, :, 1]
             frame_arr[:, :, 2] = rgb_out[:, :, 2]
