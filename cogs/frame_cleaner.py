@@ -5,6 +5,7 @@ from io import BytesIO
 from PIL import Image, ImageOps, ImageDraw
 import asyncio
 import numpy as np
+from collections import deque
 from frame_prices import FRAME_DB
 
 KARUTA_BOT_ID = 646937666251915264
@@ -87,7 +88,7 @@ class FrameTestModal(discord.ui.Modal, title="Frame Rendering Matrix"):
             T_LOW_EDGE, T_HIGH_EDGE = 2.0, 18.0
             DARK_BORDER_SLACK = 8.0
             DARK_BORDER_RANGE = 40.0
-            UNMAT_MIN_ALPHA = 0.12  
+            UNMAT_MIN_ALPHA = 0.12
 
             rgb = np.stack([r, g, b], axis=-1)
             bg = BG_RGB[np.newaxis, np.newaxis, :]
@@ -139,22 +140,47 @@ class FrameTestModal(discord.ui.Modal, title="Frame Rendering Matrix"):
             raw_alpha = np.maximum.reduce([color_alpha, sat_alpha, dark_alpha])
 
             
-            detail_protect = np.maximum(interior_detail, _smoothstep(42.0, 105.0, dist))
-            flat_haze = centre * (1.0 - detail_protect)
-            haze_cut = _smoothstep(0.55, 0.98, flat_haze)
-            raw_alpha *= (1.0 - haze_cut * 0.38)
+            near_bg = (
+                (dist < 34.0) &
+                (sat < 0.18) &
+                (physical_alpha < 0.26)
+            )
+
+            hole = np.zeros((fh, fw), dtype=bool)
+            q = deque()
+
+            seed_x0, seed_x1 = fw // 2 - 28, fw // 2 + 28
+            seed_y0, seed_y1 = fh // 2 - 40, fh // 2 + 40
+
+            ys, xs = np.where(near_bg[seed_y0:seed_y1, seed_x0:seed_x1])
+            for sy, sx in zip(ys + seed_y0, xs + seed_x0):
+                hole[sy, sx] = True
+                q.append((sy, sx))
+
+            while q:
+                y, x = q.popleft()
+                for ny, nx in ((y - 1, x), (y + 1, x), (y, x - 1), (y, x + 1)):
+                    if 0 <= ny < fh and 0 <= nx < fw and near_bg[ny, nx] and not hole[ny, nx]:
+                        hole[ny, nx] = True
+                        q.append((ny, nx))
+
+            hole_strength = hole.astype(np.float32) * (1.0 - np.maximum(sat_conf, bright_conf))
+            raw_alpha *= (1.0 - hole_strength * 0.96)
 
             raw_alpha = np.clip(raw_alpha * orig_a, 0.0, 1.0)
             final_alpha = np.power(raw_alpha, 1.08)
 
             
-            unmatte_a = np.clip(raw_alpha + 0.04, UNMAT_MIN_ALPHA, 1.0)[:, :, np.newaxis]
-            apply_mask = (raw_alpha >= UNMAT_MIN_ALPHA)[:, :, np.newaxis]
+            unmatte_a = np.clip(raw_alpha + 0.06, 0.18, 1.0)[:, :, np.newaxis]
 
             unmatted = (rgb - bg * (1.0 - unmatte_a)) / unmatte_a
             unmatted = np.clip(unmatted, 0.0, 255.0)
 
-            rgb_out = np.where(apply_mask, unmatted, rgb)
+            unmat_strength = np.maximum(sat_conf, bright_conf)
+            unmat_strength *= _smoothstep(0.10, 0.50, raw_alpha)
+            unmat_strength = unmat_strength[:, :, np.newaxis]
+
+            rgb_out = rgb * (1.0 - unmat_strength) + unmatted * unmat_strength
 
             
             frame_arr[:, :, 0] = rgb_out[:, :, 0]
