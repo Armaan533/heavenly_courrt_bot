@@ -1,234 +1,180 @@
 import discord
-from discord import app_commands
 from discord.ext import commands
 import aiohttp
 from io import BytesIO
 from PIL import Image, ImageOps, ImageDraw
-import sys
-import os
+import asyncio
+from collections import deque
 from frame_prices import FRAME_DB
 
-BASE_CARD_PATH = os.path.join("assets", "base_card.jpg")
+KARUTA_BOT_ID = 646937666251915264
 
-class FrameRenderEngine(commands.Cog):
+class FrameTestModal(discord.ui.Modal, title="Frame Rendering Matrix"):
+    frame_name = discord.ui.TextInput(
+        label="Enter Frame Name", 
+        placeholder="e.g. Voidspawn, Interface, Spring..."
+    )
+
+    def __init__(self, bot, card_url, char_name):
+        super().__init__()
+        self.bot = bot
+        self.card_url = card_url
+        self.char_name = char_name
+
+    async def on_submit(self, interaction: discord.Interaction):
+        f_name = self.frame_name.value.strip().lower()
+        
+        match = next((n for n in FRAME_DB if f_name in n.lower()), None)
+        if not match:
+            return await interaction.response.send_message(f"❌ Frame `{f_name}` not found in the database.", ephemeral=True)
+
+        frame_url = FRAME_DB[match].get("image")
+        if not frame_url:
+            return await interaction.response.send_message(f"❌ No image mapped for {match.title()}.", ephemeral=True)
+
+        await interaction.response.send_message(f"⏳ **Rendering {match.title()} on {self.char_name}...**\n*Executing Dual-Zone Flood Fill...*", ephemeral=False)
+        msg = await interaction.original_response()
+
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(self.card_url) as card_resp, session.get(frame_url) as frame_resp:
+                    if card_resp.status != 200 or frame_resp.status != 200:
+                        return await msg.edit(content="❌ Failed to fetch images from Discord servers.")
+                    
+                    card_bytes = await card_resp.read()
+                    frame_bytes = await frame_resp.read()
+
+                    output_buffer = await asyncio.to_thread(self.process_frame, card_bytes, frame_bytes)
+
+                    file = discord.File(fp=output_buffer, filename=f"preview_{match.replace(' ', '_')}.png")
+                    
+                    embed = discord.Embed(
+                        title="✦ . FRAME RENDER COMPLETE . ✦",
+                        description=f"**Character:** {self.char_name}\n**Frame:** {match.title()}",
+                        color=0x2b2d31
+                    )
+                    embed.set_image(url=f"attachment://{file.filename}")
+                    embed.set_footer(text="Grey boundary isolated and erased via spatial flood-fill.")
+                    
+                    await msg.edit(content=None, embed=embed, attachments=[file])
+
+        except Exception as e:
+            await msg.edit(content=f"❌ **Render Error:** {e}")
+
+    def process_frame(self, card_bytes, frame_bytes):
+        """Executes the dual-zone flood fill and compositing"""
+        with Image.open(BytesIO(card_bytes)).convert("RGBA") as card_img, \
+             Image.open(BytesIO(frame_bytes)).convert("RGBA") as frame_img:
+             
+            fw, fh = frame_img.size
+            
+            def flood_fill(start_xy, tolerance=30):
+                pixels = frame_img.load()
+                q = deque([start_xy])
+                visited = set([start_xy])
+                
+                while q:
+                    cx, cy = q.popleft()
+                    r, g, b, a = pixels[cx, cy]
+                    if a == 0: continue 
+                    
+                    dist = ((r - 49)**2 + (g - 51)**2 + (b - 56)**2) ** 0.5
+                    
+                    if dist <= tolerance:
+                        pixels[cx, cy] = (0, 0, 0, 0) 
+                        
+                        for dx, dy in [(-1,0), (1,0), (0,-1), (0,1)]:
+                            nx, ny = cx + dx, cy + dy
+                            if 0 <= nx < fw and 0 <= ny < fh:
+                                if (nx, ny) not in visited:
+                                    visited.add((nx, ny))
+                                    q.append((nx, ny))
+
+            flood_fill((0, 0))
+            flood_fill((fw // 2, fh // 2))
+            
+            PAD = 14
+            inner_w, inner_h = fw - (PAD*2), fh - (PAD*2)
+            
+            try: resample_method = Image.Resampling.LANCZOS
+            except AttributeError: resample_method = Image.ANTIALIAS
+                
+            card_resized = ImageOps.fit(card_img, (inner_w, inner_h), method=resample_method).convert("RGBA")
+            
+            mask = Image.new("L", (inner_w, inner_h), 0)
+            draw = ImageDraw.Draw(mask)
+            draw.rounded_rectangle((0, 0, inner_w, inner_h), radius=15, fill=255)
+            card_resized.putalpha(mask)
+            
+            canvas = Image.new("RGBA", (fw, fh), (0, 0, 0, 0))
+            canvas.paste(card_resized, (PAD, PAD), card_resized)
+            final_composite = Image.alpha_composite(canvas, frame_img)
+            
+            output = BytesIO()
+            final_composite.save(output, format="PNG")
+            output.seek(0)
+            return output
+
+
+class FrameTestPromptView(discord.ui.View):
+    def __init__(self, bot, card_url, char_name):
+        super().__init__(timeout=120)
+        self.bot = bot
+        self.card_url = card_url
+        self.char_name = char_name
+
+    @discord.ui.button(label="Test Frame", style=discord.ButtonStyle.primary, emoji="🖼️")
+    async def open_test_modal(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.send_modal(FrameTestModal(self.bot, self.card_url, self.char_name))
+
+
+class FrameTesterCog(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
-    @app_commands.command(name="test_clean", description="Execute Dual-Zone Spatial Matrix Extraction")
-    async def test_clean(self, interaction: discord.Interaction, frame_name: str):
-        match = next((n for n in FRAME_DB if frame_name.lower() in n.lower()), None)
-        if not match:
-            return await interaction.response.send_message("Frame entity not located in database.", ephemeral=True)
-
-        image_url = FRAME_DB[match].get("image")
-        if not image_url:
-            return await interaction.response.send_message("Image vector unavailable.", ephemeral=True)
-
-        await interaction.response.defer()
-
+    @commands.Cog.listener()
+    async def on_raw_reaction_add(self, payload: discord.RawReactionActionEvent):
+        if str(payload.emoji) != "⚠️" or payload.user_id == self.bot.user.id:
+            return
+            
         try:
-            async with aiohttp.ClientSession() as session:
-                async with session.get(image_url) as resp:
-                    if resp.status != 200:
-                        return await interaction.followup.send("HTTP transmission failed.")
-                    
-                    frame_bytes = await resp.read()
-                    
-                    with Image.open(BytesIO(frame_bytes)).convert("RGBA") as img:
-                        fw, fh = img.size
-                        bg_r, bg_g, bg_b = 49, 51, 56
-                        
-                        EXT_LEFT, EXT_TOP = 40, 32
-                        EXT_RIGHT, EXT_BOTTOM = fw - 40, fh - 32
-                        
-                        IN_T_MIN, IN_T_MAX = 10.0, 45.0
-                        OUT_T_MIN, OUT_T_MAX = 5.0, 15.0
-                        
-                        datas = img.getdata()
-                        new_data = []
-                        
-                        for idx, item in enumerate(datas):
-                            x = idx % fw
-                            y = idx // fw
-                            r, g, b, a = item
-                            
-                            dist = ((r - bg_r)**2 + (g - bg_g)**2 + (b - bg_b)**2) ** 0.5
-                            
-                            if EXT_LEFT <= x <= EXT_RIGHT and EXT_TOP <= y <= EXT_BOTTOM:
-                                if dist <= IN_T_MIN:
-                                    new_data.append((0, 0, 0, 0))
-                                elif dist >= IN_T_MAX:
-                                    new_data.append(item)
-                                else:
-                                    ratio = (dist - IN_T_MIN) / (IN_T_MAX - IN_T_MIN)
-                                    factor = (ratio ** 2) * (3.0 - 2.0 * ratio)
-                                    new_data.append((r, g, b, int(a * factor)))
-                            else:
-                                if dist <= OUT_T_MIN:
-                                    new_data.append((0, 0, 0, 0))
-                                elif dist >= OUT_T_MAX:
-                                    new_data.append(item)
-                                else:
-                                    ratio = (dist - OUT_T_MIN) / (OUT_T_MAX - OUT_T_MIN)
-                                    factor = (ratio ** 2) * (3.0 - 2.0 * ratio)
-                                    new_data.append((r, g, b, int(a * factor)))
-                                
-                        img.putdata(new_data)
-                        
-                        output_buffer = BytesIO()
-                        img.save(output_buffer, format="PNG")
-                        output_buffer.seek(0)
-                        
-                        file_name = f"dual_extract_{match.replace(' ', '_')}.png"
-                        file = discord.File(fp=output_buffer, filename=file_name)
-                        
-                        embed = discord.Embed(
-                            title="[ SYSTEM: DUAL-ZONE DOMAIN EXTRACTION ]",
-                            color=0x2b2d31
-                        )
-                        
-                        embed.add_field(
-                            name="Internal Subspace (Gradient Sweep)", 
-                            value=(
-                                "$$(x,y) \\in \\Omega_{inner}$$\n"
-                                f"$$\\tau_{{min}} = {IN_T_MIN}, \\quad \\tau_{{max}} = {IN_T_MAX}$$"
-                            ),
-                            inline=False
-                        )
-                        
-                        embed.add_field(
-                            name="External Boundary (Strict Cutoff)", 
-                            value=(
-                                "$$(x,y) \\notin \\Omega_{inner}$$\n"
-                                f"$$\\tau_{{min}} = {OUT_T_MIN}, \\quad \\tau_{{max}} = {OUT_T_MAX}$$\n"
-                                "Isolates and terminates residual topological artifacts in outer geometries."
-                            ),
-                            inline=False
-                        )
-                        
-                        embed.set_image(url=f"attachment://{file_name}")
-                        await interaction.followup.send(embed=embed, file=file)
+            channel = self.bot.get_channel(payload.channel_id) or await self.bot.fetch_channel(payload.channel_id)
+            message = await channel.fetch_message(payload.message_id)
+            
+            if message.author.id != KARUTA_BOT_ID or not message.embeds:
+                return
+                
+            embed = message.embeds[0]
+            title = str(embed.title) if embed.title else ""
+
+            if "Character Lookup" not in title:
+                return
+
+            card_url = None
+            if embed.image and embed.image.url:
+                card_url = embed.image.url
+            elif embed.thumbnail and embed.thumbnail.url:
+                card_url = embed.thumbnail.url
+
+            if not card_url:
+                return
+            
+            char_name = "Unknown"
+            if embed.description:
+                for line in embed.description.splitlines():
+                    if "Character" in line or "Character ·" in line:
+                        char_name = line.split("·")[-1].replace("*", "").strip()
+                        break
+
+            user = await self.bot.fetch_user(payload.user_id)
+            await channel.send(
+                f"🔧 {user.mention}, initialize frame rendering protocol for **{char_name}**?",
+                view=FrameTestPromptView(self.bot, card_url, char_name),
+                delete_after=60
+            )
 
         except Exception as e:
-            await interaction.followup.send(f"Runtime Exception: {e}")
-            print(f"Extraction Error: {e}", file=sys.stderr)
-
-    @app_commands.command(name="test_composite", description="Execute 14px Inset Z-Index Overlay")
-    async def test_composite(self, interaction: discord.Interaction, frame_name: str):
-        match = next((n for n in FRAME_DB if frame_name.lower() in n.lower()), None)
-        if not match:
-            return await interaction.response.send_message("Target entity not located in index.", ephemeral=True)
-
-        image_url = FRAME_DB[match].get("image")
-        if not image_url:
-            return await interaction.response.send_message("Vector topology unavailable.", ephemeral=True)
-
-        if not os.path.exists(BASE_CARD_PATH):
-            return await interaction.response.send_message("Base matrix `assets/base_card.jpg` missing.", ephemeral=True)
-
-        await interaction.response.defer()
-
-        try:
-            async with aiohttp.ClientSession() as session:
-                async with session.get(image_url) as resp:
-                    if resp.status != 200:
-                        return await interaction.followup.send("HTTP transmission failed.")
-                    
-                    frame_bytes = await resp.read()
-                    
-                    with Image.open(BASE_CARD_PATH).convert("RGBA") as base_img, \
-                         Image.open(BytesIO(frame_bytes)).convert("RGBA") as frame_img:
-                         
-                        fw, fh = frame_img.size
-                        bg_r, bg_g, bg_b = 49, 51, 56
-                        
-                        EXT_LEFT, EXT_TOP = 40, 32
-                        EXT_RIGHT, EXT_BOTTOM = fw - 40, fh - 32
-                        
-                        IN_T_MIN, IN_T_MAX = 10.0, 45.0
-                        OUT_T_MIN, OUT_T_MAX = 5.0, 15.0
-                        
-                        datas = frame_img.getdata()
-                        new_data = []
-                        
-                        for idx, item in enumerate(datas):
-                            x = idx % fw
-                            y = idx // fw
-                            r, g, b, a = item
-                            
-                            dist = ((r - bg_r)**2 + (g - bg_g)**2 + (b - bg_b)**2) ** 0.5
-                            
-                            if EXT_LEFT <= x <= EXT_RIGHT and EXT_TOP <= y <= EXT_BOTTOM:
-                                if dist <= IN_T_MIN:
-                                    new_data.append((0, 0, 0, 0))
-                                elif dist >= IN_T_MAX:
-                                    new_data.append(item)
-                                else:
-                                    ratio = (dist - IN_T_MIN) / (IN_T_MAX - IN_T_MIN)
-                                    factor = (ratio ** 2) * (3.0 - 2.0 * ratio)
-                                    new_data.append((r, g, b, int(a * factor)))
-                            else:
-                                if dist <= OUT_T_MIN:
-                                    new_data.append((0, 0, 0, 0))
-                                elif dist >= OUT_T_MAX:
-                                    new_data.append(item)
-                                else:
-                                    ratio = (dist - OUT_T_MIN) / (OUT_T_MAX - OUT_T_MIN)
-                                    factor = (ratio ** 2) * (3.0 - 2.0 * ratio)
-                                    new_data.append((r, g, b, int(a * factor)))
-                                
-                        frame_img.putdata(new_data)
-                        
-                        PAD = 14
-                        COMP_LEFT, COMP_TOP = PAD, PAD
-                        COMP_RIGHT, COMP_BOTTOM = fw - PAD, fh - PAD
-                        inner_w, inner_h = COMP_RIGHT - COMP_LEFT, COMP_BOTTOM - COMP_TOP
-                        
-                        try:
-                            resample_method = Image.Resampling.LANCZOS
-                        except AttributeError:
-                            resample_method = Image.ANTIALIAS
-                            
-                        card_resized = ImageOps.fit(base_img, (inner_w, inner_h), method=resample_method).convert("RGBA")
-                        
-                        mask = Image.new("L", (inner_w, inner_h), 0)
-                        draw = ImageDraw.Draw(mask)
-                        draw.rounded_rectangle((0, 0, inner_w, inner_h), radius=15, fill=255)
-                        card_resized.putalpha(mask)
-                        
-                        canvas = Image.new("RGBA", (fw, fh), (0, 0, 0, 0))
-                        canvas.paste(card_resized, (COMP_LEFT, COMP_TOP), card_resized)
-                        
-                        final_composite = Image.alpha_composite(canvas, frame_img)
-                        
-                        output_buffer = BytesIO()
-                        final_composite.save(output_buffer, format="PNG")
-                        output_buffer.seek(0)
-                        
-                        file_name = f"padded_composite_{match.replace(' ', '_')}.png"
-                        file = discord.File(fp=output_buffer, filename=file_name)
-                        
-                        embed = discord.Embed(
-                            title="[ SYSTEM: 14px INSET BOUNDARY OVERLAY ]",
-                            color=0x2b2d31
-                        )
-                        
-                        embed.add_field(
-                            name="Padding Calibration", 
-                            value=(
-                                "$$\\Omega_{safe} = [14, fw-14] \\times [14, fh-14]$$\n"
-                                "$$\\partial \\Omega_{clip} = \\rho_{15} \\quad (C^1 \\text{ boundary curvature})$$\n"
-                                "Base matrix successfully isolated from native PNG drop-shadow padding boundaries."
-                            ),
-                            inline=False
-                        )
-                        
-                        embed.set_image(url=f"attachment://{file_name}")
-                        await interaction.followup.send(embed=embed, file=file)
-
-        except Exception as e:
-            await interaction.followup.send(f"Runtime Exception: {e}")
-            print(f"Composite Error: {e}", file=sys.stderr)
+            print(f"Reaction Error: {e}")
 
 async def setup(bot):
-    await bot.add_cog(FrameRenderEngine(bot))
+    await bot.add_cog(FrameTesterCog(bot))
